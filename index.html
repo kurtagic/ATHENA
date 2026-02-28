@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Athena</title>
+</head>
+<body>
+  <div id="ide-shell">
+    <div id="ide-topbar">
+      <div class="ide-topbar-left">
+        <button id="back-btn">&larr; Back</button>
+      </div>
+      <div class="ide-topbar-center">
+        <div id="detail-title"></div>
+      </div>
+      <div class="ide-topbar-right">
+        <div id="zoom-level"></div>
+        <button id="quit-btn">&times;</button>
+      </div>
+    </div>
+    <div id="ide-sidebar-left"></div>
+    <div id="ide-map-panel">
+      <div id="map"></div>
+    </div>
+    <div id="ide-sidebar-right">
+      <div id="arty-sidebar">
+        <div id="arty-sidebar-header">Artillery Calculator</div>
+        <div id="arty-sidebar-content">
+          <label id="arty-platform-label" for="arty-platform-dropdown">Platform</label>
+          <select id="arty-platform-dropdown"></select>
+          <div id="arty-actions">
+            <button id="arty-place-gun-btn">Place Gun</button>
+            <button id="arty-set-target-btn">Set Target</button>
+            <button id="arty-mark-impact-btn">Mark Impact</button>
+            <button id="arty-clear-all-btn" class="arty-danger-btn">Clear All</button>
+          </div>
+          <div id="arty-status-text"></div>
+          <table id="arty-solution-table">
+            <thead>
+              <tr>
+                <th class="arty-col-star"></th>
+                <th class="arty-col-num">#</th>
+                <th class="arty-col-dist">Dist</th>
+                <th class="arty-col-az">Az</th>
+                <th class="arty-col-reld">Rel.D</th>
+                <th class="arty-col-relaz">Rel.Az</th>
+                <th class="arty-col-del"></th>
+              </tr>
+            </thead>
+            <tbody id="arty-solution-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div id="ide-bottombar">
+      <div class="ide-bottombar-left"></div>
+      <div class="ide-bottombar-center">
+        <div id="draw-toolbar">
+          <div id="draw-colors">
+            <div class="draw-swatch" data-color="#ff0000" style="background:#ff0000;" title="Red"></div>
+            <div class="draw-swatch" data-color="#00cc00" style="background:#00cc00;" title="Green"></div>
+            <div class="draw-swatch" data-color="#3388ff" style="background:#3388ff;" title="Blue"></div>
+            <div class="draw-swatch" data-color="#ffcc00" style="background:#ffcc00;" title="Yellow"></div>
+            <div class="draw-swatch" data-color="#ffffff" style="background:#ffffff;" title="White"></div>
+            <div class="draw-swatch" data-color="#000000" style="background:#000000;" title="Black"></div>
+            <input type="color" id="draw-custom-color" value="#ff0000" title="Custom color">
+          </div>
+          <button id="draw-eraser-btn" title="Eraser (hold left-click to erase)">Eraser</button>
+          <button id="draw-undo-btn" title="Undo last stroke">Undo</button>
+        </div>
+      </div>
+      <div class="ide-bottombar-right"></div>
+    </div>
+  </div>
+
+  <script type="module" src="/src/renderer/renderer.ts"></script>
+</body>
+</html>

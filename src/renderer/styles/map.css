@@ -1,0 +1,801 @@
+/* ── Design tokens ──────────────────────────────────────── */
+:root {
+  --font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+
+  --surface-glass: rgba(12, 12, 14, 0.75);
+  --surface-glass-hover: rgba(24, 24, 28, 0.8);
+  --border-glass: 1px solid rgba(255, 255, 255, 0.08);
+  --blur-glass: blur(12px);
+
+  --text-primary: #ffffff;
+  --text-secondary: rgba(255, 255, 255, 0.7);
+  --text-muted: rgba(255, 255, 255, 0.45);
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 12px;
+
+  --transition: 150ms ease;
+  --shell-transition: 200ms ease;
+
+  --accent-blue: #4a9eff;
+  --accent-blue-dim: rgba(74, 158, 255, 0.15);
+  --accent-red: #ef5350;
+  --accent-red-dim: rgba(239, 83, 80, 0.12);
+  --surface-raised: rgba(255, 255, 255, 0.04);
+  --surface-inset: rgba(0, 0, 0, 0.25);
+  --border-subtle: rgba(255, 255, 255, 0.06);
+  --border-focus: rgba(74, 158, 255, 0.5);
+}
+
+/* ── Base ───────────────────────────────────────────────── */
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  width: 100%;
+  background: #111214;
+  font-family: var(--font-sans);
+  user-select: none;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+/* ── IDE Shell (CSS Grid container) ────────────────────── */
+#ide-shell {
+  width: 100vw;
+  height: 100vh;
+  display: grid;
+  grid-template-areas:
+    "topbar  topbar  topbar"
+    "left    map     right"
+    "bottom  bottom  bottom";
+  grid-template-rows: 0px 1fr 0px;
+  grid-template-columns: 0px 1fr 0px;
+  transition: grid-template-rows var(--shell-transition),
+              grid-template-columns var(--shell-transition);
+}
+
+#ide-shell.detail-mode {
+  grid-template-rows: 42px 1fr 40px;
+  grid-template-columns: 0px 1fr 460px;
+}
+
+/* ── IDE Shell panels ──────────────────────────────────── */
+#ide-topbar {
+  grid-area: topbar;
+  display: flex;
+  align-items: center;
+  background: var(--surface-glass);
+  backdrop-filter: var(--blur-glass);
+  -webkit-backdrop-filter: var(--blur-glass);
+  border-bottom: var(--border-glass);
+  overflow: hidden;
+  z-index: 10;
+}
+
+.ide-topbar-left {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  padding-left: 8px;
+}
+
+.ide-topbar-center {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+}
+
+.ide-topbar-right {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-right: 8px;
+}
+
+#ide-sidebar-left {
+  grid-area: left;
+  overflow: hidden;
+}
+
+#ide-map-panel {
+  grid-area: map;
+  position: relative;
+  overflow: hidden;
+}
+
+#ide-map-panel #map {
+  width: 100%;
+  height: 100%;
+}
+
+#ide-sidebar-right {
+  grid-area: right;
+  overflow: hidden;
+  background: linear-gradient(180deg, rgba(18, 18, 22, 0.95) 0%, rgba(12, 12, 14, 0.98) 100%);
+  border-left: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+#ide-bottombar {
+  grid-area: bottom;
+  display: flex;
+  align-items: center;
+  background: var(--surface-glass);
+  backdrop-filter: var(--blur-glass);
+  -webkit-backdrop-filter: var(--blur-glass);
+  border-top: var(--border-glass);
+  overflow: hidden;
+  z-index: 10;
+}
+
+.ide-bottombar-left {
+  flex: 1 1 0;
+}
+
+.ide-bottombar-center {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ide-bottombar-right {
+  flex: 1 1 0;
+}
+
+/* ── Leaflet container background ──────────────────────── */
+.leaflet-container {
+  background: #111214;
+}
+
+/* ── Hex labels (top-level region names) ───────────────── */
+.hex-label {
+  color: var(--text-primary);
+  text-align: center;
+  font: 700 17px var(--font-sans);
+  text-transform: uppercase;
+  letter-spacing: 0.10em;
+  -webkit-text-stroke: 0.8px #000;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9),
+               0 0 12px rgba(0, 0, 0, 0.6);
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+/* ── Map icon ──────────────────────────────────────────── */
+.map-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  box-sizing: border-box;
+}
+
+.map-icon img {
+  width: 70%;
+  height: 70%;
+  object-fit: contain;
+}
+
+.map-icon.victory {
+  box-shadow: 0 0 0 1.5px #FFD700, 0 0 10px 3px rgba(255, 215, 0, 0.4);
+}
+
+.map-icon.scorched {
+  filter: brightness(0.4);
+}
+
+/* ── Static labels ─────────────────────────────────────── */
+.map-text-major {
+  color: var(--text-primary);
+  font: 600 15px var(--font-sans);
+  letter-spacing: 0.04em;
+  -webkit-text-stroke: 0.6px #000;
+  paint-order: stroke fill;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9),
+               0 0 8px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+  white-space: nowrap;
+  text-align: center;
+}
+
+.map-text-minor {
+  color: var(--text-primary);
+  font: 400 11px var(--font-sans);
+  -webkit-text-stroke: 0.4px #000;
+  paint-order: stroke fill;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+  pointer-events: none;
+  white-space: nowrap;
+  text-align: center;
+}
+
+/* ── Zoom level indicator (in topbar) ──────────────────── */
+#zoom-level {
+  padding: 4px 10px;
+  color: var(--text-secondary);
+  font: 13px var(--font-mono);
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+/* ── Back button (in topbar) ───────────────────────────── */
+#back-btn {
+  padding: 4px 12px;
+  background: rgba(255, 255, 255, 0.07);
+  border: none;
+  color: var(--text-primary);
+  font: 600 13px var(--font-sans);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background var(--transition), transform var(--transition);
+}
+
+#back-btn:hover {
+  background: rgba(255, 255, 255, 0.13);
+}
+
+#back-btn:active {
+  transform: scale(0.97);
+}
+
+/* ── Quit button (in topbar) ───────────────────────────── */
+#quit-btn {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  background: rgba(255, 255, 255, 0.07);
+  border: none;
+  color: var(--text-secondary);
+  font: 400 16px var(--font-sans);
+  line-height: 1;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background var(--transition), color var(--transition), transform var(--transition);
+}
+
+#quit-btn:hover {
+  background: rgba(180, 40, 40, 0.7);
+  color: var(--text-primary);
+}
+
+#quit-btn:active {
+  transform: scale(0.97);
+}
+
+/* ── Detail title (in topbar center) ───────────────────── */
+#detail-title {
+  padding: 2px 16px;
+  color: var(--text-primary);
+  font: 700 13px var(--font-sans);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Grid / subgrid labels ─────────────────────────────── */
+.grid-label {
+  color: #ffffff;
+  font: bold 10px var(--font-mono);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+  pointer-events: none;
+  text-align: center;
+}
+
+.subgrid-label {
+  color: #ffffff;
+  font: bold 10px var(--font-mono);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+  text-align: center;
+}
+
+/* ── Draw toolbar (in bottombar center) ────────────────── */
+#draw-toolbar {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px;
+}
+
+#draw-undo-btn {
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--text-primary);
+  border: none;
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  font: 600 13px var(--font-sans);
+  cursor: pointer;
+  transition: background var(--transition), transform var(--transition);
+}
+
+#draw-undo-btn:hover {
+  background: rgba(255, 255, 255, 0.13);
+}
+
+#draw-undo-btn:active {
+  transform: scale(0.97);
+}
+
+#draw-eraser-btn {
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--text-primary);
+  border: none;
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  font: 600 13px var(--font-sans);
+  cursor: pointer;
+  transition: background var(--transition), color var(--transition),
+              box-shadow var(--transition), transform var(--transition);
+}
+
+#draw-eraser-btn:hover {
+  background: rgba(255, 255, 255, 0.13);
+}
+
+#draw-eraser-btn:active {
+  transform: scale(0.97);
+}
+
+#draw-eraser-btn.active {
+  background: var(--accent-red-dim);
+  color: var(--accent-red);
+  box-shadow: 0 0 8px rgba(239, 83, 80, 0.3);
+}
+
+#draw-eraser-btn.active:hover {
+  background: rgba(239, 83, 80, 0.2);
+}
+
+#draw-colors {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 5px;
+}
+
+.draw-swatch {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  cursor: pointer;
+  border: 2px solid transparent;
+  box-sizing: border-box;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.15);
+  transition: transform var(--transition), box-shadow var(--transition), border-color var(--transition);
+}
+
+.draw-swatch:hover {
+  transform: scale(1.15);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.15),
+              0 0 6px rgba(255, 255, 255, 0.2);
+}
+
+.draw-swatch.selected {
+  border-color: #fff;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.15),
+              0 0 8px rgba(255, 255, 255, 0.3);
+}
+
+#draw-custom-color {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  cursor: pointer;
+  background: conic-gradient(
+    #ff0000, #ff8800, #ffff00, #00cc00, #3388ff, #8833ff, #ff0000
+  );
+  border-radius: 50%;
+  overflow: hidden;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.15);
+  transition: transform var(--transition), box-shadow var(--transition);
+}
+
+#draw-custom-color:hover {
+  transform: scale(1.15);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.15),
+              0 0 6px rgba(255, 255, 255, 0.2);
+}
+
+#draw-custom-color::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+#draw-custom-color::-webkit-color-swatch {
+  border: none;
+  border-radius: 50%;
+  opacity: 0;
+}
+
+/* ── Artillery sidebar (fills right grid cell) ──────────── */
+#arty-sidebar {
+  width: 100%;
+  height: 100%;
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+#arty-sidebar-header {
+  padding: 14px 20px 12px;
+  font: 700 13px var(--font-sans);
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--text-secondary);
+  border-bottom: none;
+  position: relative;
+}
+
+#arty-sidebar-header::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 20px;
+  right: 20px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--accent-blue) 30%, var(--accent-blue) 70%, transparent);
+  opacity: 0.4;
+}
+
+#arty-sidebar-content {
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+#arty-platform-label {
+  font: 600 11px var(--font-sans);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-secondary);
+}
+
+#arty-platform-dropdown {
+  width: 100%;
+  padding: 10px 36px 10px 14px;
+  background: var(--surface-inset);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font: 500 13px var(--font-sans);
+  cursor: pointer;
+  outline: none;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='none' viewBox='0 0 12 12'%3E%3Cpath d='M3 4.5L6 7.5L9 4.5' stroke='rgba(255,255,255,0.5)' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  transition: border-color var(--transition), box-shadow var(--transition);
+}
+
+#arty-platform-dropdown:focus {
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 3px rgba(74, 158, 255, 0.15);
+}
+
+#arty-platform-dropdown option {
+  background: #1a1a1e;
+  color: var(--text-primary);
+}
+
+#arty-platform-dropdown option.arty-faction-warden {
+  color: #6fa8dc;
+}
+
+#arty-platform-dropdown option.arty-faction-colonial {
+  color: #93c47d;
+}
+
+#arty-platform-dropdown option.arty-faction-both {
+  color: var(--text-secondary);
+}
+
+/* ── Artillery action buttons ─────────────────────────── */
+#arty-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+#arty-actions button {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-subtle);
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  font: 600 11px var(--font-sans);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  transition: background var(--transition), color var(--transition),
+              border-color var(--transition), box-shadow var(--transition),
+              transform var(--transition);
+}
+
+#arty-actions button:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-primary);
+}
+
+#arty-actions button:active {
+  transform: scale(0.97);
+}
+
+#arty-actions button.active-mode {
+  background: rgba(74, 158, 255, 0.08);
+  border-color: var(--accent-blue);
+  color: var(--accent-blue);
+  box-shadow: 0 0 8px rgba(74, 158, 255, 0.2),
+              inset 0 0 12px rgba(74, 158, 255, 0.06);
+}
+
+#arty-actions button.arty-danger-btn:hover {
+  background: var(--accent-red-dim);
+  border-color: rgba(239, 83, 80, 0.4);
+  color: var(--accent-red);
+}
+
+#arty-clear-all-btn {
+  grid-column: 1 / -1;
+}
+
+/* ── Artillery status text ────────────────────────────── */
+#arty-status-text {
+  font: 500 11px var(--font-sans);
+  letter-spacing: 0.02em;
+  color: var(--text-muted);
+  min-height: 18px;
+}
+
+/* ── Artillery solution table ─────────────────────────── */
+#arty-solution-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0 4px;
+  font: 14px var(--font-mono);
+}
+
+#arty-solution-table thead th {
+  font: 600 10px var(--font-sans);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  padding: 4px 5px 6px;
+  text-align: left;
+  border-bottom: none;
+}
+
+#arty-solution-table tbody tr {
+  background: var(--surface-raised);
+  transition: background var(--transition);
+}
+
+#arty-solution-table tbody tr:hover {
+  background: rgba(255, 255, 255, 0.07);
+}
+
+#arty-solution-table tbody td {
+  padding: 8px 5px;
+  vertical-align: middle;
+  border-bottom: none;
+}
+
+#arty-solution-table tbody td:first-child {
+  border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+}
+
+#arty-solution-table tbody td:last-child {
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+
+.arty-col-star { width: 28px; text-align: center !important; }
+.arty-col-num { width: 56px; }
+.arty-col-dist { width: 70px; }
+.arty-col-az { width: 70px; }
+.arty-col-reld { width: 64px; }
+.arty-col-relaz { width: 64px; }
+.arty-col-del { width: 28px; text-align: center !important; }
+
+.arty-rename-input {
+  width: 100%;
+  background: var(--surface-inset);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font: 14px var(--font-mono);
+  padding: 2px 6px;
+  outline: none;
+  box-sizing: border-box;
+  transition: border-color var(--transition), box-shadow var(--transition);
+}
+
+.arty-rename-input:focus {
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 2px rgba(74, 158, 255, 0.12);
+}
+
+.arty-star-btn {
+  cursor: pointer;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 14px;
+  padding: 0;
+  line-height: 1;
+  transition: transform var(--transition), color var(--transition), text-shadow var(--transition);
+}
+
+.arty-star-btn:hover {
+  transform: scale(1.15);
+}
+
+.arty-star-btn.main-gun {
+  color: var(--accent-blue);
+  text-shadow: 0 0 8px rgba(74, 158, 255, 0.5);
+}
+
+.arty-del-btn {
+  cursor: pointer;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font: 13px var(--font-sans);
+  padding: 2px 4px;
+  line-height: 1;
+  border-radius: var(--radius-sm);
+  transition: color var(--transition), background var(--transition), transform var(--transition);
+}
+
+.arty-del-btn:hover {
+  color: var(--accent-red);
+  background: var(--accent-red-dim);
+  transform: scale(1.1);
+}
+
+.arty-no-target {
+  color: var(--text-muted);
+}
+
+.arty-row-main {
+  background: var(--accent-blue-dim) !important;
+  box-shadow: inset 0 0 0 1px rgba(74, 158, 255, 0.25);
+}
+
+.arty-row-oor {
+  background: var(--accent-red-dim) !important;
+}
+
+/* ── Artillery dot markers (halo effect) ─────────────── */
+.arty-dot-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+}
+
+.arty-dot {
+  border-radius: 50%;
+  position: relative;
+  flex-shrink: 0;
+}
+
+.arty-dot::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 40%;
+  height: 40%;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.3);
+  pointer-events: none;
+}
+
+.arty-dot-main-gun {
+  background: #1565c0;
+  box-shadow:
+    0 0 0 2px #0d47a1,
+    0 0 6px 3px rgba(21, 101, 192, 0.35),
+    0 0 14px 6px rgba(21, 101, 192, 0.15),
+    0 0 24px 10px rgba(21, 101, 192, 0.06);
+}
+
+.arty-dot-gun {
+  background: #4fc3f7;
+  box-shadow:
+    0 0 0 1.5px #81d4fa,
+    0 0 5px 2px rgba(79, 195, 247, 0.3),
+    0 0 12px 5px rgba(79, 195, 247, 0.12),
+    0 0 20px 8px rgba(79, 195, 247, 0.05);
+}
+
+.arty-dot-target {
+  background: #ef5350;
+  box-shadow:
+    0 0 0 2px #f44336,
+    0 0 6px 3px rgba(239, 83, 80, 0.35),
+    0 0 14px 6px rgba(239, 83, 80, 0.15),
+    0 0 24px 10px rgba(239, 83, 80, 0.06);
+}
+
+.arty-dot-impact {
+  background: #ffd54f;
+  box-shadow:
+    0 0 0 1.5px #ffca28,
+    0 0 5px 2px rgba(255, 213, 79, 0.3),
+    0 0 12px 5px rgba(255, 213, 79, 0.12),
+    0 0 20px 8px rgba(255, 213, 79, 0.05);
+}
+
+.arty-dot-oor {
+  background: #ef5350;
+  box-shadow:
+    0 0 0 1.5px #f44336,
+    0 0 5px 2px rgba(239, 83, 80, 0.3),
+    0 0 12px 5px rgba(239, 83, 80, 0.12),
+    0 0 20px 8px rgba(239, 83, 80, 0.05);
+}
+
+.arty-dot-corrected {
+  background: #66bb6a;
+  box-shadow:
+    0 0 0 2px #4caf50,
+    0 0 6px 3px rgba(102, 187, 106, 0.35),
+    0 0 14px 6px rgba(102, 187, 106, 0.15),
+    0 0 24px 10px rgba(102, 187, 106, 0.06);
+}
+
+/* ── Artillery gun labels ─────────────────────────────── */
+.arty-gun-label {
+  color: var(--text-primary);
+  font: 700 11px var(--font-mono);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9),
+               0 0 6px rgba(0, 0, 0, 0.6);
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+/* ── Artillery draggable markers ──────────────────────── */
+.arty-draggable {
+  cursor: grab;
+}
+
+.arty-draggable:active {
+  cursor: grabbing;
+}
+
+/* ── Artillery sidebar scrollbar ────────────────────────── */
+#arty-sidebar::-webkit-scrollbar {
+  width: 6px;
+}
+
+#arty-sidebar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+#arty-sidebar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+}
+
+#arty-sidebar::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.18);
+}

@@ -1,0 +1,8 @@
+node_modules/
+.vite/
+out/
+dist/
+assets/
+.claude/
+CLAUDE.md
+docs/
