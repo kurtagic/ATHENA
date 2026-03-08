@@ -40,6 +40,18 @@ export function lngLatToMapPoint(lng: number, lat: number): MapPoint {
   return { x, y };
 }
 
+export function pointInPolygon(px: number, py: number, polygon: [number, number][]): boolean {
+  let inside = false;
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const xi = polygon[i][0], yi = polygon[i][1];
+    const xj = polygon[j][0], yj = polygon[j][1];
+    if ((yi > py) !== (yj > py) && px < (xj - xi) * (py - yi) / (yj - yi) + xi) {
+      inside = !inside;
+    }
+  }
+  return inside;
+}
+
 export function mapPointDistance(a: MapPoint, b: MapPoint): number {
   const dx = b.x - a.x;
   const dy = b.y - a.y;

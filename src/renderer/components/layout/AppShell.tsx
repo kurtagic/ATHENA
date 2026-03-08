@@ -20,8 +20,8 @@ export function AppShell() {
       id="ide-shell"
       className={`w-screen h-screen grid transition-all duration-200 ease-in-out ${
         detailMode
-          ? 'grid-rows-[42px_1fr_40px] grid-cols-[240px_1fr_460px] detail-mode'
-          : 'grid-rows-[0px_1fr_0px] grid-cols-[0px_1fr_0px]'
+          ? 'grid-rows-[42px_1fr_68px] grid-cols-[240px_1fr_560px] detail-mode'
+          : 'grid-rows-[42px_1fr_0px] grid-cols-[0px_1fr_0px]'
       }`}
       style={{
         gridTemplateAreas: `

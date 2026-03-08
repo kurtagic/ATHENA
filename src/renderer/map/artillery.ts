@@ -318,6 +318,21 @@ export function setGunPlatform(posIndex: number, platformIndex: number, map: map
   }
 }
 
+export function clearTarget(map: maplibregl.Map): void {
+  pushUndo();
+  state.target = null;
+  state.impact = null;
+  state.corrected = null;
+  refreshAll(map);
+}
+
+export function clearImpact(map: maplibregl.Map): void {
+  pushUndo();
+  state.impact = null;
+  state.corrected = null;
+  refreshAll(map);
+}
+
 export function clearAll(map: maplibregl.Map): void {
   pushUndo();
   resetState();
@@ -517,7 +532,7 @@ function refreshAll(map: maplibregl.Map): void {
   if (state.target && state.impact) {
     lineFeatures.push({
       type: 'Feature',
-      properties: { color: '#ffd54f', weight: 1, opacity: 0.5 },
+      properties: { color: '#ff8c00', weight: 1, opacity: 0.5 },
       geometry: {
         type: 'LineString',
         coordinates: [mapPointToLngLat(state.target), mapPointToLngLat(state.impact)],
@@ -532,7 +547,7 @@ function refreshAll(map: maplibregl.Map): void {
 
   // Corrected dot marker
   if (state.corrected) {
-    const el = createDotElement(12, 'arty-dot-corrected', false);
+    const el = createDotElement(16, 'arty-dot-corrected', false);
     const marker = new maplibregl.Marker({ element: el, anchor: 'center' })
       .setLngLat(mapPointToLngLat(state.corrected))
       .addTo(map);
@@ -550,7 +565,7 @@ function refreshAll(map: maplibregl.Map): void {
     else if (isMain) dotClass = 'arty-dot-main-gun';
     else dotClass = 'arty-dot-gun';
 
-    const el = createDotElement(isMain ? 16 : 12, dotClass, true);
+    const el = createDotElement(isMain ? 20 : 16, dotClass, true);
     const marker = new maplibregl.Marker({ element: el, anchor: 'center' })
       .setLngLat(mapPointToLngLat(pos.point))
       .addTo(map);
@@ -567,8 +582,7 @@ function refreshAll(map: maplibregl.Map): void {
     const labelEl = document.createElement('div');
     labelEl.className = 'arty-gun-label';
     labelEl.textContent = pos.label;
-    labelEl.style.transform = 'translate(6px, -20px)';
-    const labelMarker = new maplibregl.Marker({ element: labelEl, anchor: 'center' })
+    const labelMarker = new maplibregl.Marker({ element: labelEl, anchor: 'bottom', offset: [0, -12] })
       .setLngLat(mapPointToLngLat(pos.point))
       .addTo(map);
     state.markers.push(labelMarker);
@@ -576,7 +590,7 @@ function refreshAll(map: maplibregl.Map): void {
 
   // Target dot
   if (state.target) {
-    const el = createDotElement(14, 'arty-dot-target', true);
+    const el = createDotElement(18, 'arty-dot-target', true);
     const marker = new maplibregl.Marker({ element: el, anchor: 'center' })
       .setLngLat(mapPointToLngLat(state.target))
       .addTo(map);
@@ -590,7 +604,7 @@ function refreshAll(map: maplibregl.Map): void {
 
   // Impact dot
   if (state.impact) {
-    const el = createDotElement(12, 'arty-dot-impact', true);
+    const el = createDotElement(16, 'arty-dot-impact', true);
     const marker = new maplibregl.Marker({ element: el, anchor: 'center' })
       .setLngLat(mapPointToLngLat(state.impact))
       .addTo(map);

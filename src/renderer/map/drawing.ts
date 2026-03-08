@@ -10,6 +10,7 @@ interface StrokeData {
   points: MapPoint[];
   color: string;
   weight: number;
+  opacity: number;
 }
 
 interface DrawState {
@@ -17,6 +18,7 @@ interface DrawState {
   drawing: boolean;
   color: string;
   weight: number;
+  opacity: number;
   currentPoints: MapPoint[];
   strokes: StrokeData[];
   canvas: HTMLCanvasElement | null;
@@ -32,6 +34,7 @@ const drawState: DrawState = {
   drawing: false,
   color: '#ff0000',
   weight: 3,
+  opacity: 1.0,
   currentPoints: [],
   strokes: [],
   canvas: null,
@@ -41,6 +44,9 @@ const drawState: DrawState = {
   erasedDuringDrag: [],
   mapRef: null,
 };
+
+// Redo support: strokes popped by undo are stored here
+const undoneStrokes: StrokeData[] = [];
 
 export function getDrawState(): DrawState {
   return drawState;
@@ -70,8 +76,10 @@ function redrawAllStrokes(): void {
   ctx.clearRect(0, 0, drawState.canvas.width, drawState.canvas.height);
   const map = drawState.mapRef;
 
-  const drawStroke = (points: MapPoint[], color: string, weight: number) => {
+  const drawStroke = (points: MapPoint[], color: string, weight: number, opacity: number) => {
     if (points.length < 2) return;
+    ctx.save();
+    ctx.globalAlpha = opacity;
     ctx.beginPath();
     ctx.strokeStyle = color;
     ctx.lineWidth = weight;
@@ -85,16 +93,17 @@ function redrawAllStrokes(): void {
       else ctx.lineTo(px.x, px.y);
     }
     ctx.stroke();
+    ctx.restore();
   };
 
   // Draw completed strokes
   for (const stroke of drawState.strokes) {
-    drawStroke(stroke.points, stroke.color, stroke.weight);
+    drawStroke(stroke.points, stroke.color, stroke.weight, stroke.opacity);
   }
 
   // Draw current in-progress stroke
   if (drawState.drawing && drawState.currentPoints.length > 1) {
-    drawStroke(drawState.currentPoints, drawState.color, drawState.weight);
+    drawStroke(drawState.currentPoints, drawState.color, drawState.weight, drawState.opacity);
   }
 }
 
@@ -158,8 +167,11 @@ function finalizeStroke(): void {
       points: [...drawState.currentPoints],
       color: drawState.color,
       weight: drawState.weight,
+      opacity: drawState.opacity,
     });
     pushUndoAction({ type: 'drawing' });
+    // New stroke invalidates redo
+    undoneStrokes.length = 0;
   }
   drawState.currentPoints = [];
   drawState.drawing = false;
@@ -168,7 +180,29 @@ function finalizeStroke(): void {
 
 export function undoStroke(): void {
   if (drawState.strokes.length === 0) return;
-  drawState.strokes.pop();
+  const popped = drawState.strokes.pop()!;
+  undoneStrokes.push(popped);
+  redrawAllStrokes();
+}
+
+export function redoStroke(): void {
+  if (undoneStrokes.length === 0) return;
+  const stroke = undoneStrokes.pop()!;
+  drawState.strokes.push(stroke);
+  redrawAllStrokes();
+}
+
+export function removeMatchingStrokes(saved: SavedStroke[]): void {
+  for (const s of saved) {
+    // Find and remove the first matching stroke
+    const idx = drawState.strokes.findIndex(
+      (stroke) =>
+        stroke.color === s.color &&
+        stroke.weight === s.weight &&
+        stroke.points.length === s.points.length
+    );
+    if (idx !== -1) drawState.strokes.splice(idx, 1);
+  }
   redrawAllStrokes();
 }
 
@@ -179,11 +213,20 @@ export function setDrawColor(color: string): void {
   }
 }
 
+export function setDrawWeight(w: number): void {
+  drawState.weight = w;
+}
+
+export function setDrawOpacity(o: number): void {
+  drawState.opacity = o;
+}
+
 export function saveDrawState(): SavedStroke[] {
   return drawState.strokes.map((stroke) => ({
     points: stroke.points.map((p) => [p.x, p.y] as [number, number]),
     color: stroke.color,
     weight: stroke.weight,
+    opacity: stroke.opacity,
   }));
 }
 
@@ -193,6 +236,7 @@ export function restoreDrawState(saved: SavedStroke[], map: maplibregl.Map): voi
       points: stroke.points.map(([x, y]) => toMapPoint(x, y)),
       color: stroke.color,
       weight: stroke.weight,
+      opacity: stroke.opacity ?? 1.0,
     });
   }
   redrawAllStrokes();
@@ -240,6 +284,7 @@ function eraseStrokesAtPoint(map: maplibregl.Map, lngLat: maplibregl.LngLat): vo
         points: stroke.points.map((p) => [p.x, p.y] as [number, number]),
         color: stroke.color,
         weight: stroke.weight,
+        opacity: stroke.opacity,
       };
       drawState.erasedDuringDrag.push(saved);
       drawState.strokes.splice(i, 1);
@@ -263,6 +308,7 @@ export function restoreErasedStrokes(saved: SavedStroke[]): void {
       points: stroke.points.map(([x, y]) => toMapPoint(x, y)),
       color: stroke.color,
       weight: stroke.weight,
+      opacity: stroke.opacity ?? 1.0,
     });
   }
   redrawAllStrokes();

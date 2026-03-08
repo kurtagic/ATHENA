@@ -1,6 +1,6 @@
 import type maplibregl from 'maplibre-gl';
-import { popUndoAction } from '../data/undoStack';
-import { undoStroke, restoreErasedStrokes } from './drawing';
+import { popUndoAction, popRedoAction } from '../data/undoStack';
+import { undoStroke, restoreErasedStrokes, redoStroke, removeMatchingStrokes } from './drawing';
 import { restoreArtySnapshot } from './artillery';
 
 export function performUndo(map: maplibregl.Map): void {
@@ -13,4 +13,15 @@ export function performUndo(map: maplibregl.Map): void {
   } else {
     restoreArtySnapshot(action.snapshot, map);
   }
+}
+
+export function performRedo(map: maplibregl.Map): void {
+  const action = popRedoAction();
+  if (!action) return;
+  if (action.type === 'drawing') {
+    redoStroke();
+  } else if (action.type === 'eraser') {
+    removeMatchingStrokes(action.strokes);
+  }
+  // artillery redo skipped — snapshot-based redo is complex
 }

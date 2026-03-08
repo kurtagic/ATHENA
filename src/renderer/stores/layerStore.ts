@@ -18,7 +18,7 @@ export const useLayerStore = create<LayerState>((set) => ({
     structures: { visible: true, label: 'Structures' },
     drawings: { visible: true, label: 'Drawings' },
     artillery: { visible: true, label: 'Artillery' },
-    voronoi: { visible: true, label: 'Regions' },
+    voronoi: { visible: true, label: 'Voronoi Regions' },
   },
   toggleLayer: (key) =>
     set((state) => ({

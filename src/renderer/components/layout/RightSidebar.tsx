@@ -4,9 +4,9 @@ import { Crosshair, Target, Flame, Trash2, Shield } from 'lucide-react';
 import { useArtilleryStore } from '../../stores/artilleryStore';
 import { useMapStore } from '../../stores/mapStore';
 import { ARTILLERY_PLATFORMS, platformDisplayName } from '../../data/artilleryPlatforms';
-import { setPlacementMode, clearAll, setMainGun, removeArtillery, renameGun, setPlatformFromUI, setGunPlatform } from '../../map/artillery';
+import { setPlacementMode, clearAll, clearTarget, clearImpact, setMainGun, removeArtillery, renameGun, setPlatformFromUI, setGunPlatform } from '../../map/artillery';
 import type { PlacementMode } from '../../stores/artilleryStore';
-import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '../ui/select';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectSeparator, SelectTrigger, SelectValue } from '../ui/select';
 
 function SectionHeader({ label }: { label: string }) {
   return (
@@ -133,15 +133,18 @@ function PlatformCell({
           </span>
         </SelectTrigger>
         <SelectContent className="bg-[#1a1a1e] border-[var(--color-border-tactical)] text-white">
-          {groups.map(([type, platforms]) => (
-            <SelectGroup key={type}>
-              <SelectLabel className="text-[var(--color-gold)] text-[10px] uppercase tracking-wider">{type}</SelectLabel>
-              {platforms.map(({ platform, index }) => (
-                <SelectItem key={index} value={String(index)} className="text-[12px] focus:bg-white/10 focus:text-white">
-                  <span className={factionColor(platform.faction)}>{platformDisplayName(platform)}</span>
-                </SelectItem>
-              ))}
-            </SelectGroup>
+          {groups.map(([type, platforms], gi) => (
+            <React.Fragment key={type}>
+              {gi > 0 && <SelectSeparator className="bg-white/10 my-1.5" />}
+              <SelectGroup>
+                <SelectLabel className="text-[var(--color-gold)]/70 text-[14px] font-medium uppercase tracking-[0.1em] mb-0.5">{type}</SelectLabel>
+                {platforms.map(({ platform, index }) => (
+                  <SelectItem key={index} value={String(index)} className="text-[12px] focus:bg-white/10 focus:text-white">
+                    <span className={factionColor(platform.faction)}>{platformDisplayName(platform)}</span>
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </React.Fragment>
           ))}
         </SelectContent>
       </Select>
@@ -175,6 +178,12 @@ export function RightSidebar() {
   };
   const handleMarkImpact = () => {
     setPlacementMode(placementMode === 'placing-impact' ? 'idle' : 'placing-impact');
+  };
+  const handleClearTarget = () => {
+    if (map) clearTarget(map);
+  };
+  const handleClearImpact = () => {
+    if (map) clearImpact(map);
   };
   const handleClearAll = () => {
     if (map) clearAll(map);
@@ -217,15 +226,18 @@ export function RightSidebar() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent className="bg-[#1a1a1e] border-[var(--color-border-tactical)] text-white">
-              {groups.map(([type, platforms]) => (
-                <SelectGroup key={type}>
-                  <SelectLabel className="text-[var(--color-gold)] text-[10px] uppercase tracking-wider">{type}</SelectLabel>
-                  {platforms.map(({ platform, index }) => (
-                    <SelectItem key={index} value={String(index)} className="text-[13px] focus:bg-white/10 focus:text-white">
-                      <span className={factionColor(platform.faction)}>{platformDisplayName(platform)}</span>
-                    </SelectItem>
-                  ))}
-                </SelectGroup>
+              {groups.map(([type, platforms], gi) => (
+                <React.Fragment key={type}>
+                  {gi > 0 && <SelectSeparator className="bg-white/10 my-1.5" />}
+                  <SelectGroup>
+                    <SelectLabel className="text-[var(--color-gold)]/70 text-[14px] font-medium uppercase tracking-[0.1em] mb-0.5">{type}</SelectLabel>
+                    {platforms.map(({ platform, index }) => (
+                      <SelectItem key={index} value={String(index)} className="text-[13px] focus:bg-white/10 focus:text-white">
+                        <span className={factionColor(platform.faction)}>{platformDisplayName(platform)}</span>
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </React.Fragment>
               ))}
             </SelectContent>
           </Select>
@@ -234,14 +246,20 @@ export function RightSidebar() {
             <ActionButton id="arty-place-gun-btn" icon={<Crosshair size={14} />} label="Place Gun" mode="placing-arty" currentMode={placementMode} onClick={handlePlaceGun} />
             <ActionButton id="arty-set-target-btn" icon={<Target size={14} />} label="Set Target" mode="placing-target" currentMode={placementMode} onClick={handleSetTarget} />
             <ActionButton id="arty-mark-impact-btn" icon={<Flame size={14} />} label="Mark Impact" mode="placing-impact" currentMode={placementMode} onClick={handleMarkImpact} />
-            <ActionButton id="arty-clear-all-btn" icon={<Trash2 size={14} />} label="Clear All" currentMode={placementMode} danger onClick={handleClearAll} />
           </div>
-          <div
-            id="arty-status-text"
-            className={`font-medium text-[11px] tracking-[0.02em] min-h-[18px] ${isPlacing ? 'text-[var(--color-gold)]' : 'text-[var(--color-muted)]'}`}
-          >
-            {statusText}
+          <div className="grid grid-cols-3 gap-1.5">
+            <ActionButton id="arty-clear-target-btn" label="Clear Target" currentMode={placementMode} danger onClick={handleClearTarget} />
+            <ActionButton id="arty-clear-impact-btn" label="Clear Impact" currentMode={placementMode} danger onClick={handleClearImpact} />
+            <ActionButton id="arty-clear-all-btn" label="Clear All" currentMode={placementMode} danger onClick={handleClearAll} />
           </div>
+          {statusText && (
+            <div
+              id="arty-status-text"
+              className={`font-medium text-[11px] tracking-[0.02em] ${isPlacing ? 'text-[var(--color-gold)]' : 'text-[var(--color-muted)]'}`}
+            >
+              {statusText}
+            </div>
+          )}
           <SectionHeader label="Solutions" />
           <table
             id="arty-solution-table"
@@ -252,11 +270,11 @@ export function RightSidebar() {
               <tr>
                 <th className="arty-col-star font-semibold text-[10px] uppercase tracking-[0.08em] text-[var(--color-muted)] py-1 px-[5px] text-left" />
                 <th className="arty-col-num font-semibold text-[10px] uppercase tracking-[0.08em] text-[var(--color-muted)] py-1 px-[5px] text-left">#</th>
-                <th className="arty-col-plat font-semibold text-[10px] uppercase tracking-[0.08em] text-[var(--color-muted)] py-1 px-[5px] text-left">Plat</th>
-                <th className="arty-col-dist font-semibold text-[10px] uppercase tracking-[0.08em] text-[var(--color-muted)] py-1 px-[5px] text-left">Dist</th>
-                <th className="arty-col-az font-semibold text-[10px] uppercase tracking-[0.08em] text-[var(--color-muted)] py-1 px-[5px] text-left">Az</th>
-                <th className="arty-col-reld font-semibold text-[10px] uppercase tracking-[0.08em] text-[var(--color-muted)] py-1 px-[5px] text-left">Rel.D</th>
-                <th className="arty-col-relaz font-semibold text-[10px] uppercase tracking-[0.08em] text-[var(--color-muted)] py-1 px-[5px] text-left">Rel.Az</th>
+                <th className="arty-col-plat font-semibold text-[10px] uppercase tracking-[0.08em] text-[var(--color-muted)] py-1 px-[5px] text-left">Platform</th>
+                <th className="arty-col-dist font-semibold text-[10px] uppercase tracking-[0.08em] text-[var(--color-muted)] py-1 px-[5px] text-left">Distance</th>
+                <th className="arty-col-az font-semibold text-[10px] uppercase tracking-[0.08em] text-[var(--color-muted)] py-1 px-[5px] text-left">Azimuth</th>
+                <th className="arty-col-reld font-semibold text-[10px] uppercase tracking-[0.08em] text-[var(--color-muted)] py-1 px-[5px] text-left">&Delta; Distance</th>
+                <th className="arty-col-relaz font-semibold text-[10px] uppercase tracking-[0.08em] text-[var(--color-muted)] py-1 px-[5px] text-left">&Delta; Azimuth</th>
                 <th className="arty-col-del" />
               </tr>
             </thead>
@@ -282,12 +300,12 @@ export function RightSidebar() {
                     <PlatformCell platformIndex={sol.platformIndex} posIndex={sol.posIndex} groups={groups} map={map} />
                     {hasTarget ? (
                       <>
-                        <td className="arty-col-dist text-[var(--color-gold-bright)]">{sol.distanceM.toFixed(1)}m</td>
-                        <td className="arty-col-az text-white font-semibold">{sol.azimuthDeg.toFixed(1)}&deg;</td>
-                        <td className="arty-col-reld text-white/50 text-[12px]">
+                        <td className="arty-col-dist text-white">{sol.distanceM.toFixed(1)}m</td>
+                        <td className="arty-col-az text-white">{sol.azimuthDeg.toFixed(1)}&deg;</td>
+                        <td className="arty-col-reld text-white">
                           {sol.isMain ? '--' : `${sol.relDist >= 0 ? '+' : ''}${sol.relDist.toFixed(1)}m`}
                         </td>
-                        <td className="arty-col-relaz text-white/50 text-[12px]">
+                        <td className="arty-col-relaz text-white">
                           {sol.isMain ? '--' : `${sol.relAz >= 0 ? '+' : ''}${sol.relAz.toFixed(1)}\u00b0`}
                         </td>
                       </>

@@ -1,122 +1,269 @@
-import React from 'react';
-import { Pencil, Eraser, Undo2 } from 'lucide-react';
+import React, { useCallback, useRef } from 'react';
+import { Pencil, Eraser, Undo2, Redo2 } from 'lucide-react';
 import { useDrawStore } from '../../stores/drawStore';
 import { useMapStore } from '../../stores/mapStore';
-import { setDrawColor, toggleEraser } from '../../map/drawing';
+import { setDrawColor, setDrawWeight, setDrawOpacity, toggleEraser } from '../../map/drawing';
 import { performUndo } from '../../map/undo';
+import { performRedo } from '../../map/undo';
+import { canUndo, canRedo } from '../../data/undoStack';
 import { getDetailMode } from '../../map/detailView';
 import { Toggle } from '../ui/toggle';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip';
 import { Separator } from '../ui/separator';
+import { Slider } from '../ui/slider';
+import { Popover, PopoverTrigger, PopoverContent } from '../ui/popover';
 
 const SWATCHES = [
-  { color: '#ff0000', title: 'Red' },
-  { color: '#00cc00', title: 'Green' },
-  { color: '#3388ff', title: 'Blue' },
-  { color: '#ffcc00', title: 'Yellow' },
+  { color: '#ef4444', title: 'Red' },
+  { color: '#22c55e', title: 'Green' },
+  { color: '#3b82f6', title: 'Blue' },
+  { color: '#eab308', title: 'Yellow' },
   { color: '#ffffff', title: 'White' },
-  { color: '#000000', title: 'Black' },
 ];
 
 export function BottomBar() {
   const activeColor = useDrawStore((s) => s.activeColor);
-  const eraserActive = useDrawStore((s) => s.eraserActive);
+  const activeTool = useDrawStore((s) => s.activeTool);
+  const strokeWidth = useDrawStore((s) => s.strokeWidth);
+  const strokeOpacity = useDrawStore((s) => s.strokeOpacity);
   const map = useMapStore((s) => s.mapInstance);
+  const customColorRef = useRef('#ff8800');
+  const [customColor, setCustomColorState] = React.useState('#ff8800');
+  // Force re-render for undo/redo button states
+  const [, forceUpdate] = React.useReducer((x: number) => x + 1, 0);
 
-  const handleSwatchClick = (color: string) => {
+  const handleSwatchClick = useCallback((color: string) => {
     setDrawColor(color);
     useDrawStore.getState().setActiveColor(color);
-  };
+  }, []);
 
-  const handleCustomColor = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleCustomColorChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const color = e.target.value;
+    customColorRef.current = color;
+    setCustomColorState(color);
     setDrawColor(color);
     useDrawStore.getState().setActiveColor(color);
-  };
+  }, []);
 
-  const handleEraserClick = () => {
-    if (map) {
+  const handlePenClick = useCallback(() => {
+    if (activeTool === 'eraser' && map) {
       toggleEraser(map);
-      useDrawStore.getState().toggleEraser();
+      useDrawStore.getState().setActiveTool('pen');
+      // Restore last color if needed
+      const state = useDrawStore.getState();
+      if (!state.activeColor) {
+        useDrawStore.getState().setActiveColor('#ef4444');
+        setDrawColor('#ef4444');
+      }
     }
-  };
+  }, [activeTool, map]);
 
-  const handleUndoClick = () => {
+  const handleEraserClick = useCallback(() => {
+    if (map) {
+      if (activeTool !== 'eraser') {
+        toggleEraser(map);
+        useDrawStore.getState().setActiveTool('eraser');
+      } else {
+        toggleEraser(map);
+        useDrawStore.getState().setActiveTool('pen');
+      }
+    }
+  }, [activeTool, map]);
+
+  const handleUndoClick = useCallback(() => {
     if (map && getDetailMode()) {
       performUndo(map);
+      forceUpdate();
     }
-  };
+  }, [map]);
+
+  const handleRedoClick = useCallback(() => {
+    if (map && getDetailMode()) {
+      performRedo(map);
+      forceUpdate();
+    }
+  }, [map]);
+
+  const handleWidthChange = useCallback((value: number[]) => {
+    const w = value[0];
+    useDrawStore.getState().setStrokeWidth(w);
+    setDrawWeight(w);
+  }, []);
+
+  const handleOpacityChange = useCallback((value: number[]) => {
+    const pct = value[0];
+    useDrawStore.getState().setStrokeOpacity(pct / 100);
+    setDrawOpacity(pct / 100);
+  }, []);
+
+  const isSwatchSelected = (color: string) =>
+    activeColor === color && activeTool === 'pen';
+
+  const isCustomSelected =
+    activeTool === 'pen' &&
+    activeColor !== '' &&
+    !SWATCHES.some((s) => s.color === activeColor);
 
   return (
     <div
       id="ide-bottombar"
-      className="flex items-center bg-[var(--color-surface-glass)] backdrop-blur-xl border-t border-[var(--color-border-glass)] overflow-hidden z-10"
+      className="flex items-center bg-[rgba(18,18,20,0.92)] backdrop-blur-xl border-t border-white/[0.06] overflow-hidden z-10"
       style={{ gridArea: 'bottom' }}
     >
       <div className="flex-1" />
       <div className="flex-none flex items-center justify-center">
         <div
           id="draw-toolbar"
-          className="flex items-center gap-2.5 bg-[var(--color-surface-tactical)] border border-[var(--color-border-tactical)] rounded-[var(--radius-md)] px-3 py-1.5 shadow-[0_0_12px_rgba(74,158,255,0.06),inset_0_1px_0_rgba(255,255,255,0.04)]"
+          className="flex items-center gap-1.5 bg-white/[0.04] border border-white/[0.08] rounded-[16px] px-3 py-1.5"
         >
-          <Pencil size={14} className="text-white/40 shrink-0" />
-          <div id="draw-colors" className="flex items-center gap-[5px]">
-            {SWATCHES.map((s) => (
-              <div
-                key={s.color}
-                className={`draw-swatch${activeColor === s.color && !eraserActive ? ' selected' : ''}`}
-                data-color={s.color}
-                style={{ background: s.color }}
-                title={s.title}
-                onClick={() => handleSwatchClick(s.color)}
-              />
-            ))}
-            <input
-              type="color"
-              id="draw-custom-color"
-              defaultValue="#ff0000"
-              title="Custom color"
-              className="w-[26px] h-[26px] p-0 border-none cursor-pointer rounded-full overflow-hidden transition-all duration-150 hover:scale-[1.15]"
-              style={{
-                background: 'conic-gradient(#ff0000, #ff8800, #ffff00, #00cc00, #3388ff, #8833ff, #ff0000)',
-                boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.15)',
-              }}
-              onInput={handleCustomColor as any}
-            />
-          </div>
-          <Separator orientation="vertical" className="h-5 bg-white/10" />
+          {/* Tool group */}
           <TooltipProvider delayDuration={300}>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Toggle
-                  pressed={eraserActive}
-                  onPressedChange={handleEraserClick}
-                  className="h-8 w-8 bg-white/[0.07] hover:bg-white/[0.13] data-[state=on]:bg-[var(--color-destructive-dim)] data-[state=on]:text-[var(--color-destructive)]"
-                >
-                  <Eraser size={15} />
-                </Toggle>
-              </TooltipTrigger>
-              <TooltipContent side="top" className="bg-[#1a1a1e] border-[var(--color-border-tactical)] text-white text-xs">
-                Eraser
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-          <TooltipProvider delayDuration={300}>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  id="draw-undo-btn"
-                  title="Undo last stroke"
-                  className="h-8 w-8 flex items-center justify-center bg-white/[0.07] text-white border-none rounded-[var(--radius-sm)] cursor-pointer transition-all duration-150 hover:bg-white/[0.13] active:scale-[0.97]"
-                  onClick={handleUndoClick}
-                >
-                  <Undo2 size={15} />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent side="top" className="bg-[#1a1a1e] border-[var(--color-border-tactical)] text-white text-xs">
-                Undo
-              </TooltipContent>
-            </Tooltip>
+            <div className="flex items-center gap-1.5">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Toggle
+                    pressed={activeTool === 'pen'}
+                    onPressedChange={handlePenClick}
+                    className="h-[34px] w-[34px] bg-transparent hover:bg-white/[0.08] data-[state=on]:bg-white/[0.12] data-[state=on]:text-white text-white/50"
+                  >
+                    <Pencil size={16} />
+                  </Toggle>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="bg-[#1a1a1e] border-[var(--color-border-glass)] text-white text-xs">
+                  Draw (Right-click)
+                </TooltipContent>
+              </Tooltip>
+
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Toggle
+                    pressed={activeTool === 'eraser'}
+                    onPressedChange={handleEraserClick}
+                    className="h-[34px] w-[34px] bg-transparent hover:bg-white/[0.08] data-[state=on]:bg-[var(--color-destructive-dim)] data-[state=on]:text-[var(--color-destructive)] text-white/50"
+                  >
+                    <Eraser size={16} />
+                  </Toggle>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="bg-[#1a1a1e] border-[var(--color-border-glass)] text-white text-xs">
+                  Eraser (E)
+                </TooltipContent>
+              </Tooltip>
+            </div>
+
+            <Separator orientation="vertical" className="h-5 bg-white/[0.08] mx-1" />
+
+            {/* Color group */}
+            <div className="flex items-center gap-[6px]">
+              {SWATCHES.map((s) => (
+                <Tooltip key={s.color}>
+                  <TooltipTrigger asChild>
+                    <div
+                      className={`draw-swatch${isSwatchSelected(s.color) ? ' selected' : ''}${s.color === '#ffffff' ? ' light' : ''}`}
+                      style={{ background: s.color }}
+                      onClick={() => handleSwatchClick(s.color)}
+                    />
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="bg-[#1a1a1e] border-[var(--color-border-glass)] text-white text-xs">
+                    {s.title}
+                  </TooltipContent>
+                </Tooltip>
+              ))}
+
+              <Popover>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <PopoverTrigger asChild>
+                      <button
+                        className={`w-6 h-6 rounded-md border cursor-pointer transition-all duration-120 hover:scale-110 ${
+                          isCustomSelected
+                            ? 'border-white/60 ring-1 ring-white/60 ring-offset-2 ring-offset-[rgba(18,18,20,0.92)]'
+                            : 'border-white/20'
+                        }`}
+                        style={{ background: customColor }}
+                      />
+                    </PopoverTrigger>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="bg-[#1a1a1e] border-[var(--color-border-glass)] text-white text-xs">
+                    Custom Color
+                  </TooltipContent>
+                </Tooltip>
+                <PopoverContent side="top" className="w-auto p-3">
+                  <input
+                    type="color"
+                    value={customColor}
+                    onChange={handleCustomColorChange}
+                    className="w-[200px] h-[36px] cursor-pointer border-none p-0 bg-transparent"
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
+
+            <Separator orientation="vertical" className="h-5 bg-white/[0.08] mx-1" />
+
+            {/* Brush settings group */}
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] text-white/40 uppercase tracking-wider">W</span>
+                <Slider
+                  className="w-[80px]"
+                  value={[strokeWidth]}
+                  onValueChange={handleWidthChange}
+                  min={1}
+                  max={10}
+                  step={1}
+                />
+                <span className="text-[11px] text-white/60 w-4 text-right tabular-nums">{strokeWidth}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] text-white/40 uppercase tracking-wider">O</span>
+                <Slider
+                  className="w-[80px]"
+                  value={[Math.round(strokeOpacity * 100)]}
+                  onValueChange={handleOpacityChange}
+                  min={10}
+                  max={100}
+                  step={10}
+                />
+                <span className="text-[11px] text-white/60 w-7 text-right tabular-nums">{Math.round(strokeOpacity * 100)}%</span>
+              </div>
+            </div>
+
+            <Separator orientation="vertical" className="h-5 bg-white/[0.08] mx-1" />
+
+            {/* History group */}
+            <div className="flex items-center gap-1.5">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    className={`h-[34px] w-[34px] flex items-center justify-center bg-transparent text-white/50 border-none rounded-md cursor-pointer transition-all duration-150 hover:bg-white/[0.08] hover:text-white active:scale-[0.97] ${
+                      !canUndo() ? 'opacity-30 pointer-events-none' : ''
+                    }`}
+                    onClick={handleUndoClick}
+                  >
+                    <Undo2 size={16} />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="bg-[#1a1a1e] border-[var(--color-border-glass)] text-white text-xs">
+                  Undo (Ctrl+Z)
+                </TooltipContent>
+              </Tooltip>
+
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    className={`h-[34px] w-[34px] flex items-center justify-center bg-transparent text-white/50 border-none rounded-md cursor-pointer transition-all duration-150 hover:bg-white/[0.08] hover:text-white active:scale-[0.97] ${
+                      !canRedo() ? 'opacity-30 pointer-events-none' : ''
+                    }`}
+                    onClick={handleRedoClick}
+                  >
+                    <Redo2 size={16} />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="bg-[#1a1a1e] border-[var(--color-border-glass)] text-white text-xs">
+                  Redo (Ctrl+Shift+Z)
+                </TooltipContent>
+              </Tooltip>
+            </div>
           </TooltipProvider>
         </div>
       </div>

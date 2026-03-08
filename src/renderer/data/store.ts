@@ -9,6 +9,7 @@ export interface SavedStroke {
   points: [number, number][];
   color: string;
   weight: number;
+  opacity: number;
 }
 
 export interface SavedArtilleryState {

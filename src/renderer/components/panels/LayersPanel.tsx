@@ -1,5 +1,5 @@
 import React from 'react';
-import { Grid3x3, MapPin, Building2, Pencil, Crosshair, type LucideIcon } from 'lucide-react';
+import { Grid3x3, MapPin, Building2, Pencil, Crosshair, Hexagon, type LucideIcon } from 'lucide-react';
 import { useLayerStore } from '../../stores/layerStore';
 
 const LAYER_ICONS: Record<string, LucideIcon> = {
@@ -8,10 +8,11 @@ const LAYER_ICONS: Record<string, LucideIcon> = {
   structures: Building2,
   drawings: Pencil,
   artillery: Crosshair,
+  voronoi: Hexagon,
 };
 
 const LAYER_GROUPS = [
-  { label: 'Map Elements', keys: ['hexGrid', 'staticLabels', 'structures'] },
+  { label: 'Map Elements', keys: ['hexGrid', 'staticLabels', 'structures', 'voronoi'] },
   { label: 'Artillery', keys: ['artillery'] },
   { label: 'Markings', keys: ['drawings'] },
 ];

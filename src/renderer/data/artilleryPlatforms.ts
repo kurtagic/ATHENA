@@ -38,6 +38,5 @@ export const ARTILLERY_PLATFORMS: ArtilleryPlatform[] = [
 ];
 
 export function platformDisplayName(p: ArtilleryPlatform): string {
-  if (p.nickname) return `${p.nickname} - ${p.type}`;
-  return `${p.name} - ${p.type}`;
+  return p.name;
 }

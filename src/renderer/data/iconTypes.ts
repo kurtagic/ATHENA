@@ -52,6 +52,10 @@ export const ICON_TYPE_MAP: Record<number, string> = {
 export const MAJOR_STRUCTURES = new Set([27, 29, 45, 46, 47, 56, 57, 58]);
 export const RESOURCE_NODES = new Set([20, 21, 23, 61, 62, 75]);
 
+// Conquerable structures that determine voronoi region ownership
+// 27=Keep, 45/46/47=Relic Bases, 56/57/58=Town Halls T1/T2/T3
+export const CONQUERABLE_STRUCTURES = new Set([27, 45, 46, 47, 56, 57, 58]);
+
 // Team colors
 export const TEAM_COLOR: Record<string, string> = {
   COLONIALS: '#6D7B34',

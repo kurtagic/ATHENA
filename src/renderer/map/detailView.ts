@@ -5,6 +5,8 @@ import { hexLookup, hexImageUrl, detailMapPoint } from '../data/hexMapping';
 import { mapPointToLngLat, lngLatToMapPoint } from '../data/coords';
 import { hexStaticData, hexDynamicData, hexDrawingData, hexArtilleryData } from '../data/store';
 import { buildMarkerHtml } from '../data/dataHandlers';
+import { CONQUERABLE_STRUCTURES } from '../data/iconTypes';
+import voronoiOwners from '../../../static/voronoi_owners.json';
 import { initDrawLayer, cleanupDrawing, setDrawColor, getDrawState, activateDrawing, saveDrawState, restoreDrawState } from './drawing';
 import { initArtilleryLayer, cleanupArtillery, activateArtillery, saveArtilleryState, restoreArtilleryState } from './artillery';
 import { clearUndoStack } from '../data/undoStack';
@@ -131,11 +133,32 @@ export function renderDetailMarkers(apiName: string): void {
   }
 }
 
+function assignTeamsToVoronoi(apiName: string, regionCount: number): string[] {
+  const items = hexDynamicData[apiName];
+  const owners = (voronoiOwners as unknown as Record<string, ([number, number] | null)[]>)[apiName];
+  if (!owners || !items) return new Array(regionCount).fill('NONE');
+
+  // Build coordinate lookup from dynamic items: "x,y" → teamId
+  const conquerableByPos = new Map<string, string>();
+  for (const item of items) {
+    if (CONQUERABLE_STRUCTURES.has(item.iconType)) {
+      conquerableByPos.set(`${item.x},${item.y}`, item.teamId);
+    }
+  }
+
+  return owners.map((pos) => {
+    if (!pos) return 'NONE';
+    return conquerableByPos.get(`${pos[0]},${pos[1]}`) ?? 'NONE';
+  });
+}
+
 function buildVoronoiFeatures(apiName: string): GeoJSON.Feature<GeoJSON.Polygon>[] {
   const regions = (voronoiData as unknown as Record<string, { notes: string; coordinates: [number, number][] }[]>)[apiName];
   if (!regions) return [];
 
-  return regions.map((region) => {
+  const teams = assignTeamsToVoronoi(apiName, regions.length);
+
+  return regions.map((region, i) => {
     const coords = region.coordinates.map(([ax, ay]) => mapPointToLngLat(detailMapPoint(ax, ay)));
     // Close the ring if not already closed
     if (coords.length > 0) {
@@ -147,9 +170,17 @@ function buildVoronoiFeatures(apiName: string): GeoJSON.Feature<GeoJSON.Polygon>
     }
     return {
       type: 'Feature' as const,
-      properties: { notes: region.notes },
+      properties: { notes: region.notes, teamId: teams[i] },
       geometry: { type: 'Polygon' as const, coordinates: [coords] },
     };
+  });
+}
+
+export function refreshVoronoiFills(apiName: string): void {
+  if (!detailMode || !_map.getSource('voronoi-regions')) return;
+  const features = buildVoronoiFeatures(apiName);
+  (_map.getSource('voronoi-regions') as GeoJSONSource).setData({
+    type: 'FeatureCollection', features,
   });
 }
 
@@ -195,6 +226,18 @@ export function enterDetailMode(hexId: string): void {
     _map.addSource('voronoi-regions', {
       type: 'geojson',
       data: { type: 'FeatureCollection', features: voronoiFeatures },
+    });
+    _map.addLayer({
+      id: 'voronoi-fill',
+      type: 'fill',
+      source: 'voronoi-regions',
+      paint: {
+        'fill-color': ['match', ['get', 'teamId'],
+          'COLONIALS', '#6D7B34',
+          'WARDENS', '#516C96',
+          'rgba(0,0,0,0)'],
+        'fill-opacity': ['match', ['get', 'teamId'], 'NONE', 0, 0.25],
+      },
     });
     _map.addLayer({
       id: 'voronoi-lines',
@@ -397,11 +440,6 @@ export function enterDetailMode(hexId: string): void {
     },
   });
 
-  // Fit to image bounds
-  const sw = mapPointToLngLat({ x: 0, y: -IMG_H });
-  const ne = mapPointToLngLat({ x: IMG_W, y: 0 });
-  _map.fitBounds([sw, ne], { animate: false });
-
   detailMode = {
     hexId,
     apiName,
@@ -411,6 +449,11 @@ export function enterDetailMode(hexId: string): void {
     markerMarkers: [],
     gridLabelMarkers,
   };
+
+  // Fit to image bounds (after detailMode is set so onZoomChange sees detail mode)
+  const sw = mapPointToLngLat({ x: 0, y: -IMG_H });
+  const ne = mapPointToLngLat({ x: IMG_W, y: 0 });
+  _map.fitBounds([sw, ne], { animate: false });
 
   // Init drawing layer and activate
   initDrawLayer(_map);
@@ -431,8 +474,8 @@ export function enterDetailMode(hexId: string): void {
   activateArtillery(_map);
 
   // Render cached data immediately
-  renderDetailLabels(apiName);
   renderDetailMarkers(apiName);
+  renderDetailLabels(apiName);
 
   // Update Zustand store
   useMapStore.getState().setDetailMode({ hexId, hexName: hexInfo.name, apiName });
@@ -465,6 +508,7 @@ export function exitDetailMode(): void {
   for (const m of detailMode.gridLabelMarkers) m.remove();
 
   // Remove detail layers and sources
+  if (_map.getLayer('voronoi-fill')) _map.removeLayer('voronoi-fill');
   if (_map.getLayer('voronoi-lines')) _map.removeLayer('voronoi-lines');
   if (_map.getSource('voronoi-regions')) _map.removeSource('voronoi-regions');
   if (_map.getLayer('detail-image')) _map.removeLayer('detail-image');

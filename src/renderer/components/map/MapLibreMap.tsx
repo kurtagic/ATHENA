@@ -5,7 +5,7 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import { createMap } from '../../map/mapInit';
 import { createHexGrid, showHexLabels, hideHexLabels, showHexGrid, hideHexGrid } from '../../map/hexGrid';
 import { initLayerControl, onZoomChange } from '../../map/layerControl';
-import { initDetailView, enterDetailMode, getDetailMode, getSelectedHexes, renderDetailMarkers, showDetailMarkers, hideDetailMarkers } from '../../map/detailView';
+import { initDetailView, enterDetailMode, getDetailMode, getSelectedHexes, renderDetailMarkers, renderDetailLabels, refreshVoronoiFills, showDetailMarkers, hideDetailMarkers } from '../../map/detailView';
 import { setupDrawingEvents, showDrawCanvas, hideDrawCanvas } from '../../map/drawing';
 import { setupArtilleryEvents, showArtillery, hideArtillery, showArtilleryRings, hideArtilleryRings } from '../../map/artillery';
 import { useGlobalKeyboard } from '../../hooks/useGlobalKeyboard';
@@ -51,6 +51,8 @@ export function MapLibreMap() {
         const dm = getDetailMode();
         if (dm && dm.apiName === mapName) {
           renderDetailMarkers(mapName);
+          renderDetailLabels(mapName);
+          refreshVoronoiFills(mapName);
         }
       });
 
@@ -153,6 +155,10 @@ export function MapLibreMap() {
           hideArtilleryRings(map);
         }
 
+        if (map.getLayer('voronoi-fill')) {
+          map.setLayoutProperty('voronoi-fill', 'visibility',
+            state.layers.voronoi.visible ? 'visible' : 'none');
+        }
         if (map.getLayer('voronoi-lines')) {
           map.setLayoutProperty('voronoi-lines', 'visibility',
             state.layers.voronoi.visible ? 'visible' : 'none');
