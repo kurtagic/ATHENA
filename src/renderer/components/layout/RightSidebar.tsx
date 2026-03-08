@@ -1,11 +1,11 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import type maplibregl from 'maplibre-gl';
-import { Crosshair, Target, Flame, Trash2, Shield } from 'lucide-react';
+import { Crosshair, Target, Flame, Trash2, Shield, Check, Copy, ChevronRight, ChevronLeft } from 'lucide-react';
 import { useArtilleryStore } from '../../stores/artilleryStore';
 import { useMapStore } from '../../stores/mapStore';
 import { ARTILLERY_PLATFORMS, platformDisplayName } from '../../data/artilleryPlatforms';
 import { setPlacementMode, clearAll, clearTarget, clearImpact, setMainGun, removeArtillery, renameGun, setPlatformFromUI, setGunPlatform } from '../../map/artillery';
-import type { PlacementMode } from '../../stores/artilleryStore';
+import type { PlacementMode, ArtillerySolution } from '../../stores/artilleryStore';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectSeparator, SelectTrigger, SelectValue } from '../ui/select';
 
 function SectionHeader({ label }: { label: string }) {
@@ -17,41 +17,56 @@ function SectionHeader({ label }: { label: string }) {
   );
 }
 
+type ButtonVariant = 'primary' | 'secondary' | 'disabled' | 'active';
+
 function ActionButton({
   id,
   icon,
   label,
-  mode,
-  currentMode,
-  danger,
+  variant,
   colSpan,
   onClick,
 }: {
   id: string;
   icon?: React.ReactNode;
   label: string;
-  mode?: PlacementMode;
-  currentMode: PlacementMode;
-  danger?: boolean;
+  variant: ButtonVariant;
   colSpan?: boolean;
   onClick: () => void;
 }) {
-  const isActive = mode !== undefined && currentMode === mode;
+  const base = 'flex items-center justify-center py-2 px-2.5 rounded-[var(--radius-sm)] font-semibold text-[11px] tracking-[0.08em] cursor-pointer shadow-[0_1px_3px_rgba(0,0,0,0.3)] transition-all duration-150 active:scale-[0.97]';
+
+  let variantClass: string;
+  switch (variant) {
+    case 'primary':
+      variantClass = 'bg-[rgba(76,175,80,0.12)] text-emerald-400 border border-emerald-500/50 hover:bg-[rgba(76,175,80,0.2)] hover:text-emerald-300';
+      break;
+    case 'secondary':
+      variantClass = 'bg-[var(--color-navy)] text-white/50 border border-[var(--color-border-tactical)] hover:bg-[var(--color-navy-light)] hover:text-white/70';
+      break;
+    case 'disabled':
+      variantClass = 'bg-[var(--color-navy)] text-white/30 border border-[var(--color-border-tactical)] opacity-40 pointer-events-none';
+      break;
+    case 'active':
+      variantClass = 'active-mode bg-[var(--color-gold-dim)] border border-[var(--color-gold)] text-[var(--color-gold)]';
+      break;
+  }
+
   return (
     <button
       id={id}
-      className={`flex items-center justify-center bg-[var(--color-navy)] text-white/70 border border-[var(--color-border-tactical)] py-2 px-2.5 rounded-[var(--radius-sm)] font-semibold text-[11px] uppercase tracking-[0.08em] cursor-pointer shadow-[0_1px_3px_rgba(0,0,0,0.3)] transition-all duration-150 hover:bg-[var(--color-navy-light)] hover:text-white active:scale-[0.97]${
-        isActive ? ' active-mode' : ''
-      }${danger ? ' arty-danger-btn hover:!bg-[var(--color-destructive-dim)] hover:!border-[rgba(239,83,80,0.4)] hover:!text-[var(--color-destructive)]' : ''}${
-        colSpan ? ' col-span-2' : ''
-      }`}
+      className={`${base} ${variantClass}${colSpan ? ' col-span-2' : ''}`}
       onClick={onClick}
     >
       {icon && <span className="mr-1.5 opacity-70">{icon}</span>}
       {label}
+      {variant === 'secondary' && (
+        <Check size={10} className="ml-1.5 text-emerald-400" />
+      )}
     </button>
   );
 }
+
 
 function RenameCell({ label, posIndex }: { label: string; posIndex: number }) {
   const [editing, setEditing] = useState(false);
@@ -105,7 +120,6 @@ function platformShortName(index: number): string {
   const p = ARTILLERY_PLATFORMS[index];
   if (!p) return '?';
   if (p.nickname) return p.nickname;
-  // Use first word of name as short label
   const first = p.name.split(' ')[0];
   return first.length > 10 ? first.slice(0, 9) + '…' : first;
 }
@@ -152,13 +166,64 @@ function PlatformCell({
   );
 }
 
+function RecommendedSolution({ solution }: { solution: ArtillerySolution }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = useCallback(() => {
+    const text = `${solution.distanceM.toFixed(1)}m / ${solution.azimuthDeg.toFixed(1)}°`;
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    });
+  }, [solution]);
+
+  const borderColor = solution.inRange ? 'var(--color-accent)' : 'var(--color-destructive)';
+
+  return (
+    <div
+      className="arty-solution-card"
+      style={{ borderLeftColor: borderColor }}
+    >
+      <div className="flex items-center gap-1.5 mb-1.5">
+        <span className="text-[var(--color-gold)] text-[11px] font-bold">&#9733; {solution.label}</span>
+      </div>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3 font-mono text-[14px] text-[var(--color-gold)] tabular-nums">
+          <span>Dist: {solution.distanceM.toFixed(1)}m</span>
+          <span>Az: {solution.azimuthDeg.toFixed(1)}&deg;</span>
+        </div>
+      </div>
+      <div className="flex items-center justify-between mt-1.5">
+        {solution.inRange ? (
+          <span className="arty-badge-inrange">In Range</span>
+        ) : (
+          <span className="arty-badge-oor">Out of Range</span>
+        )}
+        <button
+          className="flex items-center gap-1 text-[10px] text-white/40 hover:text-white/70 transition-colors cursor-pointer bg-transparent border-none"
+          onClick={handleCopy}
+        >
+          <Copy size={10} />
+          {copied ? 'Copied!' : 'Copy'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export function RightSidebar() {
   const placementMode = useArtilleryStore((s) => s.placementMode);
   const platformIndex = useArtilleryStore((s) => s.platformIndex);
   const statusText = useArtilleryStore((s) => s.statusText);
   const solutions = useArtilleryStore((s) => s.solutions);
   const hasTarget = useArtilleryStore((s) => s.hasTarget);
+  const hasImpact = useArtilleryStore((s) => s.hasImpact);
   const map = useMapStore((s) => s.mapInstance);
+  const detailMode = useMapStore((s) => s.detailMode);
+  const artSidebarOpen = useMapStore((s) => s.artSidebarOpen);
+  const setArtSidebarOpen = useMapStore((s) => s.setArtSidebarOpen);
+
+  const hasGuns = solutions.length > 0;
 
   const groups = useMemo(() => {
     const map = new Map<string, { platform: typeof ARTILLERY_PLATFORMS[number]; index: number }[]>();
@@ -169,6 +234,11 @@ export function RightSidebar() {
     });
     return Array.from(map.entries());
   }, []);
+
+  const mainSolution = useMemo(() => {
+    if (!hasTarget || solutions.length === 0) return null;
+    return solutions.find((s) => s.isMain) ?? null;
+  }, [solutions, hasTarget]);
 
   const handlePlaceGun = () => {
     setPlacementMode(placementMode === 'placing-arty' ? 'idle' : 'placing-arty');
@@ -189,14 +259,47 @@ export function RightSidebar() {
     if (map) clearAll(map);
   };
 
+  // Determine button variants
+  const getPlaceGunVariant = (): ButtonVariant => {
+    if (placementMode === 'placing-arty') return 'active';
+    if (hasGuns) return 'secondary';
+    return 'primary';
+  };
+  const getSetTargetVariant = (): ButtonVariant => {
+    if (placementMode === 'placing-target') return 'active';
+    if (!hasGuns) return 'disabled';
+    if (hasTarget) return 'secondary';
+    return 'primary';
+  };
+  const getMarkImpactVariant = (): ButtonVariant => {
+    if (placementMode === 'placing-impact') return 'active';
+    if (!hasGuns || !hasTarget) return 'disabled';
+    return hasImpact ? 'secondary' : 'primary';
+  };
+
   const isPlacing = placementMode !== 'idle';
+
+  if (!detailMode) return null;
+
+  if (!artSidebarOpen) {
+    return (
+      <button
+        className="fixed top-[52px] right-3 z-50 flex items-center gap-1.5 px-3 py-2 rounded-[var(--radius-sm)] border border-[var(--color-border-tactical)] text-[var(--color-gold)] text-[11px] font-bold uppercase tracking-[0.1em] cursor-pointer transition-all duration-150 hover:bg-[var(--color-gold-dim)] hover:border-[var(--color-gold)]"
+        style={{ background: 'rgba(18,18,22,0.92)', backdropFilter: 'blur(12px)' }}
+        onClick={() => setArtSidebarOpen(true)}
+      >
+        <Shield size={13} />
+        Artillery
+        <ChevronLeft size={12} className="ml-0.5 opacity-60" />
+      </button>
+    );
+  }
 
   return (
     <div
       id="ide-sidebar-right"
-      className="overflow-hidden border-l border-white/5"
+      className="fixed top-[42px] right-0 bottom-[68px] w-[560px] z-40 overflow-hidden border-l border-white/5 transition-transform duration-200 ease-in-out"
       style={{
-        gridArea: 'right',
         background: 'linear-gradient(180deg, rgba(18,18,22,0.95) 0%, rgba(12,12,14,0.98) 100%)',
       }}
     >
@@ -204,12 +307,16 @@ export function RightSidebar() {
         id="arty-sidebar"
         className="w-full h-full text-white font-sans flex flex-col overflow-y-auto"
       >
-        <div
-          id="arty-sidebar-header"
-          className="relative px-5 pt-3.5 pb-3 font-bold text-[13px] uppercase tracking-[0.14em] text-white/70 flex items-center gap-2 after:content-[''] after:absolute after:bottom-0 after:left-5 after:right-5 after:h-px after:opacity-40"
-        >
+        <div className="panel-header relative px-5 pt-3.5 pb-3 flex items-center gap-2">
           <Shield size={14} className="text-[var(--color-gold)]" />
-          <span>Artillery</span>
+          <span className="font-bold text-[13px] uppercase tracking-[0.14em] text-[var(--color-gold)] flex-1">Artillery</span>
+          <button
+            className="text-white/40 hover:text-white/70 transition-colors cursor-pointer bg-transparent border-none p-0"
+            title="Collapse sidebar"
+            onClick={() => setArtSidebarOpen(false)}
+          >
+            <ChevronRight size={16} />
+          </button>
         </div>
         <div id="arty-sidebar-content" className="px-5 py-4 flex flex-col gap-3.5">
           <label
@@ -242,15 +349,18 @@ export function RightSidebar() {
             </SelectContent>
           </Select>
           <SectionHeader label="Fire Control" />
-          <div id="arty-actions" className="grid grid-cols-1 gap-1.5">
-            <ActionButton id="arty-place-gun-btn" icon={<Crosshair size={14} />} label="Place Gun" mode="placing-arty" currentMode={placementMode} onClick={handlePlaceGun} />
-            <ActionButton id="arty-set-target-btn" icon={<Target size={14} />} label="Set Target" mode="placing-target" currentMode={placementMode} onClick={handleSetTarget} />
-            <ActionButton id="arty-mark-impact-btn" icon={<Flame size={14} />} label="Mark Impact" mode="placing-impact" currentMode={placementMode} onClick={handleMarkImpact} />
+          <div id="arty-actions" className="grid grid-cols-2 gap-1.5">
+            <ActionButton id="arty-place-gun-btn" icon={<Crosshair size={14} />} label="Mark Platform" variant={getPlaceGunVariant()} onClick={handlePlaceGun} />
+            <ActionButton id="arty-set-target-btn" icon={<Target size={14} />} label="Mark Target" variant={getSetTargetVariant()} onClick={handleSetTarget} />
+            <ActionButton id="arty-mark-impact-btn" icon={<Flame size={14} />} label="Mark Impact" variant={getMarkImpactVariant()} colSpan onClick={handleMarkImpact} />
           </div>
-          <div className="grid grid-cols-3 gap-1.5">
-            <ActionButton id="arty-clear-target-btn" label="Clear Target" currentMode={placementMode} danger onClick={handleClearTarget} />
-            <ActionButton id="arty-clear-impact-btn" label="Clear Impact" currentMode={placementMode} danger onClick={handleClearImpact} />
-            <ActionButton id="arty-clear-all-btn" label="Clear All" currentMode={placementMode} danger onClick={handleClearAll} />
+          <div className="flex items-center gap-0 text-[10px] uppercase tracking-[0.06em]">
+            <span className="text-white/30 mr-1.5">Clear:</span>
+            <button className="arty-clear-link" onClick={handleClearTarget}>Target</button>
+            <span className="text-white/20 mx-1.5">&middot;</span>
+            <button className="arty-clear-link" onClick={handleClearImpact}>Impact</button>
+            <span className="text-white/20 mx-1.5">&middot;</span>
+            <button className="arty-clear-link" onClick={handleClearAll}>All</button>
           </div>
           {statusText && (
             <div
@@ -261,6 +371,9 @@ export function RightSidebar() {
             </div>
           )}
           <SectionHeader label="Solutions" />
+          {mainSolution && (
+            <RecommendedSolution solution={mainSolution} />
+          )}
           <table
             id="arty-solution-table"
             className="w-full font-mono text-sm"
@@ -300,12 +413,12 @@ export function RightSidebar() {
                     <PlatformCell platformIndex={sol.platformIndex} posIndex={sol.posIndex} groups={groups} map={map} />
                     {hasTarget ? (
                       <>
-                        <td className="arty-col-dist text-white">{sol.distanceM.toFixed(1)}m</td>
-                        <td className="arty-col-az text-white">{sol.azimuthDeg.toFixed(1)}&deg;</td>
-                        <td className="arty-col-reld text-white">
+                        <td className="arty-col-dist text-white tabular-nums">{sol.distanceM.toFixed(1)}m</td>
+                        <td className="arty-col-az text-white tabular-nums">{sol.azimuthDeg.toFixed(1)}&deg;</td>
+                        <td className="arty-col-reld text-white tabular-nums">
                           {sol.isMain ? '--' : `${sol.relDist >= 0 ? '+' : ''}${sol.relDist.toFixed(1)}m`}
                         </td>
-                        <td className="arty-col-relaz text-white">
+                        <td className="arty-col-relaz text-white tabular-nums">
                           {sol.isMain ? '--' : `${sol.relAz >= 0 ? '+' : ''}${sol.relAz.toFixed(1)}\u00b0`}
                         </td>
                       </>

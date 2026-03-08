@@ -633,7 +633,7 @@ function refreshAll(map: maplibregl.Map, sync = true): void {
 
   // Push solutions to Zustand store
   const solutions = computeSolutions();
-  useArtilleryStore.getState().setSolutions(solutions, state.target !== null);
+  useArtilleryStore.getState().setSolutions(solutions, state.target !== null, state.impact !== null);
 
   if (sync && onArtilleryChanged) onArtilleryChanged(saveArtilleryState(), artilleryHexId);
 }

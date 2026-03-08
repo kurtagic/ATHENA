@@ -1,4 +1,5 @@
 import React, { useCallback } from 'react';
+import { Layers, ChevronRight } from 'lucide-react';
 import { useMapStore } from '../../stores/mapStore';
 import { setShellElement } from '../../map/detailView';
 import { TopBar } from './TopBar';
@@ -10,45 +11,64 @@ import { SessionPanel } from '../panels/SessionPanel';
 
 export function AppShell() {
   const detailMode = useMapStore((s) => s.detailMode);
+  const layersSidebarOpen = useMapStore((s) => s.layersSidebarOpen);
+  const setLayersSidebarOpen = useMapStore((s) => s.setLayersSidebarOpen);
 
   const shellRef = useCallback((el: HTMLDivElement | null) => {
     if (el) setShellElement(el);
   }, []);
 
   return (
-    <div
-      ref={shellRef}
-      id="ide-shell"
-      className={`w-screen h-screen grid transition-all duration-200 ease-in-out ${
-        detailMode
-          ? 'grid-rows-[42px_1fr_68px] grid-cols-[240px_1fr_560px] detail-mode'
-          : 'grid-rows-[42px_1fr_0px] grid-cols-[0px_1fr_0px]'
-      }`}
-      style={{
-        gridTemplateAreas: `
-          "topbar topbar topbar"
-          "left   map    right"
-          "bottom bottom bottom"
-        `,
-      }}
-    >
-      <TopBar />
-      <LeftSidebar />
-      <MapPanel />
-      <RightSidebar />
-      <BottomBar />
-
-      {/* Floating multiplayer panel — always visible, top-left; shifts right of sidebar in detail mode */}
+    <>
       <div
-        className={`fixed top-12 w-[220px] z-50 rounded-lg border border-white/10 backdrop-blur-xl overflow-hidden transition-[left] duration-200 ease-in-out ${
-          detailMode ? 'left-[252px]' : 'left-3'
+        ref={shellRef}
+        id="ide-shell"
+        className={`w-screen h-screen grid grid-cols-[1fr] ${
+          detailMode
+            ? `grid-rows-[42px_1fr_68px] detail-mode`
+            : 'grid-rows-[42px_1fr_0px]'
         }`}
         style={{
-          background: 'linear-gradient(180deg, rgba(18,18,22,0.92) 0%, rgba(12,12,14,0.96) 100%)',
+          gridTemplateAreas: `
+            "topbar"
+            "map"
+            "bottom"
+          `,
         }}
       >
-        <SessionPanel />
+        <TopBar />
+        <MapPanel />
+        <BottomBar />
+
+        {/* Floating left-side stack: multiplayer panel + layers toggle (when sidebar closed) */}
+        <div
+          className={`fixed top-12 w-[220px] z-50 flex flex-col gap-2 transition-[left] duration-200 ease-in-out ${
+            detailMode && layersSidebarOpen ? 'left-[252px]' : 'left-3'
+          }`}
+        >
+          <div
+            className="rounded-lg border border-white/10 backdrop-blur-xl overflow-hidden"
+            style={{
+              background: 'linear-gradient(180deg, rgba(18,18,22,0.92) 0%, rgba(12,12,14,0.96) 100%)',
+            }}
+          >
+            <SessionPanel />
+          </div>
+          {detailMode && !layersSidebarOpen && (
+            <button
+              className="flex items-center gap-1.5 px-3 py-2 rounded-[var(--radius-sm)] border border-[var(--color-border-tactical)] text-[var(--color-gold)] text-[11px] font-bold uppercase tracking-[0.1em] cursor-pointer transition-all duration-150 hover:bg-[var(--color-gold-dim)] hover:border-[var(--color-gold)] self-start"
+              style={{ background: 'rgba(18,18,22,0.92)', backdropFilter: 'blur(12px)' }}
+              onClick={() => setLayersSidebarOpen(true)}
+            >
+              <ChevronRight size={12} className="mr-0.5 opacity-60" />
+              <Layers size={13} />
+              Layers
+            </button>
+          )}
+        </div>
       </div>
-    </div>
+      <LeftSidebar />
+      <RightSidebar />
+    </>
   );
 }

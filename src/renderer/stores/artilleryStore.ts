@@ -21,9 +21,10 @@ interface ArtilleryStoreState {
   statusText: string;
   solutions: ArtillerySolution[];
   hasTarget: boolean;
+  hasImpact: boolean;
   setPlacementMode: (mode: PlacementMode) => void;
   setPlatformIndex: (index: number) => void;
-  setSolutions: (solutions: ArtillerySolution[], hasTarget: boolean) => void;
+  setSolutions: (solutions: ArtillerySolution[], hasTarget: boolean, hasImpact: boolean) => void;
   setStatusText: (text: string) => void;
 }
 
@@ -33,8 +34,9 @@ export const useArtilleryStore = create<ArtilleryStoreState>((set) => ({
   statusText: '',
   solutions: [],
   hasTarget: false,
+  hasImpact: false,
   setPlacementMode: (mode) => set({ placementMode: mode }),
   setPlatformIndex: (index) => set({ platformIndex: index }),
-  setSolutions: (solutions, hasTarget) => set({ solutions, hasTarget }),
+  setSolutions: (solutions, hasTarget, hasImpact) => set({ solutions, hasTarget, hasImpact }),
   setStatusText: (text) => set({ statusText: text }),
 }));

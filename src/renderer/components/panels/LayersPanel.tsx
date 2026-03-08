@@ -23,11 +23,8 @@ export function LayersPanel() {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="relative px-5 pt-3.5 pb-3">
-        <div className="flex items-center gap-2">
-          <span className="font-bold text-[13px] uppercase tracking-[0.14em] text-[var(--color-gold)]">Layers</span>
-          <div className="flex-1 h-px bg-gradient-to-r from-[var(--color-gold-dim)] to-transparent" />
-        </div>
+      <div className="panel-header relative px-5 pt-3.5 pb-3">
+        <span className="font-bold text-[13px] uppercase tracking-[0.14em] text-[var(--color-gold)]">Layers</span>
       </div>
       <div className="flex flex-col gap-3 px-4 py-3">
         {LAYER_GROUPS.map((group) => (

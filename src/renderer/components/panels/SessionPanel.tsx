@@ -22,14 +22,11 @@ export function SessionPanel() {
 
   return (
     <div className="flex flex-col">
-      <div className="relative px-5 pt-3.5 pb-3">
-        <div className="flex items-center gap-2">
-          <span className="font-bold text-[13px] uppercase tracking-[0.14em] text-[var(--color-gold)]">Multiplayer</span>
-          <div className="flex-1 h-px bg-gradient-to-r from-[var(--color-gold-dim)] to-transparent" />
-          <StatusDot status={status} />
-        </div>
+      <div className="panel-header relative px-5 pt-3.5 pb-3 flex items-center gap-2">
+        <span className="font-bold text-[13px] uppercase tracking-[0.14em] text-[var(--color-gold)]">Multiplayer</span>
+        <span className="ml-auto"><StatusDot status={status} /></span>
       </div>
-      <div className="flex flex-col gap-2 px-4 pb-3">
+      <div className="flex flex-col gap-2 px-4 pt-3 pb-3">
         {error && (
           <div className="flex items-start gap-1 text-[11px] text-red-400 bg-red-400/10 rounded px-2 py-1.5">
             <span className="flex-1">{error}</span>

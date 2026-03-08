@@ -35,6 +35,7 @@ let detailMode: DetailModeState | null = null;
 let _map: maplibregl.Map;
 let _shellEl: HTMLElement | null = null;
 let _onMoveHandler: (() => void) | null = null;
+let _unsubLayers: (() => void) | null = null;
 
 export function setShellElement(el: HTMLElement): void {
   _shellEl = el;
@@ -334,10 +335,15 @@ export function enterDetailMode(hexId: string): void {
       colMarkers[c].setLngLat(mapPointToLngLat({ x: (c + 0.5) * CELL_W, y: stickyY }));
     }
 
-    // Row labels: clamp x to left of viewport or grid left, whichever is more to the right (inside grid)
+    // Row labels: offset left edge by layers sidebar width when open
+    const { layersSidebarOpen } = useMapStore.getState();
+    const sidebarPx = layersSidebarOpen ? 240 : 0;
+    const leftScreenPt = _map.unproject([sidebarPx, 0]);
+    const adjustedLeft = lngLatToMapPoint(leftScreenPt.lng, leftScreenPt.lat);
+
     const gridLeft = 0;
     const gridRight = GRID_COLS * CELL_W;
-    const stickyX = Math.min(gridRight - CELL_W, Math.max(gridLeft + PADDING * CELL_W, topLeft.x + PADDING * CELL_W));
+    const stickyX = Math.min(gridRight - CELL_W, Math.max(gridLeft + PADDING * CELL_W, adjustedLeft.x + PADDING * CELL_W));
     for (let r = 0; r < rowMarkers.length; r++) {
       rowMarkers[r].setLngLat(mapPointToLngLat({ x: stickyX, y: -(r + 0.5) * CELL_H }));
     }
@@ -346,6 +352,11 @@ export function enterDetailMode(hexId: string): void {
   updateStickyLabels();
   _onMoveHandler = updateStickyLabels;
   _map.on('move', _onMoveHandler);
+
+  // Reposition row labels when layers sidebar is toggled
+  _unsubLayers = useMapStore.subscribe((state, prev) => {
+    if (state.layersSidebarOpen !== prev.layersSidebarOpen) updateStickyLabels();
+  });
 
   // Subgrid lines (3x3 per cell)
   const SUB_W = CELL_W / 3;
@@ -496,10 +507,14 @@ export function exitDetailMode(): void {
   cleanupArtillery(_map);
   cleanupDrawing(_map);
 
-  // Remove sticky label listener
+  // Remove sticky label listener and sidebar subscription
   if (_onMoveHandler) {
     _map.off('move', _onMoveHandler);
     _onMoveHandler = null;
+  }
+  if (_unsubLayers) {
+    _unsubLayers();
+    _unsubLayers = null;
   }
 
   // Remove detail markers
