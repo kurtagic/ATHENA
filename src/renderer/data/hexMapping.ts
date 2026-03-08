@@ -1,4 +1,7 @@
 import type { HexDefinition } from '../../shared/types';
+import type { MapPoint } from './coords';
+import { toMapPoint } from './coords';
+import { hexMapUrl } from './assetUrl';
 import rawHexes from '../../../static/hexes.json';
 
 // Hex grid constants (fitted to tile imagery: 10 hex-widths span 256 CRS units)
@@ -25,7 +28,7 @@ console.log(`[hexMapping] loaded ${hexes.length} hexes, lookup keys: ${Object.ke
 
 export function hexImageUrl(hexId: string): string {
   const hex = hexLookup[hexId];
-  return `tile:///hexmaps/${hex ? hex.file : `Map${hexId}.png`}`;
+  return hexMapUrl(hexId, hex?.file ?? '');
 }
 
 export function resolveHex(name: string): HexDefinition | undefined {
@@ -34,8 +37,17 @@ export function resolveHex(name: string): HexDefinition | undefined {
   return hex;
 }
 
-export function apiToLatLng(hex: HexDefinition, apiX: number, apiY: number): [number, number] {
-  const cLng = hex.x + 128;
-  const cLat = hex.y - 128;
-  return [cLat + H / 2 - apiY * H, cLng - W / 2 + apiX * W];
+export function apiToMapPoint(hex: HexDefinition, apiX: number, apiY: number): MapPoint {
+  const cx = hex.x + 128;
+  const cy = hex.y - 128;
+  // x = lng direction, y = lat direction (up)
+  return toMapPoint(cx - W / 2 + apiX * W, cy + H / 2 - apiY * H);
+}
+
+// Detail view coordinate mapping: API coords -> detail image CRS
+const IMG_W = 256;
+const IMG_H = 256 * 1776 / 2048;
+
+export function detailMapPoint(apiX: number, apiY: number): MapPoint {
+  return toMapPoint(apiX * IMG_W, -apiY * IMG_H);
 }

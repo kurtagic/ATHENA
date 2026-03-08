@@ -1,22 +1,30 @@
-import L from 'leaflet';
+import type maplibregl from 'maplibre-gl';
+import type { MapPoint } from '../data/coords';
+import { toMapPoint, mapPointToLngLat, lngLatToMapPoint } from '../data/coords';
 import type { SavedStroke } from '../data/store';
 import { pushUndoAction } from '../data/undoStack';
+import { useMapStore } from '../stores/mapStore';
+import { useDrawStore } from '../stores/drawStore';
+
+interface StrokeData {
+  points: MapPoint[];
+  color: string;
+  weight: number;
+}
 
 interface DrawState {
   active: boolean;
   drawing: boolean;
   color: string;
   weight: number;
-  currentLine: L.Polyline | null;
-  currentPoints: L.LatLng[];
-  strokes: L.Polyline[];
-  drawLayer: L.LayerGroup | null;
+  currentPoints: MapPoint[];
+  strokes: StrokeData[];
+  canvas: HTMLCanvasElement | null;
   erasing: boolean;
   eraserActive: boolean;
   eraserRadius: number;
-  eraserCursor: HTMLDivElement | null;
   erasedDuringDrag: SavedStroke[];
-  mapRef: L.Map | null;
+  mapRef: maplibregl.Map | null;
 }
 
 const drawState: DrawState = {
@@ -24,14 +32,12 @@ const drawState: DrawState = {
   drawing: false,
   color: '#ff0000',
   weight: 3,
-  currentLine: null,
   currentPoints: [],
   strokes: [],
-  drawLayer: null,
+  canvas: null,
   erasing: false,
   eraserActive: false,
   eraserRadius: 20,
-  eraserCursor: null,
   erasedDuringDrag: [],
   mapRef: null,
 };
@@ -40,294 +46,292 @@ export function getDrawState(): DrawState {
   return drawState;
 }
 
-export function initDrawLayer(map: L.Map): void {
-  // Create a custom pane so drawings always render above markers/labels
-  if (!map.getPane('drawPane')) {
-    const pane = map.createPane('drawPane');
-    pane.style.zIndex = '650'; // above markerPane (600) and overlayPane (400)
+export function showDrawCanvas(): void {
+  if (drawState.canvas) drawState.canvas.style.display = '';
+}
+
+export function hideDrawCanvas(): void {
+  if (drawState.canvas) drawState.canvas.style.display = 'none';
+}
+
+function resizeCanvas(): void {
+  if (!drawState.canvas || !drawState.mapRef) return;
+  const container = drawState.mapRef.getContainer();
+  drawState.canvas.width = container.clientWidth;
+  drawState.canvas.height = container.clientHeight;
+  redrawAllStrokes();
+}
+
+function redrawAllStrokes(): void {
+  if (!drawState.canvas || !drawState.mapRef) return;
+  const ctx = drawState.canvas.getContext('2d');
+  if (!ctx) return;
+
+  ctx.clearRect(0, 0, drawState.canvas.width, drawState.canvas.height);
+  const map = drawState.mapRef;
+
+  const drawStroke = (points: MapPoint[], color: string, weight: number) => {
+    if (points.length < 2) return;
+    ctx.beginPath();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = weight;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    for (let i = 0; i < points.length; i++) {
+      const lngLat = mapPointToLngLat(points[i]);
+      const px = map.project(lngLat);
+      if (i === 0) ctx.moveTo(px.x, px.y);
+      else ctx.lineTo(px.x, px.y);
+    }
+    ctx.stroke();
+  };
+
+  // Draw completed strokes
+  for (const stroke of drawState.strokes) {
+    drawStroke(stroke.points, stroke.color, stroke.weight);
   }
-  drawState.drawLayer = L.layerGroup([], { pane: 'drawPane' }).addTo(map);
+
+  // Draw current in-progress stroke
+  if (drawState.drawing && drawState.currentPoints.length > 1) {
+    drawStroke(drawState.currentPoints, drawState.color, drawState.weight);
+  }
+}
+
+export function initDrawLayer(map: maplibregl.Map): void {
+  // Create canvas overlay
+  const container = map.getContainer();
+  const canvas = document.createElement('canvas');
+  canvas.style.position = 'absolute';
+  canvas.style.top = '0';
+  canvas.style.left = '0';
+  canvas.style.width = '100%';
+  canvas.style.height = '100%';
+  canvas.style.pointerEvents = 'none';
+  canvas.style.zIndex = '10';
+  canvas.width = container.clientWidth;
+  canvas.height = container.clientHeight;
+  container.appendChild(canvas);
+
+  drawState.canvas = canvas;
+  drawState.mapRef = map;
   drawState.strokes = [];
-  drawState.currentLine = null;
   drawState.currentPoints = [];
   drawState.drawing = false;
   drawState.active = false;
+
+  // Redraw on pan/zoom
+  map.on('move', redrawAllStrokes);
+  map.on('resize', resizeCanvas);
 }
 
-export function cleanupDrawing(map: L.Map): void {
+export function cleanupDrawing(map: maplibregl.Map): void {
   if (drawState.erasing) toggleEraser(map);
   if (drawState.active) deactivateDrawing(map);
-  if (drawState.drawLayer) {
-    map.removeLayer(drawState.drawLayer);
-    drawState.drawLayer = null;
+
+  map.off('move', redrawAllStrokes);
+  map.off('resize', resizeCanvas);
+
+  if (drawState.canvas) {
+    drawState.canvas.remove();
+    drawState.canvas = null;
   }
   drawState.strokes = [];
-  drawState.currentLine = null;
   drawState.currentPoints = [];
   drawState.drawing = false;
   drawState.eraserActive = false;
   drawState.erasedDuringDrag = [];
 }
 
-export function activateDrawing(map: L.Map): void {
+export function activateDrawing(_map: maplibregl.Map): void {
   drawState.active = true;
 }
 
-export function deactivateDrawing(map: L.Map): void {
+export function deactivateDrawing(_map: maplibregl.Map): void {
   finalizeStroke();
   drawState.active = false;
 }
 
 function finalizeStroke(): void {
-  if (drawState.currentLine) {
-    if (drawState.currentPoints.length > 1) {
-      drawState.strokes.push(drawState.currentLine);
-      pushUndoAction({ type: 'drawing' });
-    } else {
-      drawState.drawLayer?.removeLayer(drawState.currentLine);
-    }
-    drawState.currentLine = null;
-    drawState.currentPoints = [];
+  if (drawState.drawing && drawState.currentPoints.length > 1) {
+    drawState.strokes.push({
+      points: [...drawState.currentPoints],
+      color: drawState.color,
+      weight: drawState.weight,
+    });
+    pushUndoAction({ type: 'drawing' });
   }
+  drawState.currentPoints = [];
   drawState.drawing = false;
+  redrawAllStrokes();
 }
 
 export function undoStroke(): void {
   if (drawState.strokes.length === 0) return;
-  const last = drawState.strokes.pop()!;
-  drawState.drawLayer?.removeLayer(last);
+  drawState.strokes.pop();
+  redrawAllStrokes();
 }
 
 export function setDrawColor(color: string): void {
   drawState.color = color;
-  // Deactivate eraser when a color is selected (mutually exclusive)
   if (drawState.erasing && drawState.mapRef) {
     toggleEraser(drawState.mapRef);
   }
-
-  const swatches = document.querySelectorAll('.draw-swatch');
-  swatches.forEach((swatch) => {
-    if (swatch.getAttribute('data-color') === color) {
-      swatch.classList.add('selected');
-    } else {
-      swatch.classList.remove('selected');
-    }
-  });
 }
 
 export function saveDrawState(): SavedStroke[] {
-  return drawState.strokes.map((polyline) => {
-    const latlngs = polyline.getLatLngs() as L.LatLng[];
-    return {
-      points: latlngs.map((ll) => [ll.lat, ll.lng] as [number, number]),
-      color: polyline.options.color as string,
-      weight: polyline.options.weight as number,
-    };
-  });
+  return drawState.strokes.map((stroke) => ({
+    points: stroke.points.map((p) => [p.x, p.y] as [number, number]),
+    color: stroke.color,
+    weight: stroke.weight,
+  }));
 }
 
-export function restoreDrawState(saved: SavedStroke[]): void {
-  if (!drawState.drawLayer) return;
+export function restoreDrawState(saved: SavedStroke[], map: maplibregl.Map): void {
   for (const stroke of saved) {
-    const polyline = L.polyline(
-      stroke.points.map(([lat, lng]) => L.latLng(lat, lng)),
-      {
-        color: stroke.color,
-        weight: stroke.weight,
-        lineCap: 'round',
-        lineJoin: 'round',
-        pane: 'drawPane',
-      },
-    ).addTo(drawState.drawLayer);
-    drawState.strokes.push(polyline);
+    drawState.strokes.push({
+      points: stroke.points.map(([x, y]) => toMapPoint(x, y)),
+      color: stroke.color,
+      weight: stroke.weight,
+    });
   }
+  redrawAllStrokes();
 }
 
-export function toggleEraser(map: L.Map): void {
+export function toggleEraser(map: maplibregl.Map): void {
   drawState.erasing = !drawState.erasing;
-  const btn = document.getElementById('draw-eraser-btn');
-  const container = map.getContainer();
 
   if (drawState.erasing) {
-    btn?.classList.add('active');
-    // Deselect color swatches to signal mutual exclusivity
-    document.querySelectorAll('.draw-swatch').forEach((s) => s.classList.remove('selected'));
-    // Create eraser cursor
-    const cursor = document.createElement('div');
-    cursor.className = 'eraser-cursor';
-    const d = drawState.eraserRadius * 2;
-    cursor.style.width = `${d}px`;
-    cursor.style.height = `${d}px`;
-    cursor.style.borderRadius = '50%';
-    cursor.style.border = '2px solid rgba(239, 83, 80, 0.8)';
-    cursor.style.background = 'rgba(239, 83, 80, 0.1)';
-    cursor.style.position = 'absolute';
-    cursor.style.pointerEvents = 'none';
-    cursor.style.zIndex = '10000';
-    cursor.style.display = 'none';
-    container.appendChild(cursor);
-    drawState.eraserCursor = cursor;
-    container.style.cursor = 'none';
+    useMapStore.getState().setMapCursor('none');
   } else {
-    btn?.classList.remove('active');
-    if (drawState.eraserCursor) {
-      drawState.eraserCursor.remove();
-      drawState.eraserCursor = null;
-    }
-    container.style.cursor = '';
+    useMapStore.getState().setMapCursor('');
+    useDrawStore.getState().setEraserPosition(null);
   }
 }
 
-function updateEraserCursor(map: L.Map, e: MouseEvent): void {
-  if (!drawState.eraserCursor) return;
+function updateEraserCursor(map: maplibregl.Map, e: MouseEvent): void {
   const rect = map.getContainer().getBoundingClientRect();
   const x = e.clientX - rect.left - drawState.eraserRadius;
   const y = e.clientY - rect.top - drawState.eraserRadius;
-  drawState.eraserCursor.style.left = `${x}px`;
-  drawState.eraserCursor.style.top = `${y}px`;
-  drawState.eraserCursor.style.display = '';
+  useDrawStore.getState().setEraserPosition({ x, y });
 }
 
-function eraseStrokesAtPoint(map: L.Map, latlng: L.LatLng): void {
+function eraseStrokesAtPoint(map: maplibregl.Map, lngLat: maplibregl.LngLat): void {
+  const point = lngLatToMapPoint(lngLat.lng, lngLat.lat);
+
   // Convert pixel radius to CRS distance
-  const centerPt = map.latLngToContainerPoint(latlng);
-  const edgePt = L.point(centerPt.x + drawState.eraserRadius, centerPt.y);
-  const edgeLatLng = map.containerPointToLatLng(edgePt);
-  const radiusSq =
-    (latlng.lat - edgeLatLng.lat) ** 2 + (latlng.lng - edgeLatLng.lng) ** 2;
+  const centerPx = map.project([lngLat.lng, lngLat.lat]);
+  const edgeLngLat = map.unproject([centerPx.x + drawState.eraserRadius, centerPx.y]);
+  const edgePoint = lngLatToMapPoint(edgeLngLat.lng, edgeLngLat.lat);
+  const radiusSq = (point.x - edgePoint.x) ** 2 + (point.y - edgePoint.y) ** 2;
 
   for (let i = drawState.strokes.length - 1; i >= 0; i--) {
-    const polyline = drawState.strokes[i];
-    const pts = polyline.getLatLngs() as L.LatLng[];
+    const stroke = drawState.strokes[i];
     let hit = false;
-    for (const pt of pts) {
-      const dSq = (pt.lat - latlng.lat) ** 2 + (pt.lng - latlng.lng) ** 2;
+    for (const pt of stroke.points) {
+      const dSq = (pt.x - point.x) ** 2 + (pt.y - point.y) ** 2;
       if (dSq <= radiusSq) {
         hit = true;
         break;
       }
     }
     if (hit) {
-      // Serialize before removing
       const saved: SavedStroke = {
-        points: pts.map((ll) => [ll.lat, ll.lng] as [number, number]),
-        color: polyline.options.color as string,
-        weight: polyline.options.weight as number,
+        points: stroke.points.map((p) => [p.x, p.y] as [number, number]),
+        color: stroke.color,
+        weight: stroke.weight,
       };
       drawState.erasedDuringDrag.push(saved);
-      drawState.drawLayer?.removeLayer(polyline);
       drawState.strokes.splice(i, 1);
     }
   }
+  redrawAllStrokes();
 }
 
-function finalizeErase(map: L.Map): void {
+function finalizeErase(map: maplibregl.Map): void {
   if (drawState.erasedDuringDrag.length > 0) {
     pushUndoAction({ type: 'eraser', strokes: [...drawState.erasedDuringDrag] });
   }
   drawState.eraserActive = false;
   drawState.erasedDuringDrag = [];
-  map.dragging.enable();
+  map.dragPan.enable();
 }
 
 export function restoreErasedStrokes(saved: SavedStroke[]): void {
-  if (!drawState.drawLayer) return;
   for (const stroke of saved) {
-    const polyline = L.polyline(
-      stroke.points.map(([lat, lng]) => L.latLng(lat, lng)),
-      {
-        color: stroke.color,
-        weight: stroke.weight,
-        lineCap: 'round',
-        lineJoin: 'round',
-        pane: 'drawPane',
-      },
-    ).addTo(drawState.drawLayer);
-    drawState.strokes.push(polyline);
+    drawState.strokes.push({
+      points: stroke.points.map(([x, y]) => toMapPoint(x, y)),
+      color: stroke.color,
+      weight: stroke.weight,
+    });
   }
+  redrawAllStrokes();
 }
 
-export function setupDrawingEvents(map: L.Map): void {
+export function setupDrawingEvents(map: maplibregl.Map): void {
   drawState.mapRef = map;
 
-  map.on('mousedown', (e: L.LeafletMouseEvent) => {
+  const container = map.getContainer();
+
+  container.addEventListener('mousedown', (e: MouseEvent) => {
     if (!drawState.active) return;
-    if (e.originalEvent.button !== 2) return;
-    // Eraser: right-click when eraser mode is on
+    if (e.button !== 2) return;
+
+    const rect = container.getBoundingClientRect();
+    const lngLat = map.unproject([e.clientX - rect.left, e.clientY - rect.top]);
+
     if (drawState.erasing) {
-      map.dragging.disable();
+      map.dragPan.disable();
       drawState.eraserActive = true;
-      eraseStrokesAtPoint(map, e.latlng);
+      eraseStrokesAtPoint(map, lngLat);
       return;
     }
+
     drawState.drawing = true;
-    drawState.currentPoints = [e.latlng];
-    drawState.currentLine = L.polyline(drawState.currentPoints, {
-      color: drawState.color,
-      weight: drawState.weight,
-      lineCap: 'round',
-      lineJoin: 'round',
-      pane: 'drawPane',
-    }).addTo(drawState.drawLayer!);
+    const point = lngLatToMapPoint(lngLat.lng, lngLat.lat);
+    drawState.currentPoints = [point];
   });
 
-  map.on('mousemove', (e: L.LeafletMouseEvent) => {
-    // Always update eraser cursor position
+  container.addEventListener('mousemove', (e: MouseEvent) => {
     if (drawState.erasing) {
-      updateEraserCursor(map, e.originalEvent);
+      updateEraserCursor(map, e);
     }
+
+    const rect = container.getBoundingClientRect();
+    const lngLat = map.unproject([e.clientX - rect.left, e.clientY - rect.top]);
+
     if (drawState.eraserActive) {
-      eraseStrokesAtPoint(map, e.latlng);
+      eraseStrokesAtPoint(map, lngLat);
       return;
     }
     if (!drawState.drawing) return;
-    drawState.currentPoints.push(e.latlng);
-    drawState.currentLine?.setLatLngs(drawState.currentPoints);
+
+    const point = lngLatToMapPoint(lngLat.lng, lngLat.lat);
+    drawState.currentPoints.push(point);
+    redrawAllStrokes();
   });
 
-  map.on('mouseup', () => {
+  const finishDraw = () => {
     if (drawState.eraserActive) {
       finalizeErase(map);
       return;
     }
     if (drawState.drawing) finalizeStroke();
-  });
+  };
 
-  document.addEventListener('mouseup', () => {
-    if (drawState.eraserActive) {
-      finalizeErase(map);
-      return;
-    }
-    if (drawState.drawing) finalizeStroke();
-  });
+  container.addEventListener('mouseup', finishDraw);
+  document.addEventListener('mouseup', finishDraw);
 
   // Suppress context menu while drawing
-  map.getContainer().addEventListener('contextmenu', (e: MouseEvent) => {
+  container.addEventListener('contextmenu', (e: MouseEvent) => {
     if (drawState.active) e.preventDefault();
   });
 
-  // Toolbar handlers
-  const swatches = document.querySelectorAll('.draw-swatch');
-  swatches.forEach((swatch) => {
-    swatch.addEventListener('click', () => {
-      setDrawColor(swatch.getAttribute('data-color')!);
-    });
-  });
-
-  document.getElementById('draw-custom-color')?.addEventListener('input', (e) => {
-    setDrawColor((e.target as HTMLInputElement).value);
-  });
-
-  // Eraser button
-  document.getElementById('draw-eraser-btn')?.addEventListener('click', () => {
-    toggleEraser(map);
-  });
-
   // Hide/show eraser cursor on leave/enter
-  map.getContainer().addEventListener('mouseleave', () => {
-    if (drawState.eraserCursor) drawState.eraserCursor.style.display = 'none';
+  container.addEventListener('mouseleave', () => {
+    if (drawState.erasing) useDrawStore.getState().setEraserPosition(null);
   });
-  map.getContainer().addEventListener('mouseenter', (e: MouseEvent) => {
+  container.addEventListener('mouseenter', (e: MouseEvent) => {
     if (drawState.erasing) updateEraserCursor(map, e);
   });
 }

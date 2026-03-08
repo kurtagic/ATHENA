@@ -1,45 +1,21 @@
-import L from 'leaflet';
+import maplibregl from 'maplibre-gl';
+import type { GeoJSONSource } from 'maplibre-gl';
+import type { MapPoint } from '../data/coords';
+import { toMapPoint, mapPointToLngLat, lngLatToMapPoint } from '../data/coords';
 import type { SavedArtilleryState } from '../data/store';
 import { ARTILLERY_PLATFORMS } from '../data/artilleryPlatforms';
 import { crsDistanceMeters, crsAzimuth, metersToRadius, calculateCorrection, interpolateInaccuracy } from '../data/artilleryCalc';
-import {
-  updateSolutionTable,
-  updateStatusText,
-  highlightActionButton,
-  populatePlatformDropdown,
-  setupSidebarEvents,
-  type ArtillerySolution,
-} from './artillerySidebar';
+import { useArtilleryStore, type ArtillerySolution } from '../stores/artilleryStore';
+import { useMapStore } from '../stores/mapStore';
 import { pushUndoAction } from '../data/undoStack';
 
 const CIRCLE_SEGMENTS = 64;
 
-const DOT_WRAP_SIZE = 60;
-
-function createDotMarker(
-  latlng: L.LatLng,
-  dotSize: number,
-  cssClass: string,
-  interactive: boolean,
-): L.Marker {
-  const dotClasses = ['arty-dot', cssClass];
-  if (interactive) dotClasses.push('arty-draggable');
-  return L.marker(latlng, {
-    icon: L.divIcon({
-      className: 'arty-dot-wrap',
-      iconSize: [DOT_WRAP_SIZE, DOT_WRAP_SIZE],
-      iconAnchor: [DOT_WRAP_SIZE / 2, DOT_WRAP_SIZE / 2],
-      html: `<div class="${dotClasses.join(' ')}" style="width:${dotSize}px;height:${dotSize}px"></div>`,
-    }),
-    pane: 'artilleryPane',
-    interactive,
-  });
-}
-
 interface ArtyPosition {
   id: number;
-  latlng: L.LatLng;
+  point: MapPoint;
   label: string;
+  platformIndex?: number;
 }
 
 type PlacementMode = 'idle' | 'placing-arty' | 'placing-target' | 'placing-impact';
@@ -48,16 +24,16 @@ interface ArtyState {
   active: boolean;
   placementMode: PlacementMode;
   positions: ArtyPosition[];
-  target: L.LatLng | null;
-  impact: L.LatLng | null;
-  corrected: L.LatLng | null;
+  target: MapPoint | null;
+  impact: MapPoint | null;
+  corrected: MapPoint | null;
   mainGunIndex: number;
   defaultPlatformIndex: number;
-  ringLayer: L.LayerGroup | null;
-  artyLayer: L.LayerGroup | null;
-  targetLayer: L.LayerGroup | null;
   nextId: number;
   nextLabelNum: number;
+  // MapLibre refs
+  markers: maplibregl.Marker[];
+  sourcesAdded: boolean;
 }
 
 const state: ArtyState = {
@@ -69,23 +45,22 @@ const state: ArtyState = {
   corrected: null,
   mainGunIndex: 0,
   defaultPlatformIndex: 0,
-  ringLayer: null,
-  artyLayer: null,
-  targetLayer: null,
   nextId: 1,
   nextLabelNum: 1,
+  markers: [],
+  sourcesAdded: false,
 };
-
-// Click handler reference for cleanup
-let clickHandler: ((e: L.LeafletMouseEvent) => void) | null = null;
 
 // Drag state
 let dragInfo: { type: 'gun' | 'target' | 'impact'; gunIndex: number } | null = null;
 let dragOccurred = false;
 
+// Click handler reference
+let clickHandler: ((e: maplibregl.MapMouseEvent) => void) | null = null;
+
 // Undo stack
 export interface ArtySnapshot {
-  positions: { id: number; latlng: [number, number]; label: string }[];
+  positions: { id: number; latlng: [number, number]; label: string; platformIndex?: number }[];
   target: [number, number] | null;
   impact: [number, number] | null;
   mainGunIndex: number;
@@ -95,9 +70,9 @@ export interface ArtySnapshot {
 
 function takeSnapshot(): ArtySnapshot {
   return {
-    positions: state.positions.map(p => ({ id: p.id, latlng: [p.latlng.lat, p.latlng.lng], label: p.label })),
-    target: state.target ? [state.target.lat, state.target.lng] : null,
-    impact: state.impact ? [state.impact.lat, state.impact.lng] : null,
+    positions: state.positions.map(p => ({ id: p.id, latlng: [p.point.x, p.point.y], label: p.label, platformIndex: p.platformIndex })),
+    target: state.target ? [state.target.x, state.target.y] : null,
+    impact: state.impact ? [state.impact.x, state.impact.y] : null,
     mainGunIndex: state.mainGunIndex,
     nextId: state.nextId,
     nextLabelNum: state.nextLabelNum,
@@ -108,10 +83,10 @@ function pushUndo(): void {
   pushUndoAction({ type: 'artillery', snapshot: takeSnapshot() });
 }
 
-export function restoreArtySnapshot(snap: ArtySnapshot, map: L.Map): void {
-  state.positions = snap.positions.map(p => ({ id: p.id, latlng: L.latLng(p.latlng[0], p.latlng[1]), label: p.label }));
-  state.target = snap.target ? L.latLng(snap.target[0], snap.target[1]) : null;
-  state.impact = snap.impact ? L.latLng(snap.impact[0], snap.impact[1]) : null;
+export function restoreArtySnapshot(snap: ArtySnapshot, map: maplibregl.Map): void {
+  state.positions = snap.positions.map(p => ({ id: p.id, point: toMapPoint(p.latlng[0], p.latlng[1]), label: p.label, platformIndex: p.platformIndex }));
+  state.target = snap.target ? toMapPoint(snap.target[0], snap.target[1]) : null;
+  state.impact = snap.impact ? toMapPoint(snap.impact[0], snap.impact[1]) : null;
   state.mainGunIndex = snap.mainGunIndex;
   state.nextId = snap.nextId;
   state.nextLabelNum = snap.nextLabelNum;
@@ -126,38 +101,121 @@ export function getArtilleryState() {
   };
 }
 
-export function initArtilleryLayer(map: L.Map): void {
-  if (!map.getPane('artilleryRingPane')) {
-    const pane = map.createPane('artilleryRingPane');
-    pane.style.zIndex = '635'; // lowest — range rings underneath everything
-  }
-  if (!map.getPane('artilleryPane')) {
-    const pane = map.createPane('artilleryPane');
-    pane.style.zIndex = '640';
-  }
-  if (!map.getPane('artilleryTargetPane')) {
-    const pane = map.createPane('artilleryTargetPane');
-    pane.style.zIndex = '645'; // above gun rings, below drawPane (650)
-  }
-  state.ringLayer = L.layerGroup([], { pane: 'artilleryRingPane' }).addTo(map);
-  state.artyLayer = L.layerGroup([], { pane: 'artilleryPane' }).addTo(map);
-  state.targetLayer = L.layerGroup([], { pane: 'artilleryTargetPane' }).addTo(map);
+function emptyGeoJSON(): GeoJSON.FeatureCollection {
+  return { type: 'FeatureCollection', features: [] };
 }
 
-export function cleanupArtillery(map: L.Map): void {
-  if (state.active) deactivateArtillery(map);
-  if (state.ringLayer) {
-    map.removeLayer(state.ringLayer);
-    state.ringLayer = null;
+export function initArtilleryLayer(map: maplibregl.Map): void {
+  if (state.sourcesAdded) return;
+
+  map.addSource('arty-rings', { type: 'geojson', data: emptyGeoJSON() });
+  map.addSource('arty-lines', { type: 'geojson', data: emptyGeoJSON() });
+  map.addSource('arty-inaccuracy', { type: 'geojson', data: emptyGeoJSON() });
+
+  // Range ring fill
+  map.addLayer({
+    id: 'arty-ring-fill',
+    type: 'fill',
+    source: 'arty-rings',
+    paint: {
+      'fill-color': ['get', 'color'],
+      'fill-opacity': ['get', 'fillOpacity'],
+    },
+  });
+  // Range ring outline
+  map.addLayer({
+    id: 'arty-ring-line',
+    type: 'line',
+    source: 'arty-rings',
+    paint: {
+      'line-color': ['get', 'color'],
+      'line-width': 2,
+    },
+  });
+  // Connection / correction lines
+  map.addLayer({
+    id: 'arty-connection-lines',
+    type: 'line',
+    source: 'arty-lines',
+    paint: {
+      'line-color': ['get', 'color'],
+      'line-width': ['get', 'weight'],
+      'line-opacity': ['get', 'opacity'],
+      'line-dasharray': [4, 4],
+    },
+  });
+  // Inaccuracy circles
+  map.addLayer({
+    id: 'arty-inaccuracy-lines',
+    type: 'line',
+    source: 'arty-inaccuracy',
+    paint: {
+      'line-color': ['get', 'color'],
+      'line-width': ['get', 'weight'],
+      'line-opacity': ['get', 'opacity'],
+      'line-dasharray': [4, 3],
+    },
+  });
+  map.addLayer({
+    id: 'arty-inaccuracy-fill',
+    type: 'fill',
+    source: 'arty-inaccuracy',
+    paint: {
+      'fill-color': ['get', 'fillColor'],
+      'fill-opacity': ['get', 'fillOpacity'],
+    },
+  });
+
+  state.sourcesAdded = true;
+}
+
+const ARTY_LAYER_IDS = ['arty-ring-fill', 'arty-ring-line', 'arty-connection-lines', 'arty-inaccuracy-lines', 'arty-inaccuracy-fill'] as const;
+const ARTY_RING_LAYER_IDS = ['arty-ring-fill', 'arty-ring-line'] as const;
+
+export function showArtillery(map: maplibregl.Map): void {
+  for (const id of ARTY_LAYER_IDS) {
+    if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', 'visible');
   }
-  if (state.artyLayer) {
-    map.removeLayer(state.artyLayer);
-    state.artyLayer = null;
+  for (const m of state.markers) m.getElement().style.display = '';
+}
+
+export function hideArtillery(map: maplibregl.Map): void {
+  for (const id of ARTY_LAYER_IDS) {
+    if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', 'none');
   }
-  if (state.targetLayer) {
-    map.removeLayer(state.targetLayer);
-    state.targetLayer = null;
+  for (const m of state.markers) m.getElement().style.display = 'none';
+}
+
+export function showArtilleryRings(map: maplibregl.Map): void {
+  for (const id of ARTY_RING_LAYER_IDS) {
+    if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', 'visible');
   }
+}
+
+export function hideArtilleryRings(map: maplibregl.Map): void {
+  for (const id of ARTY_RING_LAYER_IDS) {
+    if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', 'none');
+  }
+}
+
+export function cleanupArtillery(map: maplibregl.Map): void {
+  if (state.active) deactivateArtillery();
+
+  // Remove markers
+  for (const m of state.markers) m.remove();
+  state.markers = [];
+
+  // Remove layers and sources
+  if (state.sourcesAdded) {
+    for (const id of ['arty-ring-fill', 'arty-ring-line', 'arty-connection-lines', 'arty-inaccuracy-lines', 'arty-inaccuracy-fill']) {
+      if (map.getLayer(id)) map.removeLayer(id);
+    }
+    for (const id of ['arty-rings', 'arty-lines', 'arty-inaccuracy']) {
+      if (map.getSource(id)) map.removeSource(id);
+    }
+    state.sourcesAdded = false;
+  }
+
   resetState();
 }
 
@@ -180,57 +238,48 @@ function resetState(): void {
   state.nextLabelNum = 1;
 }
 
-export function activateArtillery(map: L.Map): void {
+export function activateArtillery(map: maplibregl.Map): void {
   state.active = true;
-  populatePlatformDropdown();
-
-  // Restore dropdown to saved selection
-  const dropdown = document.getElementById('arty-platform-dropdown') as HTMLSelectElement | null;
-  if (dropdown) dropdown.value = String(state.defaultPlatformIndex);
-
-  updateStatusText('');
+  useArtilleryStore.getState().setPlatformIndex(state.defaultPlatformIndex);
+  useArtilleryStore.getState().setStatusText('');
   refreshAll(map);
 }
 
-export function deactivateArtillery(map: L.Map): void {
+export function deactivateArtillery(): void {
   state.active = false;
   state.placementMode = 'idle';
-  document.getElementById('map')!.style.cursor = '';
-  highlightActionButton('idle');
+  useMapStore.getState().setMapCursor('');
+  useArtilleryStore.getState().setPlacementMode('idle');
 }
 
 export function setPlacementMode(mode: PlacementMode): void {
   state.placementMode = mode;
-  highlightActionButton(mode);
-
-  const mapEl = document.getElementById('map')!;
-  if (mode !== 'idle') {
-    mapEl.style.cursor = 'crosshair';
-  } else {
-    mapEl.style.cursor = '';
-  }
+  useArtilleryStore.getState().setPlacementMode(mode);
+  useMapStore.getState().setMapCursor(mode !== 'idle' ? 'crosshair' : '');
 
   switch (mode) {
     case 'placing-arty':
-      updateStatusText('Click map to place gun position');
+      useArtilleryStore.getState().setStatusText('Click map to place gun position');
       break;
     case 'placing-target':
-      updateStatusText('Click map to set target');
+      useArtilleryStore.getState().setStatusText('Click map to set target');
       break;
     case 'placing-impact':
-      updateStatusText('Click map to mark impact point');
+      useArtilleryStore.getState().setStatusText('Click map to mark impact point');
       break;
     default:
-      updateStatusText('');
+      useArtilleryStore.getState().setStatusText('');
   }
 }
 
-export function removeArtillery(id: number, map: L.Map): void {
+export function removeArtillery(posIndex: number, map: maplibregl.Map): void {
+  const pos = state.positions[posIndex];
+  if (!pos) return;
+  const id = pos.id;
   const idx = state.positions.findIndex((p) => p.id === id);
   if (idx === -1) return;
   state.positions.splice(idx, 1);
 
-  // Adjust main gun index
   if (state.positions.length === 0) {
     state.mainGunIndex = 0;
   } else if (state.mainGunIndex >= state.positions.length) {
@@ -242,34 +291,54 @@ export function removeArtillery(id: number, map: L.Map): void {
   refreshAll(map);
 }
 
-export function setMainGun(index: number, map: L.Map): void {
+export function setMainGun(index: number, map: maplibregl.Map): void {
   if (index >= 0 && index < state.positions.length) {
     state.mainGunIndex = index;
     refreshAll(map);
   }
 }
 
-export function clearAll(map: L.Map): void {
+export function renameGun(index: number, newLabel: string, map: maplibregl.Map): void {
+  if (index >= 0 && index < state.positions.length) {
+    state.positions[index].label = newLabel;
+    refreshAll(map);
+  }
+}
+
+export function setPlatformFromUI(index: number, map: maplibregl.Map): void {
+  state.defaultPlatformIndex = index;
+  useArtilleryStore.getState().setPlatformIndex(index);
+  refreshAll(map);
+}
+
+export function setGunPlatform(posIndex: number, platformIndex: number, map: maplibregl.Map): void {
+  if (posIndex >= 0 && posIndex < state.positions.length) {
+    state.positions[posIndex].platformIndex = platformIndex;
+    refreshAll(map);
+  }
+}
+
+export function clearAll(map: maplibregl.Map): void {
   pushUndo();
   resetState();
   refreshAll(map);
-  updateStatusText('');
+  useArtilleryStore.getState().setStatusText('');
 }
 
-function handleMapClick(e: L.LeafletMouseEvent, map: L.Map): void {
+function handleMapClick(e: maplibregl.MapMouseEvent, map: maplibregl.Map): void {
   if (dragOccurred) return;
   if (!state.active) return;
   if (state.placementMode === 'idle') return;
   if (e.originalEvent.button !== 0) return;
 
-  const latlng = e.latlng;
+  const point = lngLatToMapPoint(e.lngLat.lng, e.lngLat.lat);
   pushUndo();
 
   switch (state.placementMode) {
     case 'placing-arty':
       state.positions.push({
         id: state.nextId++,
-        latlng,
+        point,
         label: `A${state.nextLabelNum++}`,
       });
       if (state.positions.length === 1) {
@@ -279,18 +348,18 @@ function handleMapClick(e: L.LeafletMouseEvent, map: L.Map): void {
       return;
 
     case 'placing-target':
-      state.target = latlng;
+      state.target = point;
       state.impact = null;
       state.corrected = null;
       break;
 
     case 'placing-impact':
       if (!state.target) {
-        updateStatusText('Set a target first');
+        useArtilleryStore.getState().setStatusText('Set a target first');
         setPlacementMode('idle');
         return;
       }
-      state.impact = latlng;
+      state.impact = point;
       const correction = calculateCorrection(state.target, state.impact);
       state.corrected = correction.corrected;
       break;
@@ -300,151 +369,177 @@ function handleMapClick(e: L.LeafletMouseEvent, map: L.Map): void {
   refreshAll(map);
 }
 
-// Generate circle vertices as a polygon (safer than L.circle in CRS.Simple)
-function circleVertices(center: L.LatLng, radiusCRS: number): L.LatLngTuple[] {
-  const pts: L.LatLngTuple[] = [];
-  for (let i = 0; i < CIRCLE_SEGMENTS; i++) {
+function circleCoords(center: MapPoint, radiusCRS: number): [number, number][] {
+  const pts: [number, number][] = [];
+  for (let i = 0; i <= CIRCLE_SEGMENTS; i++) {
     const angle = (2 * Math.PI * i) / CIRCLE_SEGMENTS;
-    pts.push([
-      center.lat + radiusCRS * Math.cos(angle),
-      center.lng + radiusCRS * Math.sin(angle),
-    ]);
+    const p: MapPoint = {
+      x: center.x + radiusCRS * Math.sin(angle),
+      y: center.y + radiusCRS * Math.cos(angle),
+    };
+    pts.push(mapPointToLngLat(p));
   }
   return pts;
 }
 
-function refreshAll(map: L.Map): void {
-  if (!state.artyLayer) return;
-  state.ringLayer?.clearLayers();
-  state.artyLayer.clearLayers();
-  state.targetLayer?.clearLayers();
+function createDotElement(dotSize: number, cssClass: string, interactive: boolean): HTMLDivElement {
+  const wrapper = document.createElement('div');
+  wrapper.className = 'arty-dot-wrap';
+  wrapper.style.width = `${dotSize + 20}px`;
+  wrapper.style.height = `${dotSize + 20}px`;
+  wrapper.style.display = 'flex';
+  wrapper.style.alignItems = 'center';
+  wrapper.style.justifyContent = 'center';
 
-  const platform = ARTILLERY_PLATFORMS[state.defaultPlatformIndex];
+  const dotClasses = ['arty-dot', cssClass];
+  if (interactive) dotClasses.push('arty-draggable');
+
+  const dot = document.createElement('div');
+  dot.className = dotClasses.join(' ');
+  dot.style.width = `${dotSize}px`;
+  dot.style.height = `${dotSize}px`;
+  wrapper.appendChild(dot);
+
+  return wrapper;
+}
+
+function refreshAll(map: maplibregl.Map): void {
+  if (!state.sourcesAdded) return;
+
+  // Clear old markers
+  for (const m of state.markers) m.remove();
+  state.markers = [];
+
+  const defaultPlatform = ARTILLERY_PLATFORMS[state.defaultPlatformIndex];
   const targetPos = state.corrected ?? state.target;
 
-  // === Compute per-gun in-range status ===
-
   const oorSet = new Set<number>();
-  if (platform && targetPos) {
+  if (targetPos) {
     for (let i = 0; i < state.positions.length; i++) {
-      const dist = crsDistanceMeters(state.positions[i].latlng, targetPos);
-      if (dist < platform.minRange || dist > platform.maxRange) {
+      const gunPlatform = ARTILLERY_PLATFORMS[state.positions[i].platformIndex ?? state.defaultPlatformIndex];
+      if (!gunPlatform) continue;
+      const dist = crsDistanceMeters(state.positions[i].point, targetPos);
+      if (dist < gunPlatform.minRange || dist > gunPlatform.maxRange) {
         oorSet.add(i);
       }
     }
   }
 
-  // === Non-interactive shapes (drawn first, underneath markers) ===
+  // Build ring GeoJSON
+  const ringFeatures: GeoJSON.Feature[] = [];
+  const lineFeatures: GeoJSON.Feature[] = [];
+  const inaccFeatures: GeoJSON.Feature[] = [];
 
   for (let i = 0; i < state.positions.length; i++) {
     const pos = state.positions[i];
     const isMain = i === state.mainGunIndex;
     const isOOR = targetPos !== null && oorSet.has(i);
+    const gunPlatform = ARTILLERY_PLATFORMS[pos.platformIndex ?? state.defaultPlatformIndex];
 
-    // Range ring (filled area between min and max range)
-    if (platform) {
-      const maxRadius = metersToRadius(platform.maxRange);
-      const minRadius = metersToRadius(platform.minRange);
-      const outerRing = circleVertices(pos.latlng, maxRadius);
-      const innerRing = circleVertices(pos.latlng, minRadius).reverse();
+    if (gunPlatform) {
+      const maxRadius = metersToRadius(gunPlatform.maxRange);
+      const minRadius = metersToRadius(gunPlatform.minRange);
+      const outerRing = circleCoords(pos.point, maxRadius);
+      const innerRing = [...circleCoords(pos.point, minRadius)].reverse();
 
       const ringColor = isOOR ? '#b33030' : isMain ? '#003380' : '#4488cc';
-      L.polygon([outerRing, innerRing], {
-        color: ringColor,
-        weight: 2,
-        opacity: 1,
-        fillColor: ringColor,
-        fillOpacity: isOOR ? 0.12 : 0.2,
-        interactive: false,
-        pane: 'artilleryRingPane',
-      }).addTo(state.ringLayer!);
+      ringFeatures.push({
+        type: 'Feature',
+        properties: { color: ringColor, fillOpacity: isOOR ? 0.12 : 0.2 },
+        geometry: {
+          type: 'Polygon',
+          coordinates: [outerRing, innerRing],
+        },
+      });
     }
 
-    // Connection line to target (always points at target, not corrected)
+    // Connection line to target
     if (state.target) {
-      L.polyline([pos.latlng, state.target], {
-        color: '#333333',
-        weight: 1.5,
-        opacity: 0.55,
-        dashArray: '4, 4',
-        interactive: false,
-        pane: 'artilleryPane',
-      }).addTo(state.artyLayer!);
+      lineFeatures.push({
+        type: 'Feature',
+        properties: { color: '#333333', weight: 1.5, opacity: 0.55 },
+        geometry: {
+          type: 'LineString',
+          coordinates: [mapPointToLngLat(pos.point), mapPointToLngLat(state.target)],
+        },
+      });
     }
   }
 
-  // === Target-area elements (on higher pane, above gun rings) ===
-
-  // Reference circles (min/max inaccuracy bounds) + averaged inaccuracy circle — target only
-  if (platform && state.positions.length > 0 && state.target) {
-    // Reference circles — min and max inaccuracy at target
-    const minInaccRadius = metersToRadius(platform.minInaccuracy);
-    const maxInaccRadius = metersToRadius(platform.maxInaccuracy);
+  // Inaccuracy circles
+  if (defaultPlatform && state.positions.length > 0 && state.target) {
+    const minInaccRadius = metersToRadius(defaultPlatform.minInaccuracy);
+    const maxInaccRadius = metersToRadius(defaultPlatform.maxInaccuracy);
     for (const r of [minInaccRadius, maxInaccRadius]) {
-      L.polygon(circleVertices(state.target, r), {
-        color: '#444444',
-        weight: 1,
-        opacity: 0.5,
-        fill: false,
-        dashArray: '4, 3',
-        interactive: false,
-        pane: 'artilleryTargetPane',
-      }).addTo(state.targetLayer!);
+      inaccFeatures.push({
+        type: 'Feature',
+        properties: { color: '#444444', weight: 1, opacity: 0.5, fillColor: 'transparent', fillOpacity: 0 },
+        geometry: {
+          type: 'Polygon',
+          coordinates: [circleCoords(state.target, r)],
+        },
+      });
     }
 
-    // Averaged interpolated inaccuracy circle at target
+    // Average inaccuracy circle
     let totalInaccuracy = 0;
     for (const pos of state.positions) {
-      const dist = crsDistanceMeters(pos.latlng, state.target);
-      totalInaccuracy += interpolateInaccuracy(platform, dist);
+      const gunPlat = ARTILLERY_PLATFORMS[pos.platformIndex ?? state.defaultPlatformIndex];
+      const dist = crsDistanceMeters(pos.point, state.target);
+      totalInaccuracy += interpolateInaccuracy(gunPlat || defaultPlatform, dist);
     }
     const avgInaccuracy = totalInaccuracy / state.positions.length;
     const avgRadius = metersToRadius(avgInaccuracy);
 
-    L.polygon(circleVertices(state.target, avgRadius), {
-      color: '#ef5350',
-      weight: 1.5,
-      opacity: 1,
-      fillColor: '#ef5350',
-      fillOpacity: 0.05,
-      dashArray: '4, 3',
-      interactive: false,
-      pane: 'artilleryTargetPane',
-    }).addTo(state.targetLayer!);
+    inaccFeatures.push({
+      type: 'Feature',
+      properties: { color: '#ef5350', weight: 1.5, opacity: 1, fillColor: '#ef5350', fillOpacity: 0.05 },
+      geometry: {
+        type: 'Polygon',
+        coordinates: [circleCoords(state.target, avgRadius)],
+      },
+    });
   }
 
-  // Connection line: target → corrected
+  // Correction line (target -> corrected)
   if (state.target && state.corrected) {
-    L.polyline([state.target, state.corrected], {
-      color: '#66bb6a',
-      weight: 1.5,
-      opacity: 0.7,
-      dashArray: '4, 4',
-      interactive: false,
-      pane: 'artilleryTargetPane',
-    }).addTo(state.targetLayer!);
+    lineFeatures.push({
+      type: 'Feature',
+      properties: { color: '#66bb6a', weight: 1.5, opacity: 0.7 },
+      geometry: {
+        type: 'LineString',
+        coordinates: [mapPointToLngLat(state.target), mapPointToLngLat(state.corrected)],
+      },
+    });
   }
 
-  // Connection line: target → impact
+  // Impact line (target -> impact)
   if (state.target && state.impact) {
-    L.polyline([state.target, state.impact], {
-      color: '#ffd54f',
-      weight: 1,
-      opacity: 0.5,
-      dashArray: '4, 4',
-      interactive: false,
-      pane: 'artilleryTargetPane',
-    }).addTo(state.targetLayer!);
+    lineFeatures.push({
+      type: 'Feature',
+      properties: { color: '#ffd54f', weight: 1, opacity: 0.5 },
+      geometry: {
+        type: 'LineString',
+        coordinates: [mapPointToLngLat(state.target), mapPointToLngLat(state.impact)],
+      },
+    });
   }
 
-  // Corrected marker (not draggable — computed)
+  // Update GeoJSON sources
+  (map.getSource('arty-rings') as GeoJSONSource).setData({ type: 'FeatureCollection', features: ringFeatures });
+  (map.getSource('arty-lines') as GeoJSONSource).setData({ type: 'FeatureCollection', features: lineFeatures });
+  (map.getSource('arty-inaccuracy') as GeoJSONSource).setData({ type: 'FeatureCollection', features: inaccFeatures });
+
+  // Corrected dot marker
   if (state.corrected) {
-    createDotMarker(state.corrected, 12, 'arty-dot-corrected', false)
-      .addTo(state.targetLayer!);
+    const el = createDotElement(12, 'arty-dot-corrected', false);
+    const marker = new maplibregl.Marker({ element: el, anchor: 'center' })
+      .setLngLat(mapPointToLngLat(state.corrected))
+      .addTo(map);
+    state.markers.push(marker);
   }
 
-  // === Interactive markers (drawn last, on top) ===
-
+  // Gun dot markers + labels
   for (let i = 0; i < state.positions.length; i++) {
     const pos = state.positions[i];
     const isMain = i === state.mainGunIndex;
@@ -455,71 +550,80 @@ function refreshAll(map: L.Map): void {
     else if (isMain) dotClass = 'arty-dot-main-gun';
     else dotClass = 'arty-dot-gun';
 
-    const gunMarker = createDotMarker(
-      pos.latlng,
-      isMain ? 16 : 12,
-      dotClass,
-      true,
-    ).addTo(state.artyLayer!);
+    const el = createDotElement(isMain ? 16 : 12, dotClass, true);
+    const marker = new maplibregl.Marker({ element: el, anchor: 'center' })
+      .setLngLat(mapPointToLngLat(pos.point))
+      .addTo(map);
+    state.markers.push(marker);
+
+    // Drag handling
     const gi = i;
-    gunMarker.on('mousedown', (e: L.LeafletMouseEvent) => {
-      if (e.originalEvent.button !== 0) return;
+    el.addEventListener('mousedown', (e: MouseEvent) => {
+      if (e.button !== 0) return;
       startDrag(map, 'gun', gi, e);
     });
 
     // Gun label
-    L.marker(pos.latlng, {
-      interactive: false,
-      icon: L.divIcon({
-        className: 'arty-gun-label',
-        html: pos.label,
-        iconSize: [30, 14],
-        iconAnchor: [-6, 20],
-      }),
-      pane: 'artilleryPane',
-    }).addTo(state.artyLayer!);
+    const labelEl = document.createElement('div');
+    labelEl.className = 'arty-gun-label';
+    labelEl.textContent = pos.label;
+    labelEl.style.transform = 'translate(6px, -20px)';
+    const labelMarker = new maplibregl.Marker({ element: labelEl, anchor: 'center' })
+      .setLngLat(mapPointToLngLat(pos.point))
+      .addTo(map);
+    state.markers.push(labelMarker);
   }
 
+  // Target dot
   if (state.target) {
-    const targetMarker = createDotMarker(state.target, 14, 'arty-dot-target', true)
-      .addTo(state.targetLayer!);
-    targetMarker.on('mousedown', (e: L.LeafletMouseEvent) => {
-      if (e.originalEvent.button !== 0) return;
+    const el = createDotElement(14, 'arty-dot-target', true);
+    const marker = new maplibregl.Marker({ element: el, anchor: 'center' })
+      .setLngLat(mapPointToLngLat(state.target))
+      .addTo(map);
+    state.markers.push(marker);
+
+    el.addEventListener('mousedown', (e: MouseEvent) => {
+      if (e.button !== 0) return;
       startDrag(map, 'target', -1, e);
     });
   }
 
+  // Impact dot
   if (state.impact) {
-    const impactMarker = createDotMarker(state.impact, 12, 'arty-dot-impact', true)
-      .addTo(state.targetLayer!);
-    impactMarker.on('mousedown', (e: L.LeafletMouseEvent) => {
-      if (e.originalEvent.button !== 0) return;
+    const el = createDotElement(12, 'arty-dot-impact', true);
+    const marker = new maplibregl.Marker({ element: el, anchor: 'center' })
+      .setLngLat(mapPointToLngLat(state.impact))
+      .addTo(map);
+    state.markers.push(marker);
+
+    el.addEventListener('mousedown', (e: MouseEvent) => {
+      if (e.button !== 0) return;
       startDrag(map, 'impact', -1, e);
     });
   }
 
-  // Compute solutions
+  // Push solutions to Zustand store
   const solutions = computeSolutions();
-  updateSolutionTable(solutions, state.target !== null);
+  useArtilleryStore.getState().setSolutions(solutions, state.target !== null);
 }
 
 function computeSolutions(): ArtillerySolution[] {
-  const platform = ARTILLERY_PLATFORMS[state.defaultPlatformIndex];
   const targetPos = state.corrected ?? state.target;
   const solutions: ArtillerySolution[] = [];
 
-  // Compute main gun distance/azimuth first
   let mainDist = 0;
   let mainAz = 0;
   if (targetPos && state.positions.length > 0 && state.mainGunIndex < state.positions.length) {
     const mainPos = state.positions[state.mainGunIndex];
-    mainDist = crsDistanceMeters(mainPos.latlng, targetPos);
-    mainAz = crsAzimuth(mainPos.latlng, targetPos);
+    mainDist = crsDistanceMeters(mainPos.point, targetPos);
+    mainAz = crsAzimuth(mainPos.point, targetPos);
   }
 
   for (let i = 0; i < state.positions.length; i++) {
     const pos = state.positions[i];
     const isMain = i === state.mainGunIndex;
+    const resolvedPlatformIndex = pos.platformIndex ?? state.defaultPlatformIndex;
+    const platform = ARTILLERY_PLATFORMS[resolvedPlatformIndex];
 
     let distanceM = 0;
     let azimuthDeg = 0;
@@ -528,15 +632,15 @@ function computeSolutions(): ArtillerySolution[] {
     let relAz = 0;
 
     if (targetPos) {
-      distanceM = crsDistanceMeters(pos.latlng, targetPos);
-      azimuthDeg = crsAzimuth(pos.latlng, targetPos);
+      distanceM = crsDistanceMeters(pos.point, targetPos);
+      azimuthDeg = crsAzimuth(pos.point, targetPos);
       inRange = platform
         ? distanceM >= platform.minRange && distanceM <= platform.maxRange
         : false;
 
       relDist = distanceM - mainDist;
       const rawRelAz = azimuthDeg - mainAz;
-      relAz = ((rawRelAz + 540) % 360) - 180; // normalize to [-180, 180]
+      relAz = ((rawRelAz + 540) % 360) - 180;
     }
 
     solutions.push({
@@ -546,6 +650,7 @@ function computeSolutions(): ArtillerySolution[] {
       azimuthDeg,
       inRange,
       platformName: platform ? platform.name : '',
+      platformIndex: resolvedPlatformIndex,
       relDist,
       relAz,
       isMain,
@@ -555,26 +660,27 @@ function computeSolutions(): ArtillerySolution[] {
   return solutions;
 }
 
-function startDrag(map: L.Map, type: 'gun' | 'target' | 'impact', gunIndex: number, e: L.LeafletMouseEvent): void {
-  if (state.placementMode !== 'idle') return; // don't drag while placing
-  e.originalEvent.stopPropagation();
-  e.originalEvent.preventDefault();
+function startDrag(map: maplibregl.Map, type: 'gun' | 'target' | 'impact', gunIndex: number, e: MouseEvent): void {
+  if (state.placementMode !== 'idle') return;
+  e.stopPropagation();
+  e.preventDefault();
   pushUndo();
   dragInfo = { type, gunIndex };
   dragOccurred = false;
-  map.dragging.disable();
-  document.getElementById('map')!.style.cursor = 'grabbing';
+  map.dragPan.disable();
+  useMapStore.getState().setMapCursor('grabbing');
 }
 
 export function saveArtilleryState(): SavedArtilleryState {
   return {
     positions: state.positions.map((p) => ({
       id: p.id,
-      latlng: [p.latlng.lat, p.latlng.lng] as [number, number],
+      latlng: [p.point.x, p.point.y] as [number, number],
       label: p.label,
+      platformIndex: p.platformIndex,
     })),
-    target: state.target ? [state.target.lat, state.target.lng] : null,
-    impact: state.impact ? [state.impact.lat, state.impact.lng] : null,
+    target: state.target ? [state.target.x, state.target.y] : null,
+    impact: state.impact ? [state.impact.x, state.impact.y] : null,
     mainGunIndex: state.mainGunIndex,
     defaultPlatformIndex: state.defaultPlatformIndex,
     nextId: state.nextId,
@@ -582,14 +688,15 @@ export function saveArtilleryState(): SavedArtilleryState {
   };
 }
 
-export function restoreArtilleryState(saved: SavedArtilleryState, map: L.Map): void {
+export function restoreArtilleryState(saved: SavedArtilleryState, map: maplibregl.Map): void {
   state.positions = saved.positions.map((p) => ({
     id: p.id,
-    latlng: L.latLng(p.latlng[0], p.latlng[1]),
+    point: toMapPoint(p.latlng[0], p.latlng[1]),
     label: p.label,
+    platformIndex: p.platformIndex,
   }));
-  state.target = saved.target ? L.latLng(saved.target[0], saved.target[1]) : null;
-  state.impact = saved.impact ? L.latLng(saved.impact[0], saved.impact[1]) : null;
+  state.target = saved.target ? toMapPoint(saved.target[0], saved.target[1]) : null;
+  state.impact = saved.impact ? toMapPoint(saved.impact[0], saved.impact[1]) : null;
   state.mainGunIndex = saved.mainGunIndex;
   state.defaultPlatformIndex = saved.defaultPlatformIndex;
   state.nextId = saved.nextId;
@@ -598,29 +705,29 @@ export function restoreArtilleryState(saved: SavedArtilleryState, map: L.Map): v
   refreshAll(map);
 }
 
-export function setupArtilleryEvents(map: L.Map): void {
-  // Map click handler
-  clickHandler = (e: L.LeafletMouseEvent) => handleMapClick(e, map);
+export function setupArtilleryEvents(map: maplibregl.Map): void {
+  clickHandler = (e: maplibregl.MapMouseEvent) => handleMapClick(e, map);
   map.on('click', clickHandler);
 
-  // Drag: mousemove
-  map.on('mousemove', (e: L.LeafletMouseEvent) => {
+  map.on('mousemove', (e: maplibregl.MapMouseEvent) => {
     if (!dragInfo) return;
     dragOccurred = true;
+
+    const point = lngLatToMapPoint(e.lngLat.lng, e.lngLat.lat);
 
     switch (dragInfo.type) {
       case 'gun':
         if (dragInfo.gunIndex >= 0 && dragInfo.gunIndex < state.positions.length) {
-          state.positions[dragInfo.gunIndex].latlng = e.latlng;
+          state.positions[dragInfo.gunIndex].point = point;
         }
         break;
       case 'target':
-        state.target = e.latlng;
+        state.target = point;
         state.impact = null;
         state.corrected = null;
         break;
       case 'impact':
-        state.impact = e.latlng;
+        state.impact = point;
         recalcCorrected();
         break;
     }
@@ -628,50 +735,16 @@ export function setupArtilleryEvents(map: L.Map): void {
     refreshAll(map);
   });
 
-  // Drag: mouseup
   document.addEventListener('mouseup', () => {
     if (!dragInfo) return;
     dragInfo = null;
-    map.dragging.enable();
-    document.getElementById('map')!.style.cursor =
-      state.placementMode !== 'idle' ? 'crosshair' : '';
+    map.dragPan.enable();
+    useMapStore.getState().setMapCursor(
+      state.placementMode !== 'idle' ? 'crosshair' : ''
+    );
 
-    // Suppress the click event that fires after drag release
     if (dragOccurred) {
       setTimeout(() => { dragOccurred = false; }, 50);
     }
-  });
-
-  // Sidebar button callbacks
-  setupSidebarEvents({
-    onPlaceGun: () => {
-      setPlacementMode(state.placementMode === 'placing-arty' ? 'idle' : 'placing-arty');
-    },
-    onSetTarget: () => {
-      setPlacementMode(state.placementMode === 'placing-target' ? 'idle' : 'placing-target');
-    },
-    onMarkImpact: () => {
-      setPlacementMode(state.placementMode === 'placing-impact' ? 'idle' : 'placing-impact');
-    },
-    onClearAll: () => {
-      clearAll(map);
-    },
-    onSetMainGun: (index: number) => {
-      setMainGun(index, map);
-    },
-    onRemoveGun: (index: number) => {
-      const pos = state.positions[index];
-      if (pos) removeArtillery(pos.id, map);
-    },
-    onRenameGun: (index: number, newLabel: string) => {
-      if (index >= 0 && index < state.positions.length) {
-        state.positions[index].label = newLabel;
-        refreshAll(map);
-      }
-    },
-    onPlatformChange: (index: number) => {
-      state.defaultPlatformIndex = index;
-      refreshAll(map);
-    },
   });
 }

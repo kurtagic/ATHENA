@@ -1,0 +1,469 @@
+@import "tailwindcss";
+
+/*
+ * Athena — Tailwind v4 theme + MapLibre marker class styles
+ * React components use Tailwind utilities directly;
+ * classes here are only those used by imperative MapLibre HTML markers.
+ */
+
+/* ── Theme tokens (shadcn/ui compatible) ─────────────────── */
+@theme {
+  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "SF Mono", "Cascadia Code", "Consolas", monospace;
+
+  --color-background: #111214;
+  --color-foreground: #ffffff;
+  --color-muted: rgba(255, 255, 255, 0.45);
+  --color-muted-foreground: rgba(255, 255, 255, 0.7);
+  --color-accent: #4a9eff;
+  --color-accent-dim: rgba(74, 158, 255, 0.15);
+  --color-destructive: #ef5350;
+  --color-destructive-dim: rgba(239, 83, 80, 0.12);
+  --color-surface-glass: rgba(12, 12, 14, 0.75);
+  --color-surface-glass-hover: rgba(24, 24, 28, 0.8);
+  --color-surface-raised: rgba(255, 255, 255, 0.04);
+  --color-surface-inset: rgba(0, 0, 0, 0.25);
+  --color-border-glass: rgba(255, 255, 255, 0.08);
+  --color-border-subtle: rgba(255, 255, 255, 0.06);
+  --color-border-focus: rgba(74, 158, 255, 0.5);
+
+  --color-gold: #ffd54f;
+  --color-gold-dim: rgba(255, 213, 79, 0.15);
+  --color-gold-bright: #ffe082;
+  --color-navy: #1a2744;
+  --color-navy-light: #243352;
+  --color-surface-tactical: rgba(18, 24, 38, 0.92);
+  --color-border-tactical: rgba(74, 158, 255, 0.12);
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 12px;
+}
+
+/* ── Base reset ──────────────────────────────────────────── */
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  width: 100%;
+  background: var(--color-background);
+  font-family: var(--font-sans);
+  user-select: none;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+/* ── MapLibre container ──────────────────────────────────── */
+.maplibregl-map {
+  background: var(--color-background);
+}
+
+/* ── Hex labels (divIcon className set in hexGrid.ts) ──── */
+.hex-label {
+  color: var(--color-foreground);
+  text-align: center;
+  font: 700 17px var(--font-sans);
+  text-transform: uppercase;
+  letter-spacing: 0.10em;
+  -webkit-text-stroke: 0.8px #000;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9),
+               0 0 12px rgba(0, 0, 0, 0.6);
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+/* ── Map icons (divIcon className set in dataHandlers.ts) ─ */
+.map-icon {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+}
+
+.map-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.map-icon .icon-tint {
+  position: absolute;
+  inset: 0;
+  mix-blend-mode: multiply;
+  mask-size: contain;
+  mask-repeat: no-repeat;
+  mask-position: center;
+  -webkit-mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+}
+
+.map-icon.victory {
+  filter: drop-shadow(0 0 4px rgba(255, 215, 0, 0.6));
+}
+
+.map-icon.scorched {
+  filter: brightness(0.4);
+}
+
+/* ── Static labels (divIcon className set in detailView.ts) */
+.map-text-major {
+  color: var(--color-foreground);
+  font: 600 15px var(--font-sans);
+  letter-spacing: 0.04em;
+  -webkit-text-stroke: 0.6px #000;
+  paint-order: stroke fill;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9),
+               0 0 8px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+  white-space: nowrap;
+  text-align: center;
+}
+
+.map-text-minor {
+  color: var(--color-foreground);
+  font: 400 11px var(--font-sans);
+  -webkit-text-stroke: 0.4px #000;
+  paint-order: stroke fill;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+  pointer-events: none;
+  white-space: nowrap;
+  text-align: center;
+}
+
+/* ── Grid / subgrid labels (divIcon className) ──────────── */
+.grid-label {
+  color: #ffffff;
+  font: bold 16px var(--font-mono);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
+  pointer-events: none;
+  text-align: center;
+}
+
+/* ── Draw swatch (managed by React BottomBar) */
+.draw-swatch {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  cursor: pointer;
+  border: 2px solid transparent;
+  box-sizing: border-box;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.15);
+  transition: transform 150ms ease, box-shadow 150ms ease, border-color 150ms ease;
+}
+
+.draw-swatch:hover {
+  transform: scale(1.15);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.15),
+              0 0 6px rgba(255, 255, 255, 0.2);
+}
+
+.draw-swatch.selected {
+  border-color: var(--color-gold);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.15),
+              0 0 8px rgba(255, 213, 79, 0.4);
+}
+
+/* ── Artillery dot markers (divIcon className set in artillery.ts) */
+.arty-dot-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+}
+
+.arty-dot {
+  border-radius: 50%;
+  position: relative;
+  flex-shrink: 0;
+}
+
+.arty-dot::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 40%;
+  height: 40%;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.3);
+  pointer-events: none;
+}
+
+.arty-dot-main-gun {
+  background: #1565c0;
+  box-shadow:
+    0 0 0 2px #0d47a1,
+    0 0 6px 3px rgba(21, 101, 192, 0.35),
+    0 0 14px 6px rgba(21, 101, 192, 0.15),
+    0 0 24px 10px rgba(21, 101, 192, 0.06);
+}
+
+.arty-dot-gun {
+  background: #4fc3f7;
+  box-shadow:
+    0 0 0 1.5px #81d4fa,
+    0 0 5px 2px rgba(79, 195, 247, 0.3),
+    0 0 12px 5px rgba(79, 195, 247, 0.12),
+    0 0 20px 8px rgba(79, 195, 247, 0.05);
+}
+
+.arty-dot-target {
+  background: #ef5350;
+  box-shadow:
+    0 0 0 2px #f44336,
+    0 0 6px 3px rgba(239, 83, 80, 0.35),
+    0 0 14px 6px rgba(239, 83, 80, 0.15),
+    0 0 24px 10px rgba(239, 83, 80, 0.06);
+}
+
+.arty-dot-impact {
+  background: #ffd54f;
+  box-shadow:
+    0 0 0 1.5px #ffca28,
+    0 0 5px 2px rgba(255, 213, 79, 0.3),
+    0 0 12px 5px rgba(255, 213, 79, 0.12),
+    0 0 20px 8px rgba(255, 213, 79, 0.05);
+}
+
+.arty-dot-oor {
+  background: #ef5350;
+  box-shadow:
+    0 0 0 1.5px #f44336,
+    0 0 5px 2px rgba(239, 83, 80, 0.3),
+    0 0 12px 5px rgba(239, 83, 80, 0.12),
+    0 0 20px 8px rgba(239, 83, 80, 0.05);
+}
+
+.arty-dot-corrected {
+  background: #66bb6a;
+  box-shadow:
+    0 0 0 2px #4caf50,
+    0 0 6px 3px rgba(102, 187, 106, 0.35),
+    0 0 14px 6px rgba(102, 187, 106, 0.15),
+    0 0 24px 10px rgba(102, 187, 106, 0.06);
+}
+
+/* ── Artillery gun labels (divIcon className) ────────────── */
+.arty-gun-label {
+  color: var(--color-foreground);
+  font: 700 11px var(--font-mono);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9),
+               0 0 6px rgba(0, 0, 0, 0.6);
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+/* ── Artillery draggable markers ─────────────────────────── */
+.arty-draggable {
+  cursor: grab;
+}
+
+.arty-draggable:active {
+  cursor: grabbing;
+}
+
+/* ── Artillery sidebar imperative classes ─────────────────── */
+.arty-rename-input {
+  width: 100%;
+  background: var(--color-surface-inset);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--color-foreground);
+  font: 14px var(--font-mono);
+  padding: 2px 6px;
+  outline: none;
+  box-sizing: border-box;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.arty-rename-input:focus {
+  border-color: var(--color-border-focus);
+  box-shadow: 0 0 0 2px rgba(74, 158, 255, 0.12);
+}
+
+.arty-star-btn {
+  cursor: pointer;
+  background: none;
+  border: none;
+  color: var(--color-muted);
+  font-size: 14px;
+  padding: 0;
+  line-height: 1;
+  transition: transform 150ms ease, color 150ms ease, text-shadow 150ms ease;
+}
+
+.arty-star-btn:hover {
+  transform: scale(1.15);
+}
+
+.arty-star-btn.main-gun {
+  color: var(--color-gold);
+  text-shadow: 0 0 8px rgba(255, 213, 79, 0.5);
+}
+
+.arty-del-btn {
+  cursor: pointer;
+  background: none;
+  border: none;
+  color: var(--color-muted);
+  font: 13px var(--font-sans);
+  padding: 2px 4px;
+  line-height: 1;
+  border-radius: var(--radius-sm);
+  transition: color 150ms ease, background 150ms ease, transform 150ms ease;
+}
+
+.arty-del-btn:hover {
+  color: var(--color-destructive);
+  background: var(--color-destructive-dim);
+  transform: scale(1.1);
+}
+
+.arty-no-target {
+  color: var(--color-muted);
+}
+
+.arty-row-main {
+  background: var(--color-accent-dim) !important;
+  box-shadow: inset 3px 0 0 var(--color-accent);
+}
+
+.arty-row-oor {
+  background: var(--color-destructive-dim) !important;
+  box-shadow: inset 3px 0 0 var(--color-destructive);
+}
+
+.arty-col-star { width: 24px; text-align: center !important; }
+.arty-col-num { width: 40px; }
+.arty-col-plat { width: 72px; }
+.arty-col-dist { width: 62px; }
+.arty-col-az { width: 62px; }
+.arty-col-reld { width: 56px; }
+.arty-col-relaz { width: 56px; }
+.arty-col-del { width: 24px; text-align: center !important; }
+
+/* ── Artillery active-mode button (set imperatively) ──────── */
+#arty-actions button.active-mode {
+  background: var(--color-gold-dim);
+  border-color: var(--color-gold);
+  color: var(--color-gold);
+  box-shadow: 0 0 8px rgba(255, 213, 79, 0.2),
+              inset 0 0 12px rgba(255, 213, 79, 0.06);
+}
+
+/* ── Eraser active state (set imperatively) ───────────────── */
+#draw-eraser-btn.active {
+  background: var(--color-destructive-dim);
+  color: var(--color-destructive);
+  box-shadow: 0 0 8px rgba(239, 83, 80, 0.3);
+}
+
+#draw-eraser-btn.active:hover {
+  background: rgba(239, 83, 80, 0.2);
+}
+
+/* ── Artillery solution table row styling ─────────────────── */
+#arty-solution-table tbody tr {
+  background: var(--color-surface-raised);
+  transition: background 150ms ease;
+}
+
+#arty-solution-table tbody tr:hover {
+  background: rgba(255, 255, 255, 0.07);
+}
+
+#arty-solution-table tbody td {
+  padding: 8px 5px;
+  vertical-align: middle;
+}
+
+#arty-solution-table tbody td:first-child {
+  border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+}
+
+#arty-solution-table tbody td:last-child {
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+
+/* ── Artillery dropdown option backgrounds ────────────────── */
+#arty-platform-dropdown option {
+  background: #1a1a1e;
+  color: var(--color-foreground);
+}
+
+/* ── Artillery faction option colors ─────────────────────── */
+.arty-faction-warden { color: #6fa8dc; }
+.arty-faction-colonial { color: #93c47d; }
+.arty-faction-both { color: var(--color-muted-foreground); }
+
+/* ── Artillery sidebar scrollbar ─────────────────────────── */
+#arty-sidebar::-webkit-scrollbar {
+  width: 6px;
+}
+
+#arty-sidebar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+#arty-sidebar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+}
+
+#arty-sidebar::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+/* ── Custom color picker (pseudo-elements need CSS) ──────── */
+#draw-custom-color::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+#draw-custom-color::-webkit-color-swatch {
+  border: none;
+  border-radius: 50%;
+  opacity: 0;
+}
+
+/* ── Table header bottom border ──────────────────────────── */
+#arty-solution-table thead th {
+  border-bottom: 1px solid var(--color-border-tactical);
+  padding-bottom: 6px;
+}
+
+/* ── Sidebar header → gold gradient line ─────────────────── */
+#arty-sidebar-header::after {
+  background: linear-gradient(90deg, transparent, var(--color-gold) 30%, var(--color-gold) 70%, transparent);
+}
+
+/* ── Custom checkbox styling for layers panel ────────────── */
+.layer-checkbox {
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border: 1.5px solid var(--color-border-tactical);
+  border-radius: 3px;
+  background: var(--color-surface-inset);
+  cursor: pointer;
+  position: relative;
+  transition: all 150ms ease;
+}
+.layer-checkbox:checked {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+}
+.layer-checkbox:checked::after {
+  content: '';
+  position: absolute;
+  left: 4.5px;
+  top: 1.5px;
+  width: 5px;
+  height: 9px;
+  border: solid white;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}

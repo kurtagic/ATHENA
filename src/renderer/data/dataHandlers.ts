@@ -1,8 +1,11 @@
-import L from 'leaflet';
+import maplibregl from 'maplibre-gl';
 import type { HexItemsPayload, StaticLabelsPayload, MapItem, WarStatus } from '../../shared/types';
 import { ICON_TYPE_MAP, MAJOR_STRUCTURES, RESOURCE_NODES, TEAM_COLOR, TEAM_NONE_COLOR } from './iconTypes';
-import { resolveHex, apiToLatLng } from './hexMapping';
+import { resolveHex, apiToMapPoint } from './hexMapping';
+import { mapPointToLngLat } from './coords';
+import { iconUrl } from './assetUrl';
 import { hexStaticData, hexDynamicData } from './store';
+import { setStaticLabelMarkers } from '../map/layerControl';
 
 // Re-export for convenience
 export { hexStaticData, hexDynamicData };
@@ -14,19 +17,22 @@ export function buildMarkerHtml(it: MapItem): { html: string; size: number } {
   const isVictory = !!(flags & 0x01);
   const isScorched = !!(flags & 0x10);
 
-  let size = 28;
-  if (MAJOR_STRUCTURES.has(it.iconType)) size = 36;
-  else if (RESOURCE_NODES.has(it.iconType)) size = 22;
+  let size = 36;
+  if (MAJOR_STRUCTURES.has(it.iconType)) size = 46;
+  else if (RESOURCE_NODES.has(it.iconType)) size = 30;
 
   const iconFile = ICON_TYPE_MAP[it.iconType];
   let classes = 'map-icon';
   if (isVictory) classes += ' victory';
   if (isScorched) classes += ' scorched';
-  const bg = isScorched ? '#222' : color;
 
-  let html = `<div class="${classes}" style="width:${size}px;height:${size}px;background:${bg};">`;
+  const tint = isScorched ? '#555' : color;
+
+  let html = `<div class="${classes}" style="width:${size}px;height:${size}px;">`;
   if (iconFile) {
-    html += `<img src="tile:///icons/${iconFile}">`;
+    const url = iconUrl(iconFile);
+    html += `<img src="${url}">`;
+    html += `<span class="icon-tint" style="background:${tint};-webkit-mask-image:url(${url});mask-image:url(${url});"></span>`;
   }
   html += '</div>';
   return { html, size };
@@ -56,7 +62,10 @@ export function updateHexItems(data: HexItemsPayload): void {
   }
 }
 
-export function updateStaticLabels(data: StaticLabelsPayload, staticLabelLayer: L.LayerGroup): void {
+// Static label markers stored for visibility toggling
+const staticMarkers: maplibregl.Marker[] = [];
+
+export function updateStaticLabels(data: StaticLabelsPayload, map: maplibregl.Map): void {
   const { mapName, labels } = data;
   const hex = resolveHex(mapName);
   if (!hex) {
@@ -69,20 +78,33 @@ export function updateStaticLabels(data: StaticLabelsPayload, staticLabelLayer: 
   hexStaticData[mapName] = labels;
 
   for (const lbl of labels) {
-    const latlng = apiToLatLng(hex, lbl.x, lbl.y);
+    const point = apiToMapPoint(hex, lbl.x, lbl.y);
+    const lngLat = mapPointToLngLat(point);
     const isMajor = lbl.mapMarkerType === 'Major';
     const cls = isMajor ? 'map-text-major' : 'map-text-minor';
-    const size: [number, number] = isMajor ? [160, 20] : [140, 16];
 
-    L.marker(latlng, {
-      interactive: false,
-      pane: 'labelPane',
-      icon: L.divIcon({
-        className: cls,
-        html: lbl.text,
-        iconSize: size,
-        iconAnchor: [size[0] / 2, size[1] / 2],
-      }),
-    }).addTo(staticLabelLayer);
+    const el = document.createElement('div');
+    el.className = cls;
+    el.textContent = lbl.text;
+
+    const marker = new maplibregl.Marker({ element: el })
+      .setLngLat(lngLat)
+      .addTo(map);
+
+    // Start hidden — layerControl shows at zoom >= 5
+    el.style.display = 'none';
+
+    staticMarkers.push(marker);
   }
+
+  // Update layerControl's reference
+  setStaticLabelMarkers(staticMarkers);
+}
+
+export function removeStaticLabelMarkers(): void {
+  for (const m of staticMarkers) m.remove();
+}
+
+export function addStaticLabelMarkers(map: maplibregl.Map): void {
+  for (const m of staticMarkers) m.addTo(map);
 }

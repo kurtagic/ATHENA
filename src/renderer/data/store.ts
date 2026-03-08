@@ -12,7 +12,7 @@ export interface SavedStroke {
 }
 
 export interface SavedArtilleryState {
-  positions: { id: number; latlng: [number, number]; label: string }[];
+  positions: { id: number; latlng: [number, number]; label: string; platformIndex?: number }[];
   target: [number, number] | null;
   impact: [number, number] | null;
   mainGunIndex: number;

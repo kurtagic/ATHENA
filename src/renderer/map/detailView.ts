@@ -1,47 +1,50 @@
-import L from 'leaflet';
-import { hexLookup, hexImageUrl } from '../data/hexMapping';
+import maplibregl from 'maplibre-gl';
+import type { GeoJSONSource } from 'maplibre-gl';
+import { useMapStore } from '../stores/mapStore';
+import { hexLookup, hexImageUrl, detailMapPoint } from '../data/hexMapping';
+import { mapPointToLngLat, lngLatToMapPoint } from '../data/coords';
 import { hexStaticData, hexDynamicData, hexDrawingData, hexArtilleryData } from '../data/store';
 import { buildMarkerHtml } from '../data/dataHandlers';
 import { initDrawLayer, cleanupDrawing, setDrawColor, getDrawState, activateDrawing, saveDrawState, restoreDrawState } from './drawing';
 import { initArtilleryLayer, cleanupArtillery, activateArtillery, saveArtilleryState, restoreArtilleryState } from './artillery';
 import { clearUndoStack } from '../data/undoStack';
+import { removeHexLabels, addHexLabels, hideHexGrid, showHexGrid } from './hexGrid';
+import { removeStaticLabelMarkers, addStaticLabelMarkers } from '../data/dataHandlers';
+import voronoiData from '../../../static/voronoi.json';
 
 const IMG_W = 256;
 const IMG_H = 256 * 1776 / 2048;
 const GRID_COLS = 17; // A-Q
 const GRID_ROWS = 15; // 1-15
-const GRID_CELL = 125 / 2048 * IMG_W; // 15.625 CRS units
+const CELL_W = IMG_W / GRID_COLS;  // ≈15.06 CRS units
+const CELL_H = IMG_H / GRID_ROWS;  // ≈14.80 CRS units
 
 interface DetailModeState {
   hexId: string;
   apiName: string;
-  overlay: L.ImageOverlay;
-  labelLayer: L.LayerGroup;
-  markerLayer: L.LayerGroup;
-  gridLayer: L.LayerGroup;
-  subGridLayer: L.LayerGroup;
-  savedCenter: L.LatLng;
+  savedCenter: maplibregl.LngLat;
   savedZoom: number;
+  labelMarkers: maplibregl.Marker[];
+  markerMarkers: maplibregl.Marker[];
+  gridLabelMarkers: maplibregl.Marker[];
 }
 
 let detailMode: DetailModeState | null = null;
+let _map: maplibregl.Map;
+let _shellEl: HTMLElement | null = null;
+let _onMoveHandler: (() => void) | null = null;
 
-// References set during init
-let _map: L.Map;
-let _tileLayer: L.TileLayer;
-let _hexGridLayer: L.LayerGroup;
-let _hexLabelLayer: L.LayerGroup;
-let _staticLabelLayer: L.LayerGroup;
-let _onZoomChange: () => void;
+export function setShellElement(el: HTMLElement): void {
+  _shellEl = el;
+}
 
-/** Track container resizes during CSS grid transition, keeping Leaflet in sync. */
 function duringShellTransition(cb: () => void): void {
-  const shell = document.getElementById('ide-shell');
-  const mapEl = document.getElementById('map');
+  const shell = _shellEl;
+  const mapEl = _map.getContainer();
   if (!shell || !mapEl) { cb(); return; }
 
   const ro = new ResizeObserver(() => {
-    _map.invalidateSize();
+    _map.resize();
   });
   ro.observe(mapEl);
 
@@ -50,82 +53,104 @@ function duringShellTransition(cb: () => void): void {
     if (fired) return;
     fired = true;
     ro.disconnect();
-    _map.invalidateSize();
+    _map.resize();
     cb();
   };
 
   shell.addEventListener('transitionend', done, { once: true });
-  // Fallback in case transitionend doesn't fire (e.g. no actual transition)
   setTimeout(done, 250);
 }
 
-export function initDetailView(
-  map: L.Map,
-  tileLayer: L.TileLayer,
-  hexGridLayer: L.LayerGroup,
-  hexLabelLayer: L.LayerGroup,
-  staticLabelLayer: L.LayerGroup,
-  onZoomChange: () => void,
-): void {
+export function initDetailView(map: maplibregl.Map): void {
   _map = map;
-  _tileLayer = tileLayer;
-  _hexGridLayer = hexGridLayer;
-  _hexLabelLayer = hexLabelLayer;
-  _staticLabelLayer = staticLabelLayer;
-  _onZoomChange = onZoomChange;
 }
 
 export function getDetailMode(): DetailModeState | null {
   return detailMode;
 }
 
-export function detailLatLng(apiX: number, apiY: number): [number, number] {
-  return [-apiY * IMG_H, apiX * IMG_W];
+export function showDetailMarkers(): void {
+  if (!detailMode) return;
+  for (const m of detailMode.markerMarkers) m.getElement().style.display = '';
+}
+
+export function hideDetailMarkers(): void {
+  if (!detailMode) return;
+  for (const m of detailMode.markerMarkers) m.getElement().style.display = 'none';
 }
 
 export function renderDetailLabels(apiName: string): void {
   const labels = hexStaticData[apiName];
   if (!labels || !detailMode) return;
-  detailMode.labelLayer.clearLayers();
+
+  // Clear old label markers
+  for (const m of detailMode.labelMarkers) m.remove();
+  detailMode.labelMarkers = [];
 
   for (const lbl of labels) {
-    const latlng = detailLatLng(lbl.x, lbl.y);
+    const point = detailMapPoint(lbl.x, lbl.y);
+    const lngLat = mapPointToLngLat(point);
     const isMajor = lbl.mapMarkerType === 'Major';
     const cls = isMajor ? 'map-text-major' : 'map-text-minor';
-    const size: [number, number] = isMajor ? [160, 20] : [140, 16];
 
-    L.marker(latlng, {
-      interactive: false,
-      pane: 'labelPane',
-      icon: L.divIcon({
-        className: cls,
-        html: lbl.text,
-        iconSize: size,
-        iconAnchor: [size[0] / 2, size[1] / 2],
-      }),
-    }).addTo(detailMode.labelLayer);
+    const el = document.createElement('div');
+    el.className = cls;
+    el.textContent = lbl.text;
+
+    const marker = new maplibregl.Marker({ element: el })
+      .setLngLat(lngLat)
+      .addTo(_map);
+
+    detailMode.labelMarkers.push(marker);
   }
 }
 
 export function renderDetailMarkers(apiName: string): void {
   const items = hexDynamicData[apiName];
   if (!items || !detailMode) return;
-  detailMode.markerLayer.clearLayers();
+
+  // Clear old structure markers
+  for (const m of detailMode.markerMarkers) m.remove();
+  detailMode.markerMarkers = [];
 
   for (const it of items) {
-    const latlng = detailLatLng(it.x, it.y);
+    const point = detailMapPoint(it.x, it.y);
+    const lngLat = mapPointToLngLat(point);
     const m = buildMarkerHtml(it);
 
-    L.marker(latlng, {
-      interactive: false,
-      icon: L.divIcon({
-        className: '',
-        html: m.html,
-        iconSize: [m.size, m.size],
-        iconAnchor: [m.size / 2, m.size / 2],
-      }),
-    }).addTo(detailMode.markerLayer);
+    const el = document.createElement('div');
+    el.innerHTML = m.html;
+    el.style.width = `${m.size}px`;
+    el.style.height = `${m.size}px`;
+
+    const marker = new maplibregl.Marker({ element: el, anchor: 'center' })
+      .setLngLat(lngLat)
+      .addTo(_map);
+
+    detailMode.markerMarkers.push(marker);
   }
+}
+
+function buildVoronoiFeatures(apiName: string): GeoJSON.Feature<GeoJSON.Polygon>[] {
+  const regions = (voronoiData as unknown as Record<string, { notes: string; coordinates: [number, number][] }[]>)[apiName];
+  if (!regions) return [];
+
+  return regions.map((region) => {
+    const coords = region.coordinates.map(([ax, ay]) => mapPointToLngLat(detailMapPoint(ax, ay)));
+    // Close the ring if not already closed
+    if (coords.length > 0) {
+      const first = coords[0];
+      const last = coords[coords.length - 1];
+      if (first[0] !== last[0] || first[1] !== last[1]) {
+        coords.push([...first] as [number, number]);
+      }
+    }
+    return {
+      type: 'Feature' as const,
+      properties: { notes: region.notes },
+      geometry: { type: 'Polygon' as const, coordinates: [coords] },
+    };
+  });
 }
 
 export function enterDetailMode(hexId: string): void {
@@ -139,138 +164,269 @@ export function enterDetailMode(hexId: string): void {
   const savedCenter = _map.getCenter();
   const savedZoom = _map.getZoom();
 
-  // Remove world layers
-  _map.removeLayer(_tileLayer);
-  _map.removeLayer(_hexGridLayer);
-  _map.removeLayer(_hexLabelLayer);
-  _map.removeLayer(_staticLabelLayer);
+  // Hide world layers
+  _map.setLayoutProperty('world-tiles', 'visibility', 'none');
+  hideHexGrid(_map);
+  removeHexLabels();
+  removeStaticLabelMarkers();
 
-  // Set zoom to detail level immediately so layers are added at correct scale
-  const imageBounds: L.LatLngBoundsLiteral = [[-IMG_H, 0], [0, IMG_W]];
-  _map.fitBounds(imageBounds, { animate: false });
+  // Image bounds: 4 corners [TL, TR, BR, BL] in [lng, lat]
+  const tl = mapPointToLngLat({ x: 0, y: 0 });
+  const tr = mapPointToLngLat({ x: IMG_W, y: 0 });
+  const br = mapPointToLngLat({ x: IMG_W, y: -IMG_H });
+  const bl = mapPointToLngLat({ x: 0, y: -IMG_H });
 
-  // Add hex image overlay
-  const overlay = L.imageOverlay(hexImageUrl(hexId), imageBounds).addTo(_map);
+  // Add detail image source + layer
+  _map.addSource('detail-image', {
+    type: 'image',
+    url: hexImageUrl(hexId),
+    coordinates: [
+      [tl[0], tl[1]], // TL
+      [tr[0], tr[1]], // TR
+      [br[0], br[1]], // BR
+      [bl[0], bl[1]], // BL
+    ],
+  });
+  _map.addLayer({ id: 'detail-image', type: 'raster', source: 'detail-image' });
 
-  // Create detail-specific layers
-  const dLabelLayer = L.layerGroup().addTo(_map);
-  const dMarkerLayer = L.layerGroup().addTo(_map);
+  // Voronoi subregion boundaries
+  const voronoiFeatures = buildVoronoiFeatures(apiName);
+  if (voronoiFeatures.length > 0) {
+    _map.addSource('voronoi-regions', {
+      type: 'geojson',
+      data: { type: 'FeatureCollection', features: voronoiFeatures },
+    });
+    _map.addLayer({
+      id: 'voronoi-lines',
+      type: 'line',
+      source: 'voronoi-regions',
+      paint: { 'line-color': 'rgba(0,0,0,0.5)', 'line-width': 2 },
+    });
+  }
 
-  // Build keypad grid overlay
-  const dGridLayer = L.layerGroup().addTo(_map);
-  const gridStyle: L.PolylineOptions = { color: '#000', weight: 1.5, opacity: 0.3 };
+  // Build keypad grid GeoJSON
+  const gridLines: GeoJSON.Feature<GeoJSON.LineString>[] = [];
 
   // Vertical lines
   for (let c = 0; c <= GRID_COLS; c++) {
-    const lng = c * GRID_CELL;
-    L.polyline([[0, lng], [-GRID_ROWS * GRID_CELL, lng]], gridStyle).addTo(dGridLayer);
+    const x = c * CELL_W;
+    gridLines.push({
+      type: 'Feature',
+      properties: {},
+      geometry: {
+        type: 'LineString',
+        coordinates: [
+          mapPointToLngLat({ x, y: 0 }),
+          mapPointToLngLat({ x, y: -GRID_ROWS * CELL_H }),
+        ],
+      },
+    });
   }
   // Horizontal lines
   for (let r = 0; r <= GRID_ROWS; r++) {
-    const lat = -r * GRID_CELL;
-    L.polyline([[lat, 0], [lat, GRID_COLS * GRID_CELL]], gridStyle).addTo(dGridLayer);
+    const y = -r * CELL_H;
+    gridLines.push({
+      type: 'Feature',
+      properties: {},
+      geometry: {
+        type: 'LineString',
+        coordinates: [
+          mapPointToLngLat({ x: 0, y }),
+          mapPointToLngLat({ x: GRID_COLS * CELL_W, y }),
+        ],
+      },
+    });
   }
-  // Column headers A-Q
+
+  _map.addSource('detail-grid', {
+    type: 'geojson',
+    data: { type: 'FeatureCollection', features: gridLines },
+  });
+  _map.addLayer({
+    id: 'detail-grid-lines',
+    type: 'line',
+    source: 'detail-grid',
+    paint: { 'line-color': '#000', 'line-width': 1.5, 'line-opacity': 0.3 },
+  });
+
+  // Grid labels (A-Q columns, 1-15 rows) — sticky to viewport edge
+  const gridLabelMarkers: maplibregl.Marker[] = [];
+  const colMarkers: maplibregl.Marker[] = [];
+  const rowMarkers: maplibregl.Marker[] = [];
+
+  const PADDING = 0.15; // inset fraction of cell size
+
   for (let c = 0; c < GRID_COLS; c++) {
-    const colLabel = String.fromCharCode(65 + c);
-    L.marker([GRID_CELL * 0.4, (c + 0.5) * GRID_CELL], {
-      interactive: false,
-      icon: L.divIcon({
-        className: 'grid-label',
-        html: colLabel,
-        iconSize: [20, 14],
-        iconAnchor: [10, 7],
-      }),
-    }).addTo(dGridLayer);
+    const el = document.createElement('div');
+    el.className = 'grid-label';
+    el.textContent = String.fromCharCode(65 + c);
+    const marker = new maplibregl.Marker({ element: el })
+      .setLngLat(mapPointToLngLat({ x: (c + 0.5) * CELL_W, y: -PADDING * CELL_H }))
+      .addTo(_map);
+    colMarkers.push(marker);
+    gridLabelMarkers.push(marker);
   }
-  // Row headers 1-15
   for (let r = 0; r < GRID_ROWS; r++) {
-    L.marker([-(r + 0.5) * GRID_CELL, -GRID_CELL * 0.3], {
-      interactive: false,
-      icon: L.divIcon({
-        className: 'grid-label',
-        html: `${r + 1}`,
-        iconSize: [20, 14],
-        iconAnchor: [10, 7],
-      }),
-    }).addTo(dGridLayer);
+    const el = document.createElement('div');
+    el.className = 'grid-label';
+    el.textContent = `${r + 1}`;
+    const marker = new maplibregl.Marker({ element: el })
+      .setLngLat(mapPointToLngLat({ x: PADDING * CELL_W, y: -(r + 0.5) * CELL_H }))
+      .addTo(_map);
+    rowMarkers.push(marker);
+    gridLabelMarkers.push(marker);
   }
 
-  // Build subgrid overlay (3x3 keypad per cell)
-  const SUB_CELL = GRID_CELL / 3;
-  const dSubGridLayer = L.layerGroup();
-  const subStyle: L.PolylineOptions = { color: '#000', weight: 0.5, opacity: 0.3 };
+  // Reposition labels to stick to viewport edge
+  const updateStickyLabels = () => {
+    const bounds = _map.getBounds();
+    const topLeft = lngLatToMapPoint(bounds.getWest(), bounds.getNorth());
+    const bottomRight = lngLatToMapPoint(bounds.getEast(), bounds.getSouth());
 
-  // Subgrid vertical lines
+    // Column labels: clamp y to top of viewport or grid top, whichever is lower (inside grid)
+    const gridTop = 0;
+    const gridBottom = -GRID_ROWS * CELL_H;
+    const stickyY = Math.max(gridBottom + CELL_H, Math.min(gridTop - PADDING * CELL_H, topLeft.y - PADDING * CELL_H));
+    for (let c = 0; c < colMarkers.length; c++) {
+      colMarkers[c].setLngLat(mapPointToLngLat({ x: (c + 0.5) * CELL_W, y: stickyY }));
+    }
+
+    // Row labels: clamp x to left of viewport or grid left, whichever is more to the right (inside grid)
+    const gridLeft = 0;
+    const gridRight = GRID_COLS * CELL_W;
+    const stickyX = Math.min(gridRight - CELL_W, Math.max(gridLeft + PADDING * CELL_W, topLeft.x + PADDING * CELL_W));
+    for (let r = 0; r < rowMarkers.length; r++) {
+      rowMarkers[r].setLngLat(mapPointToLngLat({ x: stickyX, y: -(r + 0.5) * CELL_H }));
+    }
+  };
+
+  updateStickyLabels();
+  _onMoveHandler = updateStickyLabels;
+  _map.on('move', _onMoveHandler);
+
+  // Subgrid lines (3x3 per cell)
+  const SUB_W = CELL_W / 3;
+  const SUB_H = CELL_H / 3;
+  const subLines: GeoJSON.Feature<GeoJSON.LineString>[] = [];
+
   for (let c = 0; c < GRID_COLS; c++) {
     for (let sc = 1; sc <= 2; sc++) {
-      const lng = c * GRID_CELL + sc * SUB_CELL;
-      L.polyline([[0, lng], [-GRID_ROWS * GRID_CELL, lng]], subStyle).addTo(dSubGridLayer);
+      const x = c * CELL_W + sc * SUB_W;
+      subLines.push({
+        type: 'Feature',
+        properties: {},
+        geometry: {
+          type: 'LineString',
+          coordinates: [
+            mapPointToLngLat({ x, y: 0 }),
+            mapPointToLngLat({ x, y: -GRID_ROWS * CELL_H }),
+          ],
+        },
+      });
     }
   }
-  // Subgrid horizontal lines
   for (let r = 0; r < GRID_ROWS; r++) {
     for (let sr = 1; sr <= 2; sr++) {
-      const lat = -(r * GRID_CELL + sr * SUB_CELL);
-      L.polyline([[lat, 0], [lat, GRID_COLS * GRID_CELL]], subStyle).addTo(dSubGridLayer);
+      const y = -(r * CELL_H + sr * SUB_H);
+      subLines.push({
+        type: 'Feature',
+        properties: {},
+        geometry: {
+          type: 'LineString',
+          coordinates: [
+            mapPointToLngLat({ x: 0, y }),
+            mapPointToLngLat({ x: GRID_COLS * CELL_W, y }),
+          ],
+        },
+      });
     }
   }
-  // Keypad numbers 1-9 in each cell
+
+  _map.addSource('detail-subgrid', {
+    type: 'geojson',
+    data: { type: 'FeatureCollection', features: subLines },
+  });
+  _map.addLayer({
+    id: 'detail-subgrid-lines',
+    type: 'line',
+    source: 'detail-subgrid',
+    paint: { 'line-color': '#000', 'line-width': 0.5, 'line-opacity': 0.3 },
+    layout: { visibility: _map.getZoom() >= 4 ? 'visible' : 'none' },
+  });
+
+  // Subgrid labels (1-9 per cell) — GPU-rendered symbol layer
+  const subgridPoints: GeoJSON.Feature<GeoJSON.Point>[] = [];
   for (let c = 0; c < GRID_COLS; c++) {
     for (let r = 0; r < GRID_ROWS; r++) {
       for (let sr = 0; sr < 3; sr++) {
         for (let sc = 0; sc < 3; sc++) {
           const num = sr * 3 + sc + 1;
-          const lng = c * GRID_CELL + (sc + 0.5) * SUB_CELL;
-          const lat = -(r * GRID_CELL + (sr + 0.5) * SUB_CELL);
-          L.marker([lat, lng], {
-            interactive: false,
-            icon: L.divIcon({
-              className: 'subgrid-label',
-              html: `${num}`,
-              iconSize: [12, 10],
-              iconAnchor: [6, 5],
-            }),
-          }).addTo(dSubGridLayer);
+          const x = c * CELL_W + (sc + 0.5) * SUB_W;
+          const y = -(r * CELL_H + (sr + 0.5) * SUB_H);
+          const lngLat = mapPointToLngLat({ x, y });
+          subgridPoints.push({
+            type: 'Feature',
+            properties: { label: `${num}` },
+            geometry: { type: 'Point', coordinates: lngLat },
+          });
         }
       }
     }
   }
 
-  // Show subgrid if already zoomed in enough
-  if (_map.getZoom() >= 5) dSubGridLayer.addTo(_map);
+  _map.addSource('detail-subgrid-labels', {
+    type: 'geojson',
+    data: { type: 'FeatureCollection', features: subgridPoints },
+  });
+  _map.addLayer({
+    id: 'detail-subgrid-labels',
+    type: 'symbol',
+    source: 'detail-subgrid-labels',
+    layout: {
+      'text-field': ['get', 'label'],
+      'text-font': ['Open Sans Semibold'],
+      'text-size': 14,
+      'text-allow-overlap': true,
+      'text-ignore-placement': true,
+      visibility: _map.getZoom() >= 4 ? 'visible' : 'none',
+    },
+    paint: {
+      'text-color': '#ffffff',
+      'text-halo-color': 'rgba(0,0,0,0.5)',
+      'text-halo-width': 1,
+    },
+  });
+
+  // Fit to image bounds
+  const sw = mapPointToLngLat({ x: 0, y: -IMG_H });
+  const ne = mapPointToLngLat({ x: IMG_W, y: 0 });
+  _map.fitBounds([sw, ne], { animate: false });
 
   detailMode = {
     hexId,
     apiName,
-    overlay,
-    labelLayer: dLabelLayer,
-    markerLayer: dMarkerLayer,
-    gridLayer: dGridLayer,
-    subGridLayer: dSubGridLayer,
     savedCenter,
     savedZoom,
+    labelMarkers: [],
+    markerMarkers: [],
+    gridLabelMarkers,
   };
 
-  // Init drawing layer and activate immediately
+  // Init drawing layer and activate
   initDrawLayer(_map);
   setDrawColor(getDrawState().color);
   activateDrawing(_map);
 
   // Restore saved drawing state for this hex
   const savedDrawing = hexDrawingData[apiName];
-  if (savedDrawing) {
-    restoreDrawState(savedDrawing);
-  }
+  if (savedDrawing) restoreDrawState(savedDrawing, _map);
 
-  // Init artillery layer and activate immediately
+  // Init artillery layer and activate
   initArtilleryLayer(_map);
 
   // Restore saved artillery state for this hex
   const savedArty = hexArtilleryData[apiName];
-  if (savedArty) {
-    restoreArtilleryState(savedArty, _map);
-  }
+  if (savedArty) restoreArtilleryState(savedArty, _map);
 
   activateArtillery(_map);
 
@@ -278,17 +434,11 @@ export function enterDetailMode(hexId: string): void {
   renderDetailLabels(apiName);
   renderDetailMarkers(apiName);
 
-  // Set detail title text
-  const detailTitle = document.getElementById('detail-title');
-  if (detailTitle) detailTitle.textContent = hexInfo.name;
+  // Update Zustand store
+  useMapStore.getState().setDetailMode({ hexId, hexName: hexInfo.name, apiName });
 
-  // Activate IDE shell detail mode — panels animate open
-  const shell = document.getElementById('ide-shell');
-  if (shell) shell.classList.add('detail-mode');
-
-  // Track container resize during transition, then fit to hex image
   duringShellTransition(() => {
-    _map.fitBounds(imageBounds, { animate: false });
+    _map.fitBounds([sw, ne], { animate: false });
   });
 }
 
@@ -303,35 +453,49 @@ export function exitDetailMode(): void {
   cleanupArtillery(_map);
   cleanupDrawing(_map);
 
-  // Remove detail layers
-  _map.removeLayer(detailMode.overlay);
-  _map.removeLayer(detailMode.labelLayer);
-  _map.removeLayer(detailMode.markerLayer);
-  _map.removeLayer(detailMode.gridLayer);
-  _map.removeLayer(detailMode.subGridLayer);
+  // Remove sticky label listener
+  if (_onMoveHandler) {
+    _map.off('move', _onMoveHandler);
+    _onMoveHandler = null;
+  }
 
-  // Capture saved view before nullifying detailMode
+  // Remove detail markers
+  for (const m of detailMode.labelMarkers) m.remove();
+  for (const m of detailMode.markerMarkers) m.remove();
+  for (const m of detailMode.gridLabelMarkers) m.remove();
+
+  // Remove detail layers and sources
+  if (_map.getLayer('voronoi-lines')) _map.removeLayer('voronoi-lines');
+  if (_map.getSource('voronoi-regions')) _map.removeSource('voronoi-regions');
+  if (_map.getLayer('detail-image')) _map.removeLayer('detail-image');
+  if (_map.getSource('detail-image')) _map.removeSource('detail-image');
+  if (_map.getLayer('detail-grid-lines')) _map.removeLayer('detail-grid-lines');
+  if (_map.getSource('detail-grid')) _map.removeSource('detail-grid');
+  if (_map.getLayer('detail-subgrid-lines')) _map.removeLayer('detail-subgrid-lines');
+  if (_map.getSource('detail-subgrid')) _map.removeSource('detail-subgrid');
+  if (_map.getLayer('detail-subgrid-labels')) _map.removeLayer('detail-subgrid-labels');
+  if (_map.getSource('detail-subgrid-labels')) _map.removeSource('detail-subgrid-labels');
+
   const { savedCenter, savedZoom } = detailMode;
 
-  // Restore world view immediately so tiles load at the correct zoom/position
-  _map.setView(savedCenter, savedZoom, { animate: false });
+  // Restore world view
+  _map.jumpTo({ center: savedCenter, zoom: savedZoom });
 
-  // Restore world layers
-  _map.addLayer(_tileLayer);
-  _map.addLayer(_hexGridLayer);
+  // Show world layers
+  _map.setLayoutProperty('world-tiles', 'visibility', 'visible');
+  showHexGrid(_map);
+  addHexLabels(_map);
+  addStaticLabelMarkers(_map);
 
   detailMode = null;
 
-  // Restore zoom-dependent layers
-  _onZoomChange();
+  useMapStore.getState().setDetailMode(null);
 
-  // Deactivate IDE shell — panels animate closed
-  const shell = document.getElementById('ide-shell');
-  if (shell) shell.classList.remove('detail-mode');
+  // Import onZoomChange dynamically to avoid circular dependency
+  import('./layerControl').then(({ onZoomChange }) => onZoomChange());
 
-  // Track container resize during transition, then restore world view
   duringShellTransition(() => {
-    _map.setView(savedCenter, savedZoom, { animate: false });
+    _map.jumpTo({ center: savedCenter, zoom: savedZoom });
   });
 }
 

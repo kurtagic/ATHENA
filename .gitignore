@@ -2,6 +2,7 @@ node_modules/
 .vite/
 out/
 dist/
+dist-web/
 assets/
 .claude/
 CLAUDE.md
