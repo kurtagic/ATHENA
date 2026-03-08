@@ -2,7 +2,7 @@ import type { ArtySnapshot } from '../map/artillery';
 import type { SavedStroke } from '../data/store';
 
 export type UndoAction =
-  | { type: 'drawing' }
+  | { type: 'drawing'; strokeId: string }
   | { type: 'artillery'; snapshot: ArtySnapshot }
   | { type: 'eraser'; strokes: SavedStroke[] };
 

@@ -6,7 +6,8 @@ import { pushUndoAction } from '../data/undoStack';
 import { useMapStore } from '../stores/mapStore';
 import { useDrawStore } from '../stores/drawStore';
 
-interface StrokeData {
+export interface StrokeData {
+  id?: string;
   points: MapPoint[];
   color: string;
   weight: number;
@@ -47,6 +48,21 @@ const drawState: DrawState = {
 
 // Redo support: strokes popped by undo are stored here
 const undoneStrokes: StrokeData[] = [];
+
+// ── Sync infrastructure ──
+let syncMode = false;
+let onStrokeFinalized: ((stroke: StrokeData, hexId: string) => void) | null = null;
+let onStrokeUndone: ((strokeId: string, hexId: string) => void) | null = null;
+let onStrokeRedone: ((stroke: StrokeData, hexId: string) => void) | null = null;
+let onStrokesErased: ((strokeIds: string[], hexId: string) => void) | null = null;
+let currentHexId: string = '';
+
+export function setSyncMode(enabled: boolean) { syncMode = enabled; }
+export function setCurrentHexId(hexId: string) { currentHexId = hexId; }
+export function setStrokeFinalizedCallback(cb: typeof onStrokeFinalized) { onStrokeFinalized = cb; }
+export function setStrokeUndoneCallback(cb: typeof onStrokeUndone) { onStrokeUndone = cb; }
+export function setStrokeRedoneCallback(cb: typeof onStrokeRedone) { onStrokeRedone = cb; }
+export function setStrokesErasedCallback(cb: typeof onStrokesErased) { onStrokesErased = cb; }
 
 export function getDrawState(): DrawState {
   return drawState;
@@ -163,32 +179,63 @@ export function deactivateDrawing(_map: maplibregl.Map): void {
 
 function finalizeStroke(): void {
   if (drawState.drawing && drawState.currentPoints.length > 1) {
-    drawState.strokes.push({
+    const id = crypto.randomUUID();
+    const stroke: StrokeData = {
+      id,
       points: [...drawState.currentPoints],
       color: drawState.color,
       weight: drawState.weight,
       opacity: drawState.opacity,
-    });
-    pushUndoAction({ type: 'drawing' });
+    };
+
+    drawState.strokes.push(stroke);
+    pushUndoAction({ type: 'drawing', strokeId: id });
     // New stroke invalidates redo
     undoneStrokes.length = 0;
+
+    if (onStrokeFinalized) onStrokeFinalized(stroke, currentHexId);
   }
   drawState.currentPoints = [];
   drawState.drawing = false;
   redrawAllStrokes();
 }
 
-export function undoStroke(): void {
-  if (drawState.strokes.length === 0) return;
+export function undoStroke(): string | undefined {
+  if (drawState.strokes.length === 0) return undefined;
   const popped = drawState.strokes.pop()!;
   undoneStrokes.push(popped);
   redrawAllStrokes();
+  if (onStrokeUndone && popped.id) onStrokeUndone(popped.id, currentHexId);
+  return popped.id;
 }
 
-export function redoStroke(): void {
-  if (undoneStrokes.length === 0) return;
+export function redoStroke(): StrokeData | undefined {
+  if (undoneStrokes.length === 0) return undefined;
   const stroke = undoneStrokes.pop()!;
   drawState.strokes.push(stroke);
+  redrawAllStrokes();
+  if (onStrokeRedone && stroke.id) onStrokeRedone(stroke, currentHexId);
+  return stroke;
+}
+
+// ── Remote operation helpers ──
+
+export function addRemoteStroke(stroke: StrokeData): void {
+  drawState.strokes.push(stroke);
+  redrawAllStrokes();
+}
+
+export function removeStrokeById(id: string): void {
+  const idx = drawState.strokes.findIndex(s => s.id === id);
+  if (idx !== -1) {
+    drawState.strokes.splice(idx, 1);
+    redrawAllStrokes();
+  }
+}
+
+export function clearAllStrokes(): void {
+  drawState.strokes.length = 0;
+  undoneStrokes.length = 0;
   redrawAllStrokes();
 }
 
@@ -223,6 +270,7 @@ export function setDrawOpacity(o: number): void {
 
 export function saveDrawState(): SavedStroke[] {
   return drawState.strokes.map((stroke) => ({
+    id: stroke.id,
     points: stroke.points.map((p) => [p.x, p.y] as [number, number]),
     color: stroke.color,
     weight: stroke.weight,
@@ -230,9 +278,10 @@ export function saveDrawState(): SavedStroke[] {
   }));
 }
 
-export function restoreDrawState(saved: SavedStroke[], map: maplibregl.Map): void {
+export function restoreDrawState(saved: SavedStroke[], _map: maplibregl.Map): void {
   for (const stroke of saved) {
     drawState.strokes.push({
+      id: stroke.id,
       points: stroke.points.map(([x, y]) => toMapPoint(x, y)),
       color: stroke.color,
       weight: stroke.weight,
@@ -281,6 +330,7 @@ function eraseStrokesAtPoint(map: maplibregl.Map, lngLat: maplibregl.LngLat): vo
     }
     if (hit) {
       const saved: SavedStroke = {
+        id: stroke.id,
         points: stroke.points.map((p) => [p.x, p.y] as [number, number]),
         color: stroke.color,
         weight: stroke.weight,
@@ -296,6 +346,13 @@ function eraseStrokesAtPoint(map: maplibregl.Map, lngLat: maplibregl.LngLat): vo
 function finalizeErase(map: maplibregl.Map): void {
   if (drawState.erasedDuringDrag.length > 0) {
     pushUndoAction({ type: 'eraser', strokes: [...drawState.erasedDuringDrag] });
+    // Notify sync of erased stroke IDs
+    const erasedIds = drawState.erasedDuringDrag
+      .map(s => s.id)
+      .filter((id): id is string => id !== undefined);
+    if (onStrokesErased && erasedIds.length > 0) {
+      onStrokesErased(erasedIds, currentHexId);
+    }
   }
   drawState.eraserActive = false;
   drawState.erasedDuringDrag = [];
@@ -305,6 +362,7 @@ function finalizeErase(map: maplibregl.Map): void {
 export function restoreErasedStrokes(saved: SavedStroke[]): void {
   for (const stroke of saved) {
     drawState.strokes.push({
+      id: stroke.id,
       points: stroke.points.map(([x, y]) => toMapPoint(x, y)),
       color: stroke.color,
       weight: stroke.weight,

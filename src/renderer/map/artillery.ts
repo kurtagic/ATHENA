@@ -7,6 +7,7 @@ import { ARTILLERY_PLATFORMS } from '../data/artilleryPlatforms';
 import { crsDistanceMeters, crsAzimuth, metersToRadius, calculateCorrection, interpolateInaccuracy } from '../data/artilleryCalc';
 import { useArtilleryStore, type ArtillerySolution } from '../stores/artilleryStore';
 import { useMapStore } from '../stores/mapStore';
+import { useLayerStore } from '../stores/layerStore';
 import { pushUndoAction } from '../data/undoStack';
 
 const CIRCLE_SEGMENTS = 64;
@@ -54,6 +55,13 @@ const state: ArtyState = {
 // Drag state
 let dragInfo: { type: 'gun' | 'target' | 'impact'; gunIndex: number } | null = null;
 let dragOccurred = false;
+
+// Sync callback
+let onArtilleryChanged: ((state: SavedArtilleryState, hexId: string) => void) | null = null;
+let artilleryHexId: string = '';
+
+export function setArtilleryChangedCallback(cb: typeof onArtilleryChanged) { onArtilleryChanged = cb; }
+export function setArtilleryHexId(hexId: string) { artilleryHexId = hexId; }
 
 // Click handler reference
 let clickHandler: ((e: maplibregl.MapMouseEvent) => void) | null = null;
@@ -418,7 +426,7 @@ function createDotElement(dotSize: number, cssClass: string, interactive: boolea
   return wrapper;
 }
 
-function refreshAll(map: maplibregl.Map): void {
+function refreshAll(map: maplibregl.Map, sync = true): void {
   if (!state.sourcesAdded) return;
 
   // Clear old markers
@@ -544,6 +552,7 @@ function refreshAll(map: maplibregl.Map): void {
   (map.getSource('arty-rings') as GeoJSONSource).setData({ type: 'FeatureCollection', features: ringFeatures });
   (map.getSource('arty-lines') as GeoJSONSource).setData({ type: 'FeatureCollection', features: lineFeatures });
   (map.getSource('arty-inaccuracy') as GeoJSONSource).setData({ type: 'FeatureCollection', features: inaccFeatures });
+  map.triggerRepaint();
 
   // Corrected dot marker
   if (state.corrected) {
@@ -616,9 +625,17 @@ function refreshAll(map: maplibregl.Map): void {
     });
   }
 
+  // Hide newly created markers if artillery layer is toggled off
+  const artilleryLayerVisible = useLayerStore.getState().layers.artillery?.visible ?? true;
+  if (!artilleryLayerVisible) {
+    for (const m of state.markers) m.getElement().style.display = 'none';
+  }
+
   // Push solutions to Zustand store
   const solutions = computeSolutions();
   useArtilleryStore.getState().setSolutions(solutions, state.target !== null);
+
+  if (sync && onArtilleryChanged) onArtilleryChanged(saveArtilleryState(), artilleryHexId);
 }
 
 function computeSolutions(): ArtillerySolution[] {
@@ -702,7 +719,7 @@ export function saveArtilleryState(): SavedArtilleryState {
   };
 }
 
-export function restoreArtilleryState(saved: SavedArtilleryState, map: maplibregl.Map): void {
+export function restoreArtilleryState(saved: SavedArtilleryState, map: maplibregl.Map, sync = false): void {
   state.positions = saved.positions.map((p) => ({
     id: p.id,
     point: toMapPoint(p.latlng[0], p.latlng[1]),
@@ -716,7 +733,7 @@ export function restoreArtilleryState(saved: SavedArtilleryState, map: maplibreg
   state.nextId = saved.nextId;
   state.nextLabelNum = saved.nextLabelNum;
   recalcCorrected();
-  refreshAll(map);
+  refreshAll(map, sync);
 }
 
 export function setupArtilleryEvents(map: maplibregl.Map): void {

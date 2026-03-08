@@ -6,6 +6,7 @@ export const hexDynamicData: Record<string, MapItem[]> = {};
 
 // Per-hex drawing and artillery state caches (survive view transitions)
 export interface SavedStroke {
+  id?: string;
   points: [number, number][];
   color: string;
   weight: number;

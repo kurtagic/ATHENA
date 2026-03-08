@@ -3,15 +3,25 @@ import type maplibregl from 'maplibre-gl';
 import { getDetailMode, exitDetailMode } from '../map/detailView';
 import { getArtilleryState, setPlacementMode } from '../map/artillery';
 import { performUndo, performRedo } from '../map/undo';
-import { toggleEraser } from '../map/drawing';
-import { useDrawStore } from '../stores/drawStore';
 import { useMapStore } from '../stores/mapStore';
+import { useVoiceStore } from '../stores/voiceStore';
+import { voice } from '../multiplayer/voiceManager';
 
 export function useGlobalKeyboard(mapRef: React.MutableRefObject<maplibregl.Map | null>): void {
   useEffect(() => {
     const handleKeydown = (e: KeyboardEvent) => {
       const map = mapRef.current;
       if (!map) return;
+
+      // V key → PTT (push-to-talk)
+      if (e.key === 'y' && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {
+        if (useVoiceStore.getState().joined) {
+          e.preventDefault();
+          voice.setPttActive(true);
+          useVoiceStore.getState().setPttActive(true);
+          return;
+        }
+      }
 
       // Ctrl+Shift+Z or Ctrl+Y → Redo
       if (
@@ -32,13 +42,6 @@ export function useGlobalKeyboard(mapRef: React.MutableRefObject<maplibregl.Map 
         return;
       }
 
-      // E → Toggle eraser
-      if (e.key === 'e' && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey && getDetailMode()) {
-        e.preventDefault();
-        toggleEraser(map);
-        useDrawStore.getState().toggleEraser();
-        return;
-      }
 
       if (e.key === 'Escape') {
         const as = getArtilleryState();
@@ -50,7 +53,18 @@ export function useGlobalKeyboard(mapRef: React.MutableRefObject<maplibregl.Map 
       }
     };
 
+    const handleKeyup = (e: KeyboardEvent) => {
+      if (e.key === 'y' && useVoiceStore.getState().joined) {
+        voice.setPttActive(false);
+        useVoiceStore.getState().setPttActive(false);
+      }
+    };
+
     document.addEventListener('keydown', handleKeydown);
-    return () => document.removeEventListener('keydown', handleKeydown);
+    document.addEventListener('keyup', handleKeyup);
+    return () => {
+      document.removeEventListener('keydown', handleKeydown);
+      document.removeEventListener('keyup', handleKeyup);
+    };
   }, [mapRef]);
 }

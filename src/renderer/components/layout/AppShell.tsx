@@ -6,6 +6,7 @@ import { LeftSidebar } from './LeftSidebar';
 import { MapPanel } from './MapPanel';
 import { RightSidebar } from './RightSidebar';
 import { BottomBar } from './BottomBar';
+import { SessionPanel } from '../panels/SessionPanel';
 
 export function AppShell() {
   const detailMode = useMapStore((s) => s.detailMode);
@@ -36,6 +37,18 @@ export function AppShell() {
       <MapPanel />
       <RightSidebar />
       <BottomBar />
+
+      {/* Floating multiplayer panel — always visible, top-left; shifts right of sidebar in detail mode */}
+      <div
+        className={`fixed top-12 w-[220px] z-50 rounded-lg border border-white/10 backdrop-blur-xl overflow-hidden transition-[left] duration-200 ease-in-out ${
+          detailMode ? 'left-[252px]' : 'left-3'
+        }`}
+        style={{
+          background: 'linear-gradient(180deg, rgba(18,18,22,0.92) 0%, rgba(12,12,14,0.96) 100%)',
+        }}
+      >
+        <SessionPanel />
+      </div>
     </div>
   );
 }
