@@ -5,7 +5,7 @@ import { useVoiceStore } from '../../stores/voiceStore';
 import { session } from '../../multiplayer/sessionManager';
 import { voice } from '../../multiplayer/voiceManager';
 
-const SERVER_URL = 'wss://athena.kurti.si';
+const SERVER_URL = 'wss://api.athena.kurti.si';
 
 export function SessionPanel() {
   const status = useSessionStore((s) => s.status);

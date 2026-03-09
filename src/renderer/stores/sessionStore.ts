@@ -7,7 +7,6 @@ interface SessionState {
   status: ConnectionStatus;
   memberId: string | null;
   displayName: string;
-  serverUrl: string;
   lobbyId: string | null;
   lobbyName: string | null;
   isOwner: boolean;
@@ -19,7 +18,6 @@ interface SessionState {
   setStatus: (status: ConnectionStatus) => void;
   setMemberId: (id: string | null) => void;
   setDisplayName: (name: string) => void;
-  setServerUrl: (url: string) => void;
   setLobby: (lobbyId: string | null, name: string | null) => void;
   setIsOwner: (isOwner: boolean) => void;
   setOwnerId: (id: string | null) => void;
@@ -35,7 +33,6 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   status: 'disconnected',
   memberId: null,
   displayName: '',
-  serverUrl: 'wss://athena.kurti.si',
   lobbyId: null,
   lobbyName: null,
   isOwner: false,
@@ -47,7 +44,6 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   setStatus: (status) => set({ status }),
   setMemberId: (memberId) => set({ memberId }),
   setDisplayName: (displayName) => set({ displayName }),
-  setServerUrl: (serverUrl) => set({ serverUrl }),
   setLobby: (lobbyId, lobbyName) => set({ lobbyId, lobbyName }),
   setIsOwner: (isOwner) => set({ isOwner }),
   setOwnerId: (ownerId) => {
