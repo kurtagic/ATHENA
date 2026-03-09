@@ -1,9 +1,7 @@
 const isElectron = typeof window !== 'undefined' && !!(window as any).athena;
 
 export function tileUrlTemplate(): string {
-  return isElectron
-    ? 'tile:///{z}/{z}_{x}_{y}.png'
-    : '/assets/tiles/{z}/{z}_{x}_{y}.png';
+  return 'tile:///{z}/{z}_{x}_{y}.png';
 }
 
 export function iconUrl(iconFile: string): string {

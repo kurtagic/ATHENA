@@ -12,13 +12,16 @@ import { initArtilleryLayer, cleanupArtillery, activateArtillery, saveArtilleryS
 import { removeHexLabels, addHexLabels, hideHexGrid, showHexGrid } from './hexGrid';
 import { removeStaticLabelMarkers, addStaticLabelMarkers } from '../data/dataHandlers';
 import voronoiData from '../../../static/voronoi.json';
+import { METERS_PER_CRS_UNIT } from '../data/artilleryCalc';
 
-const IMG_W = 256;
-const IMG_H = 256 * 1776 / 2048;
-const GRID_COLS = 17; // A-Q
-const GRID_ROWS = 15; // 1-15
-const CELL_W = IMG_W / GRID_COLS;  // ≈15.06 CRS units
-const CELL_H = IMG_H / GRID_ROWS;  // ≈14.80 CRS units
+// Official hex extents: 218400cm × 189000cm, converted to CRS units
+const IMG_W = 218400 / 100 / METERS_PER_CRS_UNIT; // 273
+const IMG_H = 189000 / 100 / METERS_PER_CRS_UNIT; // 236.25
+const GRID_COLS = 18; // A-R
+const GRID_ROWS = 16; // 1-16
+const CELL_SIZE = 125 / METERS_PER_CRS_UNIT; // 15.625 CRS units = 125m
+const CELL_W = CELL_SIZE;
+const CELL_H = CELL_SIZE;
 
 interface DetailModeState {
   hexId: string;
@@ -403,7 +406,7 @@ export function enterDetailMode(hexId: string): void {
     type: 'line',
     source: 'detail-subgrid',
     paint: { 'line-color': '#000', 'line-width': 0.5, 'line-opacity': 0.3 },
-    layout: { visibility: _map.getZoom() >= 4 ? 'visible' : 'none' },
+    layout: { visibility: _map.getZoom() >= 5 ? 'visible' : 'none' },
   });
 
   // Subgrid labels (1-9 per cell) — GPU-rendered symbol layer
@@ -440,7 +443,7 @@ export function enterDetailMode(hexId: string): void {
       'text-size': 14,
       'text-allow-overlap': true,
       'text-ignore-placement': true,
-      visibility: _map.getZoom() >= 4 ? 'visible' : 'none',
+      visibility: _map.getZoom() >= 5 ? 'visible' : 'none',
     },
     paint: {
       'text-color': '#ffffff',

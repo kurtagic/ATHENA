@@ -9,6 +9,7 @@ import { initDetailView, enterDetailMode, getDetailMode, getSelectedHexes, rende
 import { setupDrawingEvents, showDrawCanvas, hideDrawCanvas } from '../../map/drawing';
 import { setupArtilleryEvents, showArtillery, hideArtillery, showArtilleryRings, hideArtilleryRings } from '../../map/artillery';
 import { useGlobalKeyboard } from '../../hooks/useGlobalKeyboard';
+import { useVoiceSilencer } from '../../hooks/useVoiceSilencer';
 import { updateWarStatus, updateHexItems, updateStaticLabels, setDetailRefreshCallback } from '../../data/dataHandlers';
 import { SELECTION_POLL_MS } from '../../../shared/constants';
 import { webAdapter } from '../../data/webAdapter';
@@ -20,6 +21,7 @@ export function MapLibreMap() {
   const mapRef = useRef<maplibregl.Map | null>(null);
 
   useGlobalKeyboard(mapRef);
+  useVoiceSilencer();
 
   useEffect(() => {
     if (initializedRef.current) return;

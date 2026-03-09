@@ -26,17 +26,20 @@ export function toMapPoint(x: number, y: number): MapPoint {
 }
 
 export function mapPointToLngLat(p: MapPoint): [number, number] {
-  const lng = p.x * (360 / 256) - 180;
-  const n = Math.PI * (1 + p.y / 128);
+  const sx = p.x * 0.5 + 64;
+  const sy = p.y * 0.5 - 64;
+  const lng = sx * (360 / 256) - 180;
+  const n = Math.PI * (1 + sy / 128);
   const lat = Math.atan(Math.sinh(n)) * DEG;
   return [lng, lat];
 }
 
 export function lngLatToMapPoint(lng: number, lat: number): MapPoint {
-  const x = (lng + 180) / 360 * 256;
+  const sx = (lng + 180) / 360 * 256;
   const latRad = lat * RAD;
-  const pixelY = 128 * (1 - Math.log(Math.tan(Math.PI / 4 + latRad / 2)) / Math.PI);
-  const y = -pixelY;
+  const sy = -128 * (1 - Math.log(Math.tan(Math.PI / 4 + latRad / 2)) / Math.PI);
+  const x = (sx - 64) * 2;
+  const y = (sy + 64) * 2;
   return { x, y };
 }
 

@@ -1,10 +1,12 @@
 import React from 'react';
-import { ChevronLeft } from 'lucide-react';
+import { ChevronLeft, Settings } from 'lucide-react';
 import { useMapStore } from '../../stores/mapStore';
+import { useSettingsStore } from '../../stores/settingsStore';
 import { exitDetailMode } from '../../map/detailView';
 
 export function TopBar() {
   const detailMode = useMapStore((s) => s.detailMode);
+  const setSettingsOpen = useSettingsStore((s) => s.setSettingsOpen);
 
   return (
     <div
@@ -35,6 +37,13 @@ export function TopBar() {
         )}
       </div>
       <div className="flex-none flex items-center gap-1.5 pr-2">
+        <button
+          className="w-7 h-7 p-0 bg-white/[0.07] border-none text-white/70 text-base leading-none rounded-[var(--radius-sm)] cursor-pointer flex items-center justify-center transition-all duration-150 hover:bg-white/[0.15] hover:text-white active:scale-[0.97]"
+          onClick={() => setSettingsOpen(true)}
+          title="Settings"
+        >
+          <Settings size={14} />
+        </button>
         <button
           id="quit-btn"
           className="w-7 h-7 p-0 bg-white/[0.07] border-none text-white/70 text-base leading-none rounded-[var(--radius-sm)] cursor-pointer flex items-center justify-center transition-all duration-150 hover:bg-[rgba(180,40,40,0.7)] hover:text-white active:scale-[0.97]"

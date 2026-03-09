@@ -4,6 +4,9 @@ import path from 'node:path';
 import { registerTileProtocol } from './protocol';
 import { registerIpcHandlers } from './ipc';
 import { startPoller, stopPoller } from './warPoller';
+import { loadSettings } from './settings';
+import { registerOverlayHotkey, registerPttHotkey } from './hotkeys';
+import { unmuteOtherApps } from './audioSilencer';
 
 // Handle Squirrel install/update/uninstall events
 const squirrelArg = process.argv[1];
@@ -68,18 +71,9 @@ function createWindow(): void {
   registerIpcHandlers(mainWindow);
   startPoller(mainWindow);
 
-  // Backtick hotkey to toggle overlay
-  globalShortcut.register('`', () => {
-    if (!mainWindow) return;
-    if (mainWindow.getOpacity() > 0) {
-      mainWindow.setOpacity(0);
-      mainWindow.setIgnoreMouseEvents(true);
-    } else {
-      mainWindow.setOpacity(1);
-      mainWindow.setIgnoreMouseEvents(false);
-      mainWindow.focus();
-    }
-  });
+  const settings = loadSettings();
+  registerOverlayHotkey(settings.keybinds.toggleOverlay, mainWindow);
+  registerPttHotkey(settings.keybinds.pushToTalk, mainWindow);
 
   mainWindow.on('closed', () => {
     mainWindow = null;
@@ -98,6 +92,7 @@ ipcMain.on('quit', () => {
 app.on('will-quit', () => {
   globalShortcut.unregisterAll();
   stopPoller();
+  unmuteOtherApps();
 });
 
 app.on('window-all-closed', () => {

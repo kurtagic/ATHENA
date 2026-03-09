@@ -2,8 +2,10 @@ import React, { useState } from 'react';
 import { Users, Crown, X, Check, Copy, LogOut, Loader2, Volume2, Phone, PhoneOff } from 'lucide-react';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useVoiceStore } from '../../stores/voiceStore';
+import { useSettingsStore } from '../../stores/settingsStore';
 import { session } from '../../multiplayer/sessionManager';
 import { voice } from '../../multiplayer/voiceManager';
+import { acceleratorToDisplay } from '../../lib/keybindUtils';
 
 const SERVER_URL = 'wss://api.athena.kurti.si';
 
@@ -317,6 +319,7 @@ function LobbyView({
 function VoiceButton() {
   const joined = useVoiceStore((s) => s.joined);
   const pttActive = useVoiceStore((s) => s.pttActive);
+  const pttKey = useSettingsStore((s) => s.settings?.keybinds.pushToTalk ?? 'Y');
 
   return (
     <button
@@ -339,7 +342,7 @@ function VoiceButton() {
       ) : (
         <>
           <Phone size={11} />
-          Join Voice (PTT: Y)
+          Join Voice (PTT: {acceleratorToDisplay(pttKey)})
         </>
       )}
     </button>

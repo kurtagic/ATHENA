@@ -13,8 +13,20 @@ contextBridge.exposeInMainWorld('athena', {
   setSelectedHexes: (hexes: string[]) => {
     ipcRenderer.send('set-selected-hexes', hexes);
   },
+  setAppSilence: (mute: boolean) => {
+    ipcRenderer.send('set-app-silence', mute);
+  },
   loadStaticData: () => {
     return ipcRenderer.invoke('load-static-data');
+  },
+  getSettings: () => {
+    return ipcRenderer.invoke('get-settings');
+  },
+  setSettings: (partial: unknown) => {
+    return ipcRenderer.invoke('set-settings', partial);
+  },
+  onPttToggle: (callback: () => void) => {
+    ipcRenderer.on('ptt-toggle', () => callback());
   },
   quit: () => {
     ipcRenderer.send('quit');

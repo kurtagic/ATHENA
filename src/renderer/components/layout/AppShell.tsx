@@ -1,6 +1,7 @@
 import React, { useCallback } from 'react';
 import { Layers, ChevronRight } from 'lucide-react';
 import { useMapStore } from '../../stores/mapStore';
+import { useSettingsStore } from '../../stores/settingsStore';
 import { setShellElement } from '../../map/detailView';
 import { TopBar } from './TopBar';
 import { LeftSidebar } from './LeftSidebar';
@@ -8,11 +9,13 @@ import { MapPanel } from './MapPanel';
 import { RightSidebar } from './RightSidebar';
 import { BottomBar } from './BottomBar';
 import { SessionPanel } from '../panels/SessionPanel';
+import { SettingsPage } from '../settings/SettingsPage';
 
 export function AppShell() {
   const detailMode = useMapStore((s) => s.detailMode);
   const layersSidebarOpen = useMapStore((s) => s.layersSidebarOpen);
   const setLayersSidebarOpen = useMapStore((s) => s.setLayersSidebarOpen);
+  const settingsOpen = useSettingsStore((s) => s.settingsOpen);
 
   const shellRef = useCallback((el: HTMLDivElement | null) => {
     if (el) setShellElement(el);
@@ -69,6 +72,7 @@ export function AppShell() {
       </div>
       <LeftSidebar />
       <RightSidebar />
+      {settingsOpen && <SettingsPage />}
     </>
   );
 }

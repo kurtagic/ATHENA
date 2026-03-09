@@ -45,8 +45,9 @@ export function apiToMapPoint(hex: HexDefinition, apiX: number, apiY: number): M
 }
 
 // Detail view coordinate mapping: API coords -> detail image CRS
-const IMG_W = 256;
-const IMG_H = 256 * 1776 / 2048;
+// Official hex extents: 218400cm × 189000cm, 8 meters per CRS unit
+const IMG_W = 218400 / 100 / 8; // 273
+const IMG_H = 189000 / 100 / 8; // 236.25
 
 export function detailMapPoint(apiX: number, apiY: number): MapPoint {
   return toMapPoint(apiX * IMG_W, -apiY * IMG_H);

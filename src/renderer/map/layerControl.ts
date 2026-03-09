@@ -33,7 +33,7 @@ export function onZoomChange(): void {
   const dm = getDetailMode();
   if (dm) {
     // Detail view: toggle subgrid visibility (zoom >= 4 AND hexGrid toggle on)
-    const showSub = layers.hexGrid.visible && z >= 4;
+    const showSub = layers.hexGrid.visible && z >= 5;
     if (_map.getLayer('detail-subgrid-lines')) {
       _map.setLayoutProperty('detail-subgrid-lines', 'visibility', showSub ? 'visible' : 'none');
     }
@@ -65,7 +65,7 @@ export function onZoomChange(): void {
   // World view: toggle hex grid + labels together
   if (layers.hexGrid.visible) {
     showHexGrid(_map);
-    if (z >= 3) showHexLabels();
+    if (z >= 4) showHexLabels();
     else hideHexLabels();
   } else {
     hideHexGrid(_map);
@@ -73,7 +73,7 @@ export function onZoomChange(): void {
   }
 
   // World view: toggle static labels at zoom >= 5
-  const showStatic = layers.staticLabels.visible && z >= 5;
+  const showStatic = layers.staticLabels.visible && z >= 6;
   for (const m of _staticLabelMarkers) {
     m.getElement().style.display = showStatic ? '' : 'none';
   }
