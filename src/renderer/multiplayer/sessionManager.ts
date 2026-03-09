@@ -1,8 +1,8 @@
 import type {
   ClientMessage,
   ServerMessage,
-  SyncStroke,
-  SyncArtillery,
+  Entity,
+  EntityType,
 } from './protocol';
 import { PROTOCOL_VERSION } from './protocol';
 import { useSessionStore } from '../stores/sessionStore';
@@ -95,28 +95,22 @@ export class SessionManager {
     this.send({ type: 'kick-member', memberId });
   }
 
-  // ── Drawing sync ──
+  // ── Entity sync ──
 
-  sendStrokeAdd(stroke: Omit<SyncStroke, 'authorId'>): void {
-    this.send({ type: 'stroke-add', stroke });
+  sendEntityCreate(entity: Omit<Entity, 'authorId'>): void {
+    this.send({ type: 'entity-create', entity });
   }
 
-  sendStrokeUndo(hexId: string, strokeId: string): void {
-    this.send({ type: 'stroke-undo', hexId, strokeId });
+  sendEntityDelete(hexId: string, entityId: string): void {
+    this.send({ type: 'entity-delete', hexId, entityId });
   }
 
-  sendStrokeRedo(stroke: Omit<SyncStroke, 'authorId'>): void {
-    this.send({ type: 'stroke-redo', stroke });
+  sendEntityUpdate(hexId: string, entityId: string, entityType: EntityType, changes: Record<string, unknown>): void {
+    this.send({ type: 'entity-update', hexId, entityId, entityType, changes });
   }
 
-  sendStrokeClear(hexId: string): void {
-    this.send({ type: 'stroke-clear', hexId });
-  }
-
-  // ── Artillery sync ──
-
-  sendArtillerySnapshot(hexId: string, data: Omit<SyncArtillery, 'authorId' | 'hexId'>): void {
-    this.send({ type: 'artillery-snapshot', hexId, data });
+  sendEntityClear(hexId: string, entityType?: EntityType): void {
+    this.send({ type: 'entity-clear', hexId, entityType });
   }
 
   // ── Voice signaling ──

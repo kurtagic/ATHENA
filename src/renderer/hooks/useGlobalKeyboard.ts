@@ -2,7 +2,6 @@ import { useEffect } from 'react';
 import type maplibregl from 'maplibre-gl';
 import { getDetailMode, exitDetailMode } from '../map/detailView';
 import { getArtilleryState, setPlacementMode } from '../map/artillery';
-import { performUndo, performRedo } from '../map/undo';
 import { useMapStore } from '../stores/mapStore';
 import { useVoiceStore } from '../stores/voiceStore';
 import { voice } from '../multiplayer/voiceManager';
@@ -22,26 +21,6 @@ export function useGlobalKeyboard(mapRef: React.MutableRefObject<maplibregl.Map 
           return;
         }
       }
-
-      // Ctrl+Shift+Z or Ctrl+Y → Redo
-      if (
-        ((e.key === 'z' || e.key === 'Z') && (e.ctrlKey || e.metaKey) && e.shiftKey) ||
-        (e.key === 'y' && (e.ctrlKey || e.metaKey))
-      ) {
-        if (getDetailMode()) {
-          e.preventDefault();
-          performRedo(map);
-        }
-        return;
-      }
-
-      // Ctrl+Z → Undo (must check after shift variant)
-      if (e.key === 'z' && (e.ctrlKey || e.metaKey) && !e.shiftKey && getDetailMode()) {
-        e.preventDefault();
-        performUndo(map);
-        return;
-      }
-
 
       if (e.key === 'Escape') {
         const as = getArtilleryState();

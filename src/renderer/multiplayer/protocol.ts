@@ -1,38 +1,50 @@
 // Client-side protocol types mirroring athena-server/src/shared/protocol.ts
 
-export const PROTOCOL_VERSION = 1;
+export const PROTOCOL_VERSION = 2;
 
-// ── Sync data types ──
+// ── Entity type system ──
 
-export interface SyncStroke {
+export type EntityType = 'stroke' | 'artillery-platform' | 'artillery-target' | 'artillery-impact';
+
+export interface SyncEntity {
   id: string;
   hexId: string;
+  entityType: EntityType;
+  authorId: string;
+}
+
+export interface StrokeEntity extends SyncEntity {
+  entityType: 'stroke';
   points: [number, number][];
   color: string;
   weight: number;
   opacity: number;
-  authorId: string;
 }
 
-export interface SyncArtillery {
-  hexId: string;
-  positions: {
-    id: number;
-    latlng: [number, number];
-    label: string;
-    platformIndex?: number;
-  }[];
-  target: [number, number] | null;
-  impact: [number, number] | null;
-  mainGunIndex: number;
-  nextId: number;
-  nextLabelNum: number;
-  authorId: string;
+export interface ArtilleryPlatformEntity extends SyncEntity {
+  entityType: 'artillery-platform';
+  position: [number, number];
+  label: string;
+  platformIndex?: number;
+  isMain: boolean;
 }
+
+export interface ArtilleryTargetEntity extends SyncEntity {
+  entityType: 'artillery-target';
+  position: [number, number];
+}
+
+export interface ArtilleryImpactEntity extends SyncEntity {
+  entityType: 'artillery-impact';
+  position: [number, number];
+}
+
+export type Entity = StrokeEntity | ArtilleryPlatformEntity | ArtilleryTargetEntity | ArtilleryImpactEntity;
+
+// ── Session snapshot ──
 
 export interface SessionSnapshot {
-  drawings: Record<string, SyncStroke[]>;
-  artillery: Record<string, SyncArtillery>;
+  entities: Record<string, Entity[]>;
 }
 
 // ── Server broadcast envelope ──
@@ -101,31 +113,29 @@ export interface KickMemberMsg {
   memberId: string;
 }
 
-export interface StrokeAddMsg {
-  type: 'stroke-add';
-  stroke: Omit<SyncStroke, 'authorId'>;
+export interface EntityCreateMsg {
+  type: 'entity-create';
+  entity: Omit<Entity, 'authorId'>;
 }
 
-export interface StrokeUndoMsg {
-  type: 'stroke-undo';
+export interface EntityDeleteMsg {
+  type: 'entity-delete';
   hexId: string;
-  strokeId: string;
+  entityId: string;
 }
 
-export interface StrokeRedoMsg {
-  type: 'stroke-redo';
-  stroke: Omit<SyncStroke, 'authorId'>;
-}
-
-export interface StrokeClearMsg {
-  type: 'stroke-clear';
+export interface EntityUpdateMsg {
+  type: 'entity-update';
   hexId: string;
+  entityId: string;
+  entityType: EntityType;
+  changes: Record<string, unknown>;
 }
 
-export interface ArtillerySnapshotMsg {
-  type: 'artillery-snapshot';
+export interface EntityClearMsg {
+  type: 'entity-clear';
   hexId: string;
-  data: Omit<SyncArtillery, 'authorId' | 'hexId'>;
+  entityType?: EntityType;
 }
 
 export interface VoiceJoinMsg { type: 'voice-join'; }
@@ -263,11 +273,10 @@ export type ClientMessage =
   | ApproveJoinMsg
   | DenyJoinMsg
   | KickMemberMsg
-  | StrokeAddMsg
-  | StrokeUndoMsg
-  | StrokeRedoMsg
-  | StrokeClearMsg
-  | ArtillerySnapshotMsg
+  | EntityCreateMsg
+  | EntityDeleteMsg
+  | EntityUpdateMsg
+  | EntityClearMsg
   | VoiceJoinMsg
   | VoiceLeaveMsg
   | VoiceOfferMsg

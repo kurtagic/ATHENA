@@ -1,12 +1,8 @@
 import React, { useCallback, useRef } from 'react';
-import { Pencil, Eraser, Undo2, Redo2 } from 'lucide-react';
+import { Pencil, Eraser } from 'lucide-react';
 import { useDrawStore } from '../../stores/drawStore';
 import { useMapStore } from '../../stores/mapStore';
 import { setDrawColor, setDrawWeight, setDrawOpacity, toggleEraser } from '../../map/drawing';
-import { performUndo } from '../../map/undo';
-import { performRedo } from '../../map/undo';
-import { canUndo, canRedo } from '../../data/undoStack';
-import { getDetailMode } from '../../map/detailView';
 import { Toggle } from '../ui/toggle';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip';
 import { Separator } from '../ui/separator';
@@ -29,8 +25,6 @@ export function BottomBar() {
   const map = useMapStore((s) => s.mapInstance);
   const customColorRef = useRef('#ff8800');
   const [customColor, setCustomColorState] = React.useState('#ff8800');
-  // Force re-render for undo/redo button states
-  const [, forceUpdate] = React.useReducer((x: number) => x + 1, 0);
 
   const handleSwatchClick = useCallback((color: string) => {
     setDrawColor(color);
@@ -69,20 +63,6 @@ export function BottomBar() {
       }
     }
   }, [activeTool, map]);
-
-  const handleUndoClick = useCallback(() => {
-    if (map && getDetailMode()) {
-      performUndo(map);
-      forceUpdate();
-    }
-  }, [map]);
-
-  const handleRedoClick = useCallback(() => {
-    if (map && getDetailMode()) {
-      performRedo(map);
-      forceUpdate();
-    }
-  }, [map]);
 
   const handleWidthChange = useCallback((value: number[]) => {
     const w = value[0];
@@ -228,42 +208,6 @@ export function BottomBar() {
               </div>
             </div>
 
-            <Separator orientation="vertical" className="h-5 bg-white/[0.08] mx-1" />
-
-            {/* History group */}
-            <div className="flex items-center gap-1.5">
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    className={`h-[34px] w-[34px] flex items-center justify-center bg-transparent text-white/50 border-none rounded-md cursor-pointer transition-all duration-150 hover:bg-white/[0.08] hover:text-white active:scale-[0.97] ${
-                      !canUndo() ? 'opacity-30 pointer-events-none' : ''
-                    }`}
-                    onClick={handleUndoClick}
-                  >
-                    <Undo2 size={16} />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="top" className="bg-[#1a1a1e] border-[var(--color-border-glass)] text-white text-xs">
-                  Undo (Ctrl+Z)
-                </TooltipContent>
-              </Tooltip>
-
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    className={`h-[34px] w-[34px] flex items-center justify-center bg-transparent text-white/50 border-none rounded-md cursor-pointer transition-all duration-150 hover:bg-white/[0.08] hover:text-white active:scale-[0.97] ${
-                      !canRedo() ? 'opacity-30 pointer-events-none' : ''
-                    }`}
-                    onClick={handleRedoClick}
-                  >
-                    <Redo2 size={16} />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="top" className="bg-[#1a1a1e] border-[var(--color-border-glass)] text-white text-xs">
-                  Redo (Ctrl+Shift+Z)
-                </TooltipContent>
-              </Tooltip>
-            </div>
           </TooltipProvider>
         </div>
       </div>

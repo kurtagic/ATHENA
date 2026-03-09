@@ -9,7 +9,6 @@ import { CONQUERABLE_STRUCTURES } from '../data/iconTypes';
 import voronoiOwners from '../../../static/voronoi_owners.json';
 import { initDrawLayer, cleanupDrawing, setDrawColor, getDrawState, activateDrawing, saveDrawState, restoreDrawState } from './drawing';
 import { initArtilleryLayer, cleanupArtillery, activateArtillery, saveArtilleryState, restoreArtilleryState } from './artillery';
-import { clearUndoStack } from '../data/undoStack';
 import { removeHexLabels, addHexLabels, hideHexGrid, showHexGrid } from './hexGrid';
 import { removeStaticLabelMarkers, addStaticLabelMarkers } from '../data/dataHandlers';
 import voronoiData from '../../../static/voronoi.json';
@@ -187,7 +186,6 @@ export function refreshVoronoiFills(apiName: string): void {
 
 export function enterDetailMode(hexId: string): void {
   if (detailMode) return;
-  clearUndoStack();
   const hexInfo = hexLookup[hexId];
   if (!hexInfo) return;
   const apiName = hexInfo.apiName;
@@ -502,7 +500,6 @@ export function exitDetailMode(): void {
   // Save drawing and artillery state before cleanup
   hexDrawingData[detailMode.apiName] = saveDrawState();
   hexArtilleryData[detailMode.apiName] = saveArtilleryState();
-  clearUndoStack();
 
   cleanupArtillery(_map);
   cleanupDrawing(_map);

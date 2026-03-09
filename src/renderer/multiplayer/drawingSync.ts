@@ -1,22 +1,21 @@
 import type { StrokeData } from '../map/drawing';
 import {
   setStrokeFinalizedCallback,
-  setStrokeUndoneCallback,
-  setStrokeRedoneCallback,
   setStrokesErasedCallback,
   addRemoteStroke,
   removeStrokeById,
   clearAllStrokes,
 } from '../map/drawing';
 import { toMapPoint } from '../data/coords';
-import { hexDrawingData } from '../data/store';
+import { hexEntityData, hexDrawingData } from '../data/store';
 import { session } from './sessionManager';
-import type { SyncStroke, ServerBroadcast } from './protocol';
+import type { StrokeEntity, ServerBroadcast, Entity } from './protocol';
 
-function toSyncStroke(stroke: StrokeData, hexId: string): Omit<SyncStroke, 'authorId'> {
+function toEntityCreate(stroke: StrokeData, hexId: string): Omit<StrokeEntity, 'authorId'> {
   return {
     id: stroke.id || crypto.randomUUID(),
     hexId,
+    entityType: 'stroke',
     points: stroke.points.map((p) => [p.x, p.y] as [number, number]),
     color: stroke.color,
     weight: stroke.weight,
@@ -24,13 +23,13 @@ function toSyncStroke(stroke: StrokeData, hexId: string): Omit<SyncStroke, 'auth
   };
 }
 
-function fromSyncStroke(sync: SyncStroke): StrokeData {
+function fromStrokeEntity(entity: StrokeEntity): StrokeData {
   return {
-    id: sync.id,
-    points: sync.points.map(([x, y]) => toMapPoint(x, y)),
-    color: sync.color,
-    weight: sync.weight,
-    opacity: sync.opacity,
+    id: entity.id,
+    points: entity.points.map(([x, y]) => toMapPoint(x, y)),
+    color: entity.color,
+    weight: entity.weight,
+    opacity: entity.opacity,
   };
 }
 
@@ -38,76 +37,91 @@ export function initDrawingSync(): void {
   // Outbound: local drawing actions → server
   setStrokeFinalizedCallback((stroke, hexId) => {
     if (!session.connected) return;
-    session.sendStrokeAdd(toSyncStroke(stroke, hexId));
-  });
-
-  setStrokeUndoneCallback((strokeId, hexId) => {
-    if (!session.connected) return;
-    session.sendStrokeUndo(hexId, strokeId);
-  });
-
-  setStrokeRedoneCallback((stroke, hexId) => {
-    if (!session.connected) return;
-    session.sendStrokeRedo(toSyncStroke(stroke, hexId));
+    session.sendEntityCreate(toEntityCreate(stroke, hexId));
   });
 
   setStrokesErasedCallback((strokeIds, hexId) => {
     if (!session.connected) return;
     for (const id of strokeIds) {
-      session.sendStrokeUndo(hexId, id);
+      session.sendEntityDelete(hexId, id);
     }
   });
 }
 
-function syncStrokeToSaved(sync: SyncStroke) {
-  return {
-    id: sync.id,
-    points: sync.points as [number, number][],
-    color: sync.color,
-    weight: sync.weight,
-    opacity: sync.opacity,
-  };
+function cacheStroke(entity: StrokeEntity): void {
+  if (!hexEntityData[entity.hexId]) hexEntityData[entity.hexId] = [];
+  hexEntityData[entity.hexId].push(entity);
+
+  // Also update legacy drawing cache used by detailView save/restore
+  if (!hexDrawingData[entity.hexId]) hexDrawingData[entity.hexId] = [];
+  hexDrawingData[entity.hexId].push({
+    id: entity.id,
+    points: entity.points,
+    color: entity.color,
+    weight: entity.weight,
+    opacity: entity.opacity,
+  });
+}
+
+function removeCachedStroke(hexId: string, entityId: string): void {
+  const cached = hexEntityData[hexId];
+  if (cached) {
+    const idx = cached.findIndex(e => e.id === entityId);
+    if (idx !== -1) cached.splice(idx, 1);
+  }
+
+  const drawings = hexDrawingData[hexId];
+  if (drawings) {
+    const idx = drawings.findIndex(s => s.id === entityId);
+    if (idx !== -1) drawings.splice(idx, 1);
+  }
 }
 
 export function handleDrawingBroadcast(
   msg: ServerBroadcast | Record<string, any>,
   currentHexId: string,
 ): void {
-  // Broadcasts may come as { type, payload: {...} } or { type, seq, senderId, payload: {...} }
   const data = (msg as any).payload ?? msg;
 
   switch (msg.type) {
-    case 'stroke-add':
-    case 'stroke-redo': {
-      const syncStroke = data.stroke as SyncStroke;
-      if (syncStroke.hexId === currentHexId) {
-        addRemoteStroke(fromSyncStroke(syncStroke));
+    case 'entity-create': {
+      const entity = data.entity as StrokeEntity;
+      if (entity.entityType !== 'stroke') return;
+      if (entity.hexId === currentHexId) {
+        addRemoteStroke(fromStrokeEntity(entity));
       } else {
-        if (!hexDrawingData[syncStroke.hexId]) hexDrawingData[syncStroke.hexId] = [];
-        hexDrawingData[syncStroke.hexId].push(syncStrokeToSaved(syncStroke));
+        cacheStroke(entity);
       }
       break;
     }
-    case 'stroke-undo': {
+    case 'entity-delete': {
       const hexId = data.hexId as string;
-      const strokeId = data.strokeId as string;
+      const entityId = data.entityId as string;
       if (hexId === currentHexId) {
-        removeStrokeById(strokeId);
+        removeStrokeById(entityId);
       } else {
-        const cached = hexDrawingData[hexId];
-        if (cached) {
-          const idx = cached.findIndex(s => s.id === strokeId);
-          if (idx !== -1) cached.splice(idx, 1);
+        removeCachedStroke(hexId, entityId);
+      }
+      break;
+    }
+    case 'entity-clear': {
+      const hexId = data.hexId as string;
+      const entityType = data.entityType as string | undefined;
+      if (!entityType || entityType === 'stroke') {
+        if (hexId === currentHexId) {
+          clearAllStrokes();
+        } else {
+          if (entityType) {
+            const cached = hexEntityData[hexId];
+            if (cached) {
+              hexEntityData[hexId] = cached.filter(e => e.entityType !== 'stroke');
+            }
+            delete hexDrawingData[hexId];
+          } else {
+            delete hexEntityData[hexId];
+            delete hexDrawingData[hexId];
+          }
         }
-      }
-      break;
-    }
-    case 'stroke-clear': {
-      const hexId = data.hexId as string;
-      if (hexId === currentHexId) {
-        clearAllStrokes();
-      } else {
-        delete hexDrawingData[hexId];
       }
       break;
     }

@@ -2,7 +2,6 @@ import type maplibregl from 'maplibre-gl';
 import type { MapPoint } from '../data/coords';
 import { toMapPoint, mapPointToLngLat, lngLatToMapPoint } from '../data/coords';
 import type { SavedStroke } from '../data/store';
-import { pushUndoAction } from '../data/undoStack';
 import { useMapStore } from '../stores/mapStore';
 import { useDrawStore } from '../stores/drawStore';
 
@@ -46,22 +45,15 @@ const drawState: DrawState = {
   mapRef: null,
 };
 
-// Redo support: strokes popped by undo are stored here
-const undoneStrokes: StrokeData[] = [];
-
 // ── Sync infrastructure ──
 let syncMode = false;
 let onStrokeFinalized: ((stroke: StrokeData, hexId: string) => void) | null = null;
-let onStrokeUndone: ((strokeId: string, hexId: string) => void) | null = null;
-let onStrokeRedone: ((stroke: StrokeData, hexId: string) => void) | null = null;
 let onStrokesErased: ((strokeIds: string[], hexId: string) => void) | null = null;
 let currentHexId: string = '';
 
 export function setSyncMode(enabled: boolean) { syncMode = enabled; }
 export function setCurrentHexId(hexId: string) { currentHexId = hexId; }
 export function setStrokeFinalizedCallback(cb: typeof onStrokeFinalized) { onStrokeFinalized = cb; }
-export function setStrokeUndoneCallback(cb: typeof onStrokeUndone) { onStrokeUndone = cb; }
-export function setStrokeRedoneCallback(cb: typeof onStrokeRedone) { onStrokeRedone = cb; }
 export function setStrokesErasedCallback(cb: typeof onStrokesErased) { onStrokesErased = cb; }
 
 export function getDrawState(): DrawState {
@@ -189,33 +181,12 @@ function finalizeStroke(): void {
     };
 
     drawState.strokes.push(stroke);
-    pushUndoAction({ type: 'drawing', strokeId: id });
-    // New stroke invalidates redo
-    undoneStrokes.length = 0;
 
     if (onStrokeFinalized) onStrokeFinalized(stroke, currentHexId);
   }
   drawState.currentPoints = [];
   drawState.drawing = false;
   redrawAllStrokes();
-}
-
-export function undoStroke(): string | undefined {
-  if (drawState.strokes.length === 0) return undefined;
-  const popped = drawState.strokes.pop()!;
-  undoneStrokes.push(popped);
-  redrawAllStrokes();
-  if (onStrokeUndone && popped.id) onStrokeUndone(popped.id, currentHexId);
-  return popped.id;
-}
-
-export function redoStroke(): StrokeData | undefined {
-  if (undoneStrokes.length === 0) return undefined;
-  const stroke = undoneStrokes.pop()!;
-  drawState.strokes.push(stroke);
-  redrawAllStrokes();
-  if (onStrokeRedone && stroke.id) onStrokeRedone(stroke, currentHexId);
-  return stroke;
 }
 
 // ── Remote operation helpers ──
@@ -235,21 +206,6 @@ export function removeStrokeById(id: string): void {
 
 export function clearAllStrokes(): void {
   drawState.strokes.length = 0;
-  undoneStrokes.length = 0;
-  redrawAllStrokes();
-}
-
-export function removeMatchingStrokes(saved: SavedStroke[]): void {
-  for (const s of saved) {
-    // Find and remove the first matching stroke
-    const idx = drawState.strokes.findIndex(
-      (stroke) =>
-        stroke.color === s.color &&
-        stroke.weight === s.weight &&
-        stroke.points.length === s.points.length
-    );
-    if (idx !== -1) drawState.strokes.splice(idx, 1);
-  }
   redrawAllStrokes();
 }
 
@@ -345,7 +301,6 @@ function eraseStrokesAtPoint(map: maplibregl.Map, lngLat: maplibregl.LngLat): vo
 
 function finalizeErase(map: maplibregl.Map): void {
   if (drawState.erasedDuringDrag.length > 0) {
-    pushUndoAction({ type: 'eraser', strokes: [...drawState.erasedDuringDrag] });
     // Notify sync of erased stroke IDs
     const erasedIds = drawState.erasedDuringDrag
       .map(s => s.id)
@@ -357,19 +312,6 @@ function finalizeErase(map: maplibregl.Map): void {
   drawState.eraserActive = false;
   drawState.erasedDuringDrag = [];
   map.dragPan.enable();
-}
-
-export function restoreErasedStrokes(saved: SavedStroke[]): void {
-  for (const stroke of saved) {
-    drawState.strokes.push({
-      id: stroke.id,
-      points: stroke.points.map(([x, y]) => toMapPoint(x, y)),
-      color: stroke.color,
-      weight: stroke.weight,
-      opacity: stroke.opacity ?? 1.0,
-    });
-  }
-  redrawAllStrokes();
 }
 
 export function setupDrawingEvents(map: maplibregl.Map): void {

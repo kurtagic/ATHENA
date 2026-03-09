@@ -8,8 +8,6 @@ import { crsDistanceMeters, crsAzimuth, metersToRadius, calculateCorrection, int
 import { useArtilleryStore, type ArtillerySolution } from '../stores/artilleryStore';
 import { useMapStore } from '../stores/mapStore';
 import { useLayerStore } from '../stores/layerStore';
-import { pushUndoAction } from '../data/undoStack';
-
 const CIRCLE_SEGMENTS = 64;
 
 interface ArtyPosition {
@@ -65,42 +63,6 @@ export function setArtilleryHexId(hexId: string) { artilleryHexId = hexId; }
 
 // Click handler reference
 let clickHandler: ((e: maplibregl.MapMouseEvent) => void) | null = null;
-
-// Undo stack
-export interface ArtySnapshot {
-  positions: { id: number; latlng: [number, number]; label: string; platformIndex?: number }[];
-  target: [number, number] | null;
-  impact: [number, number] | null;
-  mainGunIndex: number;
-  nextId: number;
-  nextLabelNum: number;
-}
-
-function takeSnapshot(): ArtySnapshot {
-  return {
-    positions: state.positions.map(p => ({ id: p.id, latlng: [p.point.x, p.point.y], label: p.label, platformIndex: p.platformIndex })),
-    target: state.target ? [state.target.x, state.target.y] : null,
-    impact: state.impact ? [state.impact.x, state.impact.y] : null,
-    mainGunIndex: state.mainGunIndex,
-    nextId: state.nextId,
-    nextLabelNum: state.nextLabelNum,
-  };
-}
-
-function pushUndo(): void {
-  pushUndoAction({ type: 'artillery', snapshot: takeSnapshot() });
-}
-
-export function restoreArtySnapshot(snap: ArtySnapshot, map: maplibregl.Map): void {
-  state.positions = snap.positions.map(p => ({ id: p.id, point: toMapPoint(p.latlng[0], p.latlng[1]), label: p.label, platformIndex: p.platformIndex }));
-  state.target = snap.target ? toMapPoint(snap.target[0], snap.target[1]) : null;
-  state.impact = snap.impact ? toMapPoint(snap.impact[0], snap.impact[1]) : null;
-  state.mainGunIndex = snap.mainGunIndex;
-  state.nextId = snap.nextId;
-  state.nextLabelNum = snap.nextLabelNum;
-  recalcCorrected();
-  refreshAll(map);
-}
 
 export function getArtilleryState() {
   return {
@@ -327,7 +289,6 @@ export function setGunPlatform(posIndex: number, platformIndex: number, map: map
 }
 
 export function clearTarget(map: maplibregl.Map): void {
-  pushUndo();
   state.target = null;
   state.impact = null;
   state.corrected = null;
@@ -335,14 +296,12 @@ export function clearTarget(map: maplibregl.Map): void {
 }
 
 export function clearImpact(map: maplibregl.Map): void {
-  pushUndo();
   state.impact = null;
   state.corrected = null;
   refreshAll(map);
 }
 
 export function clearAll(map: maplibregl.Map): void {
-  pushUndo();
   resetState();
   refreshAll(map);
   useArtilleryStore.getState().setStatusText('');
@@ -355,10 +314,14 @@ function handleMapClick(e: maplibregl.MapMouseEvent, map: maplibregl.Map): void 
   if (e.originalEvent.button !== 0) return;
 
   const point = lngLatToMapPoint(e.lngLat.lng, e.lngLat.lat);
-  pushUndo();
 
   switch (state.placementMode) {
     case 'placing-arty':
+      if (state.positions.length >= 10) {
+        useArtilleryStore.getState().setStatusText('Max 10 gun positions');
+        setPlacementMode('idle');
+        return;
+      }
       state.positions.push({
         id: state.nextId++,
         point,
@@ -635,7 +598,7 @@ function refreshAll(map: maplibregl.Map, sync = true): void {
   const solutions = computeSolutions();
   useArtilleryStore.getState().setSolutions(solutions, state.target !== null, state.impact !== null);
 
-  if (sync && onArtilleryChanged) onArtilleryChanged(saveArtilleryState(), artilleryHexId);
+  if (sync && onArtilleryChanged && artilleryHexId) onArtilleryChanged(saveArtilleryState(), artilleryHexId);
 }
 
 function computeSolutions(): ArtillerySolution[] {
@@ -695,7 +658,6 @@ function startDrag(map: maplibregl.Map, type: 'gun' | 'target' | 'impact', gunIn
   if (state.placementMode !== 'idle') return;
   e.stopPropagation();
   e.preventDefault();
-  pushUndo();
   dragInfo = { type, gunIndex };
   dragOccurred = false;
   map.dragPan.disable();
@@ -763,18 +725,21 @@ export function setupArtilleryEvents(map: maplibregl.Map): void {
         break;
     }
 
-    refreshAll(map);
+    refreshAll(map, false); // Don't sync mid-drag, only render locally
   });
 
   document.addEventListener('mouseup', () => {
     if (!dragInfo) return;
+    const wasDrag = dragOccurred;
     dragInfo = null;
     map.dragPan.enable();
     useMapStore.getState().setMapCursor(
       state.placementMode !== 'idle' ? 'crosshair' : ''
     );
 
-    if (dragOccurred) {
+    if (wasDrag) {
+      // Sync final position to server on drop
+      refreshAll(map, true);
       setTimeout(() => { dragOccurred = false; }, 50);
     }
   });
