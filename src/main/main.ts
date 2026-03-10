@@ -31,18 +31,28 @@ declare const MAIN_WINDOW_VITE_NAME: string;
 let mainWindow: BrowserWindow | null = null;
 
 function createWindow(): void {
+  const settings = loadSettings();
+  const windowed = settings.general.windowedMode;
+
   const primaryDisplay = screen.getPrimaryDisplay();
-  const { x, y, width, height } = primaryDisplay.bounds;
+  const fullBounds = primaryDisplay.bounds;
+  const workArea = primaryDisplay.workArea;
+
+  const winWidth = windowed ? Math.round(workArea.width * 0.7) : fullBounds.width;
+  const winHeight = windowed ? Math.round(workArea.height * 0.7) : fullBounds.height;
+  const winX = windowed ? Math.round(workArea.x + (workArea.width - winWidth) / 2) : fullBounds.x;
+  const winY = windowed ? Math.round(workArea.y + (workArea.height - winHeight) / 2) : fullBounds.y;
 
   mainWindow = new BrowserWindow({
-    width,
-    height,
-    x,
-    y,
-    frame: false,
-    alwaysOnTop: true,
+    width: winWidth,
+    height: winHeight,
+    x: winX,
+    y: winY,
+    frame: windowed,
+    alwaysOnTop: !windowed,
     skipTaskbar: false,
     transparent: false,
+    resizable: windowed,
     icon: app.isPackaged
       ? path.join(process.resourcesPath, 'athena.ico')
       : path.join(app.getAppPath(), 'athena.ico'),
@@ -55,10 +65,14 @@ function createWindow(): void {
     },
   });
 
-  // Force full display bounds after creation — Windows clips frameless
-  // windows to the work area (excluding taskbar) during construction.
-  mainWindow.setBounds({ x, y, width, height });
-  mainWindow.setAlwaysOnTop(true, 'screen-saver');
+  mainWindow.setMenuBarVisibility(false);
+  mainWindow.setAutoHideMenuBar(true);
+
+  if (!windowed) {
+    // Force full display bounds — Windows clips frameless windows to work area
+    mainWindow.setBounds(fullBounds);
+    mainWindow.setAlwaysOnTop(true, 'screen-saver');
+  }
 
   if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
     mainWindow.loadURL(MAIN_WINDOW_VITE_DEV_SERVER_URL);
@@ -71,7 +85,6 @@ function createWindow(): void {
   registerIpcHandlers(mainWindow);
   startPoller(mainWindow);
 
-  const settings = loadSettings();
   registerOverlayHotkey(settings.keybinds.toggleOverlay, mainWindow);
   registerPttHotkey(settings.keybinds.pushToTalk, mainWindow);
 

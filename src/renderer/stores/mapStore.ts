@@ -20,6 +20,7 @@ interface MapState {
   setMapCursor: (cursor: string) => void;
   setArtSidebarOpen: (open: boolean) => void;
   setLayersSidebarOpen: (open: boolean) => void;
+  reset: () => void;
 }
 
 export const useMapStore = create<MapState>((set) => ({
@@ -35,4 +36,11 @@ export const useMapStore = create<MapState>((set) => ({
   setMapCursor: (cursor) => set({ mapCursor: cursor }),
   setArtSidebarOpen: (open) => set({ artSidebarOpen: open }),
   setLayersSidebarOpen: (open) => set({ layersSidebarOpen: open }),
+  reset: () => set({
+    detailMode: null,
+    zoomLevel: 0,
+    mapCursor: '',
+    artSidebarOpen: true,
+    layersSidebarOpen: true,
+  }),
 }));

@@ -17,6 +17,7 @@ interface DrawStoreState {
   setActiveTool: (tool: ActiveTool) => void;
   setStrokeWidth: (width: number) => void;
   setStrokeOpacity: (opacity: number) => void;
+  reset: () => void;
 }
 
 export const useDrawStore = create<DrawStoreState>((set) => ({
@@ -44,4 +45,13 @@ export const useDrawStore = create<DrawStoreState>((set) => ({
   }),
   setStrokeWidth: (width) => set({ strokeWidth: width }),
   setStrokeOpacity: (opacity) => set({ strokeOpacity: opacity }),
+  reset: () => set({
+    activeColor: '#ff0000',
+    eraserActive: false,
+    eraserPosition: null,
+    eraserRadius: 20,
+    activeTool: 'pen',
+    strokeWidth: 3,
+    strokeOpacity: 1.0,
+  }),
 }));

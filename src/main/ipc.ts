@@ -71,4 +71,5 @@ export function registerIpcHandlers(win: BrowserWindow): void {
       unmuteOtherApps();
     }
   });
+
 }

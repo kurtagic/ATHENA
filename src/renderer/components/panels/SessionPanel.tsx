@@ -7,7 +7,7 @@ import { session } from '../../multiplayer/sessionManager';
 import { voice } from '../../multiplayer/voiceManager';
 import { acceleratorToDisplay } from '../../lib/keybindUtils';
 
-const SERVER_URL = 'wss://api.athena.kurti.si';
+import { ensureConnected } from '../../multiplayer/connectionHelper';
 
 export function SessionPanel() {
   const status = useSessionStore((s) => s.status);
@@ -65,26 +65,6 @@ function StatusDot({ status }: { status: string }) {
     status === 'connecting' || status === 'reconnecting' ? 'bg-amber-400 animate-pulse' :
     'bg-white/20';
   return <div className={`w-2 h-2 rounded-full ${color}`} />;
-}
-
-function ensureConnected(displayName: string): Promise<void> {
-  const store = useSessionStore.getState();
-  if (store.status === 'connected') return Promise.resolve();
-
-  return new Promise((resolve, reject) => {
-    store.setDisplayName(displayName);
-    session.connect(SERVER_URL, displayName);
-
-    const unsub = useSessionStore.subscribe((state) => {
-      if (state.status === 'connected') {
-        unsub();
-        resolve();
-      } else if (state.status === 'disconnected' && state.error) {
-        unsub();
-        reject(new Error(state.error));
-      }
-    });
-  });
 }
 
 function MainView() {

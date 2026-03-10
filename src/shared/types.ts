@@ -52,9 +52,14 @@ export interface AudioSettings {
   autoSilenceOnVoice: boolean;
 }
 
+export interface GeneralSettings {
+  windowedMode: boolean;
+}
+
 export interface Settings {
   keybinds: KeybindSettings;
   audio: AudioSettings;
+  general: GeneralSettings;
 }
 
 export type SettingsPartial = {
@@ -70,6 +75,7 @@ export interface AthenaAPI {
   onPttToggle: (callback: () => void) => void;
   getSettings: () => Promise<Settings>;
   setSettings: (partial: SettingsPartial) => Promise<{ settings: Settings; error?: string }>;
+  quit: () => void;
 }
 
 declare global {

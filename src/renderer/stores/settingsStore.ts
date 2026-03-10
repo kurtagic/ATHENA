@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Settings, AudioSettings, SettingsPartial } from '../../shared/types';
+import type { Settings, AudioSettings, GeneralSettings, SettingsPartial } from '../../shared/types';
 
 interface SettingsState {
   settings: Settings | null;
@@ -9,6 +9,7 @@ interface SettingsState {
   fetchSettings: () => Promise<void>;
   updateKeybind: (action: keyof Settings['keybinds'], accelerator: string) => Promise<void>;
   updateAudioSetting: <K extends keyof AudioSettings>(key: K, value: AudioSettings[K]) => Promise<void>;
+  updateGeneralSetting: <K extends keyof GeneralSettings>(key: K, value: GeneralSettings[K]) => Promise<void>;
 }
 
 export const useSettingsStore = create<SettingsState>((set) => ({
@@ -39,6 +40,18 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     set({ error: null });
     const result = await window.athena.setSettings({
       audio: { [key]: value },
+    });
+    if (result.error) {
+      set({ settings: result.settings, error: result.error });
+    } else {
+      set({ settings: result.settings, error: null });
+    }
+  },
+
+  updateGeneralSetting: async (key, value) => {
+    set({ error: null });
+    const result = await window.athena.setSettings({
+      general: { [key]: value },
     });
     if (result.error) {
       set({ settings: result.settings, error: result.error });

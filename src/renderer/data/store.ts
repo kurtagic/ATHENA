@@ -31,6 +31,12 @@ export const hexEntityData: Record<string, Entity[]> = {};
 export const hexDrawingData: Record<string, SavedStroke[]> = {};
 export const hexArtilleryData: Record<string, SavedArtilleryState> = {};
 
+export function clearHexCaches(): void {
+  for (const key of Object.keys(hexDrawingData)) delete hexDrawingData[key];
+  for (const key of Object.keys(hexArtilleryData)) delete hexArtilleryData[key];
+  for (const key of Object.keys(hexEntityData)) delete hexEntityData[key];
+}
+
 // Helper functions for entity cache
 export function getEntitiesByType<T extends Entity>(hexId: string, type: EntityType): T[] {
   const entities = hexEntityData[hexId];

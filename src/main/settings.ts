@@ -11,12 +11,16 @@ const DEFAULT_SETTINGS: Settings = {
   audio: {
     autoSilenceOnVoice: false,
   },
+  general: {
+    windowedMode: false,
+  },
 };
 
 let currentSettings: Settings = {
   ...DEFAULT_SETTINGS,
   keybinds: { ...DEFAULT_SETTINGS.keybinds },
   audio: { ...DEFAULT_SETTINGS.audio },
+  general: { ...DEFAULT_SETTINGS.general },
 };
 
 function settingsPath(): string {
@@ -36,11 +40,16 @@ export function loadSettings(): Settings {
         ...DEFAULT_SETTINGS.audio,
         ...(parsed.audio || {}),
       },
+      general: {
+        ...DEFAULT_SETTINGS.general,
+        ...(parsed.general || {}),
+      },
     };
   } catch {
     currentSettings = {
       keybinds: { ...DEFAULT_SETTINGS.keybinds },
       audio: { ...DEFAULT_SETTINGS.audio },
+      general: { ...DEFAULT_SETTINGS.general },
     };
   }
   return currentSettings;
@@ -58,6 +67,9 @@ export function updateSettings(partial: SettingsPartial): Settings {
   }
   if (partial.audio) {
     currentSettings.audio = { ...currentSettings.audio, ...partial.audio };
+  }
+  if (partial.general) {
+    currentSettings.general = { ...currentSettings.general, ...partial.general };
   }
   saveSettings(currentSettings);
   return currentSettings;

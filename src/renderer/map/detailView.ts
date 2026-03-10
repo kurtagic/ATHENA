@@ -558,6 +558,13 @@ export function exitDetailMode(): void {
   });
 }
 
+export function resetDetailMode(): void {
+  if (detailMode && _map) {
+    exitDetailMode();
+  }
+  detailMode = null;
+}
+
 export function getSelectedHexes(): string[] {
   if (detailMode) return [detailMode.apiName];
   return [];

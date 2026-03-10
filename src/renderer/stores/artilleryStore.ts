@@ -26,6 +26,7 @@ interface ArtilleryStoreState {
   setPlatformIndex: (index: number) => void;
   setSolutions: (solutions: ArtillerySolution[], hasTarget: boolean, hasImpact: boolean) => void;
   setStatusText: (text: string) => void;
+  reset: () => void;
 }
 
 export const useArtilleryStore = create<ArtilleryStoreState>((set) => ({
@@ -39,4 +40,12 @@ export const useArtilleryStore = create<ArtilleryStoreState>((set) => ({
   setPlatformIndex: (index) => set({ platformIndex: index }),
   setSolutions: (solutions, hasTarget, hasImpact) => set({ solutions, hasTarget, hasImpact }),
   setStatusText: (text) => set({ statusText: text }),
+  reset: () => set({
+    placementMode: 'idle',
+    platformIndex: 0,
+    statusText: '',
+    solutions: [],
+    hasTarget: false,
+    hasImpact: false,
+  }),
 }));

@@ -1,10 +1,13 @@
 import React, { useEffect, useState } from 'react';
-import { X, Keyboard, Volume2 } from 'lucide-react';
+import { X, Keyboard, Volume2, LogOut, Settings2 } from 'lucide-react';
 import { useSettingsStore } from '../../stores/settingsStore';
+import { useAppStore } from '../../stores/appStore';
+import { GeneralTab } from './GeneralTab';
 import { KeybindsTab } from './KeybindsTab';
 import { AudioTab } from './AudioTab';
 
 const TABS = [
+  { id: 'general' as const, label: 'General', icon: Settings2 },
   { id: 'keybinds' as const, label: 'Keybinds', icon: Keyboard },
   { id: 'audio' as const, label: 'Audio', icon: Volume2 },
 ];
@@ -12,9 +15,11 @@ const TABS = [
 type TabId = (typeof TABS)[number]['id'];
 
 export function SettingsPage() {
-  const [activeTab, setActiveTab] = useState<TabId>('keybinds');
+  const [activeTab, setActiveTab] = useState<TabId>('general');
   const setSettingsOpen = useSettingsStore((s) => s.setSettingsOpen);
   const fetchSettings = useSettingsStore((s) => s.fetchSettings);
+  const appView = useAppStore((s) => s.appView);
+  const returnToMenu = useAppStore((s) => s.returnToMenu);
 
   useEffect(() => {
     fetchSettings();
@@ -72,6 +77,21 @@ export function SettingsPage() {
               </button>
             );
           })}
+
+          {appView === 'app' && (
+            <div className="mt-auto pt-3 border-t border-white/8">
+              <button
+                className="flex items-center gap-2.5 px-3 py-2 w-full rounded-[var(--radius-sm)] text-left text-[12px] font-medium transition-colors duration-150 border-none cursor-pointer bg-transparent text-red-400/80 hover:bg-red-500/10 hover:text-red-400"
+                onClick={() => {
+                  setSettingsOpen(false);
+                  returnToMenu();
+                }}
+              >
+                <LogOut size={14} />
+                Back to Main Menu
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Content */}
@@ -88,6 +108,7 @@ export function SettingsPage() {
             </button>
           </div>
           <div className="flex-1 p-5">
+            {activeTab === 'general' && <GeneralTab />}
             {activeTab === 'keybinds' && <KeybindsTab />}
             {activeTab === 'audio' && <AudioTab />}
           </div>
