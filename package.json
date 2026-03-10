@@ -1,6 +1,6 @@
 {
   "name": "athena",
-  "version": "0.2.3",
+  "version": "0.2.2",
   "productName": "Athena",
   "description": "Foxhole Map Viewer",
   "author": "teo",
@@ -12,7 +12,8 @@
     "fetch-static": "npx tsx scripts/fetchStatic.ts",
     "start:web": "vite --config vite.web.config.ts",
     "extract-voronoi": "npx tsx scripts/extractVoronoi.ts",
-    "fetch-voronoi-owners": "npx tsx scripts/fetchVoronoiOwners.ts"
+    "fetch-voronoi-owners": "npx tsx scripts/fetchVoronoiOwners.ts",
+    "release": "npx tsx scripts/release.ts"
   },
   "devDependencies": {
     "@electron-forge/cli": "^7.6.0",
