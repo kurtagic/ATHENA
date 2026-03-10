@@ -13,6 +13,8 @@ export interface ArtillerySolution {
   relDist: number;
   relAz: number;
   isMain: boolean;
+  windDriftM: number;
+  isPinned: boolean;
 }
 
 interface ArtilleryStoreState {
@@ -22,10 +24,15 @@ interface ArtilleryStoreState {
   solutions: ArtillerySolution[];
   hasTarget: boolean;
   hasImpact: boolean;
+  windDirection: number | null;
+  windStrength: number;
+  pinnedGuns: Set<number>;
   setPlacementMode: (mode: PlacementMode) => void;
   setPlatformIndex: (index: number) => void;
   setSolutions: (solutions: ArtillerySolution[], hasTarget: boolean, hasImpact: boolean) => void;
   setStatusText: (text: string) => void;
+  setWind: (direction: number | null, strength: number) => void;
+  togglePin: (posIndex: number) => void;
   reset: () => void;
 }
 
@@ -36,10 +43,20 @@ export const useArtilleryStore = create<ArtilleryStoreState>((set) => ({
   solutions: [],
   hasTarget: false,
   hasImpact: false,
+  windDirection: null,
+  windStrength: 0,
+  pinnedGuns: new Set<number>(),
   setPlacementMode: (mode) => set({ placementMode: mode }),
   setPlatformIndex: (index) => set({ platformIndex: index }),
   setSolutions: (solutions, hasTarget, hasImpact) => set({ solutions, hasTarget, hasImpact }),
   setStatusText: (text) => set({ statusText: text }),
+  setWind: (direction, strength) => set({ windDirection: direction, windStrength: strength }),
+  togglePin: (posIndex) => set((state) => {
+    const next = new Set(state.pinnedGuns);
+    if (next.has(posIndex)) next.delete(posIndex);
+    else next.add(posIndex);
+    return { pinnedGuns: next };
+  }),
   reset: () => set({
     placementMode: 'idle',
     platformIndex: 0,
@@ -47,5 +64,8 @@ export const useArtilleryStore = create<ArtilleryStoreState>((set) => ({
     solutions: [],
     hasTarget: false,
     hasImpact: false,
+    windDirection: null,
+    windStrength: 0,
+    pinnedGuns: new Set<number>(),
   }),
 }));

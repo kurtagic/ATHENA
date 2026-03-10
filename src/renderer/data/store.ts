@@ -22,6 +22,8 @@ export interface SavedArtilleryState {
   defaultPlatformIndex: number;
   nextId: number;
   nextLabelNum: number;
+  windDirection?: number | null;
+  windStrength?: number;
 }
 
 // Unified entity cache

@@ -1,10 +1,11 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import type maplibregl from 'maplibre-gl';
-import { Crosshair, Target, Flame, Trash2, Shield, Check, Copy, ChevronRight, ChevronLeft } from 'lucide-react';
+import { Crosshair, Target, Flame, Trash2, Shield, Check, Copy, ChevronRight, ChevronLeft, Pin } from 'lucide-react';
 import { useArtilleryStore } from '../../stores/artilleryStore';
 import { useMapStore } from '../../stores/mapStore';
 import { ARTILLERY_PLATFORMS, platformDisplayName } from '../../data/artilleryPlatforms';
-import { setPlacementMode, clearAll, clearTarget, clearImpact, setMainGun, removeArtillery, renameGun, setPlatformFromUI, setGunPlatform } from '../../map/artillery';
+import { setPlacementMode, clearAll, clearTarget, clearImpact, setMainGun, removeArtillery, renameGun, setPlatformFromUI, setGunPlatform, refreshPinnedData } from '../../map/artillery';
+import { WindCompass } from '../artillery/WindCompass';
 import type { PlacementMode, ArtillerySolution } from '../../stores/artilleryStore';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectSeparator, SelectTrigger, SelectValue } from '../ui/select';
 
@@ -193,6 +194,11 @@ function RecommendedSolution({ solution }: { solution: ArtillerySolution }) {
           <span>Az: {solution.azimuthDeg.toFixed(1)}&deg;</span>
         </div>
       </div>
+      {solution.windDriftM > 0 && (
+        <div className="text-[10px] text-white/40 mt-0.5">
+          Wind: {solution.windDriftM.toFixed(1)}m drift
+        </div>
+      )}
       <div className="flex items-center justify-between mt-1.5">
         {solution.inRange ? (
           <span className="arty-badge-inrange">In Range</span>
@@ -218,6 +224,7 @@ export function RightSidebar() {
   const solutions = useArtilleryStore((s) => s.solutions);
   const hasTarget = useArtilleryStore((s) => s.hasTarget);
   const hasImpact = useArtilleryStore((s) => s.hasImpact);
+  const pinnedGuns = useArtilleryStore((s) => s.pinnedGuns);
   const map = useMapStore((s) => s.mapInstance);
   const detailMode = useMapStore((s) => s.detailMode);
   const artSidebarOpen = useMapStore((s) => s.artSidebarOpen);
@@ -370,6 +377,8 @@ export function RightSidebar() {
               {statusText}
             </div>
           )}
+          <SectionHeader label="Wind" />
+          <WindCompass />
           <SectionHeader label="Solutions" />
           {mainSolution && (
             <RecommendedSolution solution={mainSolution} />
@@ -381,13 +390,12 @@ export function RightSidebar() {
           >
             <thead>
               <tr>
-                <th className="arty-col-star font-semibold text-[10px] uppercase tracking-[0.08em] text-[var(--color-muted)] py-1 px-[5px] text-left" />
-                <th className="arty-col-num font-semibold text-[10px] uppercase tracking-[0.08em] text-[var(--color-muted)] py-1 px-[5px] text-left">#</th>
-                <th className="arty-col-plat font-semibold text-[10px] uppercase tracking-[0.08em] text-[var(--color-muted)] py-1 px-[5px] text-left">Platform</th>
-                <th className="arty-col-dist font-semibold text-[10px] uppercase tracking-[0.08em] text-[var(--color-muted)] py-1 px-[5px] text-left">Distance</th>
-                <th className="arty-col-az font-semibold text-[10px] uppercase tracking-[0.08em] text-[var(--color-muted)] py-1 px-[5px] text-left">Azimuth</th>
-                <th className="arty-col-reld font-semibold text-[10px] uppercase tracking-[0.08em] text-[var(--color-muted)] py-1 px-[5px] text-left">&Delta; Distance</th>
-                <th className="arty-col-relaz font-semibold text-[10px] uppercase tracking-[0.08em] text-[var(--color-muted)] py-1 px-[5px] text-left">&Delta; Azimuth</th>
+                <th className="arty-col-star font-semibold text-[12px] uppercase tracking-[0.08em] text-[var(--color-muted)] py-1.5 px-[6px] text-left" />
+                <th className="arty-col-pin font-semibold text-[12px] uppercase tracking-[0.08em] text-[var(--color-muted)] py-1.5 px-[6px] text-left" />
+                <th className="arty-col-num font-semibold text-[12px] uppercase tracking-[0.08em] text-[var(--color-muted)] py-1.5 px-[6px] text-left">#</th>
+                <th className="arty-col-plat font-semibold text-[12px] uppercase tracking-[0.08em] text-[var(--color-muted)] py-1.5 px-[6px] text-left">Platform</th>
+                <th className="arty-col-dist font-semibold text-[12px] uppercase tracking-[0.08em] text-[var(--color-muted)] py-1.5 px-[6px] text-left">Distance</th>
+                <th className="arty-col-az font-semibold text-[12px] uppercase tracking-[0.08em] text-[var(--color-muted)] py-1.5 px-[6px] text-left">Azimuth</th>
                 <th className="arty-col-del" />
               </tr>
             </thead>
@@ -409,21 +417,27 @@ export function RightSidebar() {
                         {sol.isMain ? '\u2605' : '\u2606'}
                       </button>
                     </td>
+                    <td className="arty-col-pin">
+                      <button
+                        className={`arty-pin-btn${pinnedGuns.has(sol.posIndex) ? ' pinned' : ''}`}
+                        title="Pin to HUD"
+                        onClick={() => {
+                          useArtilleryStore.getState().togglePin(sol.posIndex);
+                          refreshPinnedData();
+                        }}
+                      >
+                        <Pin size={16} fill={pinnedGuns.has(sol.posIndex) ? 'currentColor' : 'none'} />
+                      </button>
+                    </td>
                     <RenameCell label={sol.label} posIndex={sol.posIndex} />
                     <PlatformCell platformIndex={sol.platformIndex} posIndex={sol.posIndex} groups={groups} map={map} />
                     {hasTarget ? (
                       <>
-                        <td className="arty-col-dist text-white tabular-nums">{sol.distanceM.toFixed(1)}m</td>
-                        <td className="arty-col-az text-white tabular-nums">{sol.azimuthDeg.toFixed(1)}&deg;</td>
-                        <td className="arty-col-reld text-white tabular-nums">
-                          {sol.isMain ? '--' : `${sol.relDist >= 0 ? '+' : ''}${sol.relDist.toFixed(1)}m`}
-                        </td>
-                        <td className="arty-col-relaz text-white tabular-nums">
-                          {sol.isMain ? '--' : `${sol.relAz >= 0 ? '+' : ''}${sol.relAz.toFixed(1)}\u00b0`}
-                        </td>
+                        <td className="arty-col-dist text-white text-[13px] tabular-nums">{sol.distanceM.toFixed(1)}m</td>
+                        <td className="arty-col-az text-white text-[13px] tabular-nums">{sol.azimuthDeg.toFixed(1)}&deg;</td>
                       </>
                     ) : (
-                      <td colSpan={4} className="arty-no-target">NO TARGET</td>
+                      <td colSpan={2} className="arty-no-target">NO TARGET</td>
                     )}
                     <td className="arty-col-del">
                       <button

@@ -7,6 +7,7 @@ import { startPoller, stopPoller } from './warPoller';
 import { loadSettings } from './settings';
 import { registerOverlayHotkey, registerPttHotkey } from './hotkeys';
 import { unmuteOtherApps } from './audioSilencer';
+import { destroyPip } from './pipWindow';
 
 // Handle Squirrel install/update/uninstall events
 const squirrelArg = process.argv[1];
@@ -90,6 +91,7 @@ function createWindow(): void {
 
   mainWindow.on('closed', () => {
     mainWindow = null;
+    destroyPip();
   });
 }
 
@@ -106,6 +108,7 @@ app.on('will-quit', () => {
   globalShortcut.unregisterAll();
   stopPoller();
   unmuteOtherApps();
+  destroyPip();
 });
 
 app.on('window-all-closed', () => {

@@ -5,7 +5,8 @@ import { setSelectedHexes } from './warPoller';
 import { getSettings, updateSettings } from './settings';
 import { registerOverlayHotkey, registerPttHotkey } from './hotkeys';
 import { muteOtherApps, unmuteOtherApps } from './audioSilencer';
-import type { SettingsPartial } from '../shared/types';
+import { updatePipData } from './pipWindow';
+import type { SettingsPartial, PinnedSolution } from '../shared/types';
 
 export function registerIpcHandlers(win: BrowserWindow): void {
   ipcMain.on('set-selected-hexes', (_event, hexes: string[]) => {
@@ -62,6 +63,10 @@ export function registerIpcHandlers(win: BrowserWindow): void {
     }
 
     return { settings: newSettings };
+  });
+
+  ipcMain.on('update-pinned-artillery', (_event, data: PinnedSolution[]) => {
+    updatePipData(data);
   });
 
   ipcMain.on('set-app-silence', (_event, mute: boolean) => {

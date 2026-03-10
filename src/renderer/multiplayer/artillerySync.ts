@@ -11,6 +11,7 @@ import type {
   ArtilleryPlatformEntity,
   ArtilleryTargetEntity,
   ArtilleryImpactEntity,
+  ArtilleryWindEntity,
 } from './protocol';
 
 // Convert SavedArtilleryState into entity create operations
@@ -48,6 +49,16 @@ function artilleryStateToEntities(state: SavedArtilleryState, hexId: string): Om
     } as Omit<ArtilleryImpactEntity, 'authorId'>);
   }
 
+  if (state.windDirection !== undefined) {
+    entities.push({
+      id: crypto.randomUUID(),
+      hexId,
+      entityType: 'artillery-wind',
+      windDirection: state.windDirection,
+      windStrength: state.windStrength ?? 0,
+    } as Omit<ArtilleryWindEntity, 'authorId'>);
+  }
+
   return entities;
 }
 
@@ -56,6 +67,7 @@ export function entitiesToArtilleryState(entities: Entity[]): SavedArtilleryStat
   const platforms = entities.filter(e => e.entityType === 'artillery-platform') as ArtilleryPlatformEntity[];
   const targets = entities.filter(e => e.entityType === 'artillery-target') as ArtilleryTargetEntity[];
   const impacts = entities.filter(e => e.entityType === 'artillery-impact') as ArtilleryImpactEntity[];
+  const winds = entities.filter(e => e.entityType === 'artillery-wind') as ArtilleryWindEntity[];
 
   let mainGunIndex = 0;
   const positions = platforms.map((p, i) => {
@@ -68,6 +80,8 @@ export function entitiesToArtilleryState(entities: Entity[]): SavedArtilleryStat
     };
   });
 
+  const wind = winds.length > 0 ? winds[winds.length - 1] : null;
+
   return {
     positions,
     target: targets.length > 0 ? targets[targets.length - 1].position : null,
@@ -76,6 +90,8 @@ export function entitiesToArtilleryState(entities: Entity[]): SavedArtilleryStat
     defaultPlatformIndex: 0,
     nextId: positions.length + 1,
     nextLabelNum: positions.length + 1,
+    windDirection: wind ? wind.windDirection : undefined,
+    windStrength: wind ? wind.windStrength : undefined,
   };
 }
 
@@ -87,6 +103,7 @@ export function initArtillerySync(): void {
     session.sendEntityClear(hexId, 'artillery-platform');
     session.sendEntityClear(hexId, 'artillery-target');
     session.sendEntityClear(hexId, 'artillery-impact');
+    session.sendEntityClear(hexId, 'artillery-wind');
 
     const entities = artilleryStateToEntities(state, hexId);
     for (const entity of entities) {
@@ -96,7 +113,7 @@ export function initArtillerySync(): void {
 }
 
 function isArtilleryType(entityType: string): boolean {
-  return entityType === 'artillery-platform' || entityType === 'artillery-target' || entityType === 'artillery-impact';
+  return entityType === 'artillery-platform' || entityType === 'artillery-target' || entityType === 'artillery-impact' || entityType === 'artillery-wind';
 }
 
 function rebuildArtilleryFromCache(hexId: string): void {
@@ -209,6 +226,20 @@ export function handleArtilleryBroadcast(
       }
       break;
     }
+  }
+}
+
+export function syncWindOnly(windDirection: number | null, windStrength: number, hexId: string): void {
+  if (!session.connected) return;
+  session.sendEntityClear(hexId, 'artillery-wind');
+  if (windDirection !== null && windStrength > 0) {
+    session.sendEntityCreate({
+      id: crypto.randomUUID(),
+      hexId,
+      entityType: 'artillery-wind',
+      windDirection,
+      windStrength,
+    } as Omit<ArtilleryWindEntity, 'authorId'>);
   }
 }
 

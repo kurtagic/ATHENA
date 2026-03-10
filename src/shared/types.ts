@@ -66,6 +66,13 @@ export type SettingsPartial = {
   [K in keyof Settings]?: Partial<Settings[K]>;
 };
 
+export interface PinnedSolution {
+  label: string;
+  distanceM: number;
+  azimuthDeg: number;
+  inRange: boolean;
+}
+
 export interface AthenaAPI {
   onWarStatus: (callback: (data: WarStatus) => void) => void;
   onHexItems: (callback: (data: HexItemsPayload) => void) => void;
@@ -75,6 +82,7 @@ export interface AthenaAPI {
   onPttToggle: (callback: () => void) => void;
   getSettings: () => Promise<Settings>;
   setSettings: (partial: SettingsPartial) => Promise<{ settings: Settings; error?: string }>;
+  updatePinnedArtillery: (data: PinnedSolution[]) => void;
   quit: () => void;
 }
 

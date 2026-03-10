@@ -343,14 +343,33 @@ html, body {
   box-shadow: inset 3px 0 0 var(--color-destructive);
 }
 
-.arty-col-star { width: 24px; text-align: center !important; }
-.arty-col-num { width: 40px; }
-.arty-col-plat { width: 72px; }
-.arty-col-dist { width: 62px; }
-.arty-col-az { width: 62px; }
-.arty-col-reld { width: 56px; }
-.arty-col-relaz { width: 56px; }
-.arty-col-del { width: 24px; text-align: center !important; }
+.arty-col-star { width: 28px; text-align: center !important; }
+.arty-col-pin { width: 28px; text-align: center !important; }
+
+.arty-pin-btn {
+  cursor: pointer;
+  background: none;
+  border: none;
+  color: var(--color-muted);
+  font-size: 14px;
+  padding: 0;
+  line-height: 1;
+  transition: transform 150ms ease, color 150ms ease, text-shadow 150ms ease;
+}
+
+.arty-pin-btn:hover {
+  transform: scale(1.15);
+}
+
+.arty-pin-btn.pinned {
+  color: #66bb6a;
+  text-shadow: 0 0 8px rgba(102, 187, 106, 0.5);
+}
+.arty-col-num { width: 48px; font-size: 13px; }
+.arty-col-plat { width: 90px; font-size: 13px; }
+.arty-col-dist { width: 80px; }
+.arty-col-az { width: 80px; }
+.arty-col-del { width: 28px; text-align: center !important; }
 
 /* ── Artillery solution card ──────────────────────────────── */
 .arty-solution-card {

@@ -4,8 +4,9 @@ import type { MapPoint } from '../data/coords';
 import { toMapPoint, mapPointToLngLat, lngLatToMapPoint } from '../data/coords';
 import type { SavedArtilleryState } from '../data/store';
 import { ARTILLERY_PLATFORMS } from '../data/artilleryPlatforms';
-import { crsDistanceMeters, crsAzimuth, metersToRadius, calculateCorrection, interpolateInaccuracy } from '../data/artilleryCalc';
+import { crsDistanceMeters, crsAzimuth, metersToRadius, calculateCorrection, interpolateInaccuracy, windCompensatedTarget, interpolateWindDrift } from '../data/artilleryCalc';
 import { useArtilleryStore, type ArtillerySolution } from '../stores/artilleryStore';
+import { syncWindOnly } from '../multiplayer/artillerySync';
 import { useMapStore } from '../stores/mapStore';
 import { useLayerStore } from '../stores/layerStore';
 const CIRCLE_SEGMENTS = 64;
@@ -63,6 +64,20 @@ export function setArtilleryHexId(hexId: string) { artilleryHexId = hexId; }
 
 // Click handler reference
 let clickHandler: ((e: maplibregl.MapMouseEvent) => void) | null = null;
+
+export function refreshPinnedData(): void {
+  const { pinnedGuns } = useArtilleryStore.getState();
+  const targetPos = state.corrected ?? state.target;
+  if (!targetPos) {
+    window.athena.updatePinnedArtillery([]);
+    return;
+  }
+  const solutions = computeSolutions();
+  const pinnedData = solutions
+    .filter((s) => pinnedGuns.has(s.posIndex))
+    .map((s) => ({ label: s.label, distanceM: s.distanceM, azimuthDeg: s.azimuthDeg, inRange: s.inRange }));
+  window.athena.updatePinnedArtillery(pinnedData);
+}
 
 export function getArtilleryState() {
   return {
@@ -299,6 +314,12 @@ export function clearImpact(map: maplibregl.Map): void {
   state.impact = null;
   state.corrected = null;
   refreshAll(map);
+}
+
+export function recalcWind(map: maplibregl.Map): void {
+  const { windDirection, windStrength } = useArtilleryStore.getState();
+  refreshAll(map, false);
+  if (artilleryHexId) syncWindOnly(windDirection, windStrength, artilleryHexId);
 }
 
 export function clearAll(map: maplibregl.Map): void {
@@ -598,19 +619,35 @@ function refreshAll(map: maplibregl.Map, sync = true): void {
   const solutions = computeSolutions();
   useArtilleryStore.getState().setSolutions(solutions, state.target !== null, state.impact !== null);
 
+  // Send pinned solutions to main process for pip window
+  const pinnedData = solutions
+    .filter((s) => s.isPinned && state.target !== null)
+    .map((s) => ({ label: s.label, distanceM: s.distanceM, azimuthDeg: s.azimuthDeg, inRange: s.inRange }));
+  window.athena.updatePinnedArtillery(pinnedData);
+
   if (sync && onArtilleryChanged && artilleryHexId) onArtilleryChanged(saveArtilleryState(), artilleryHexId);
 }
 
 function computeSolutions(): ArtillerySolution[] {
   const targetPos = state.corrected ?? state.target;
   const solutions: ArtillerySolution[] = [];
+  const { windDirection, windStrength, pinnedGuns } = useArtilleryStore.getState();
+  const hasWind = windDirection !== null && windStrength > 0;
 
   let mainDist = 0;
   let mainAz = 0;
   if (targetPos && state.positions.length > 0 && state.mainGunIndex < state.positions.length) {
     const mainPos = state.positions[state.mainGunIndex];
-    mainDist = crsDistanceMeters(mainPos.point, targetPos);
-    mainAz = crsAzimuth(mainPos.point, targetPos);
+    const mainPlatform = ARTILLERY_PLATFORMS[state.positions[state.mainGunIndex].platformIndex ?? state.defaultPlatformIndex];
+    if (hasWind && mainPlatform) {
+      const rawDist = crsDistanceMeters(mainPos.point, targetPos);
+      const compensated = windCompensatedTarget(targetPos, windDirection, windStrength, mainPlatform, rawDist);
+      mainDist = crsDistanceMeters(mainPos.point, compensated);
+      mainAz = crsAzimuth(mainPos.point, compensated);
+    } else {
+      mainDist = crsDistanceMeters(mainPos.point, targetPos);
+      mainAz = crsAzimuth(mainPos.point, targetPos);
+    }
   }
 
   for (let i = 0; i < state.positions.length; i++) {
@@ -624,10 +661,19 @@ function computeSolutions(): ArtillerySolution[] {
     let inRange = false;
     let relDist = 0;
     let relAz = 0;
+    let windDriftM = 0;
 
     if (targetPos) {
-      distanceM = crsDistanceMeters(pos.point, targetPos);
-      azimuthDeg = crsAzimuth(pos.point, targetPos);
+      if (hasWind && platform) {
+        const rawDist = crsDistanceMeters(pos.point, targetPos);
+        windDriftM = interpolateWindDrift(platform, rawDist) * (windStrength / 5);
+        const compensated = windCompensatedTarget(targetPos, windDirection, windStrength, platform, rawDist);
+        distanceM = crsDistanceMeters(pos.point, compensated);
+        azimuthDeg = crsAzimuth(pos.point, compensated);
+      } else {
+        distanceM = crsDistanceMeters(pos.point, targetPos);
+        azimuthDeg = crsAzimuth(pos.point, targetPos);
+      }
       inRange = platform
         ? distanceM >= platform.minRange && distanceM <= platform.maxRange
         : false;
@@ -648,6 +694,8 @@ function computeSolutions(): ArtillerySolution[] {
       relDist,
       relAz,
       isMain,
+      windDriftM,
+      isPinned: pinnedGuns.has(i),
     });
   }
 
@@ -665,6 +713,7 @@ function startDrag(map: maplibregl.Map, type: 'gun' | 'target' | 'impact', gunIn
 }
 
 export function saveArtilleryState(): SavedArtilleryState {
+  const { windDirection, windStrength } = useArtilleryStore.getState();
   return {
     positions: state.positions.map((p) => ({
       id: p.id,
@@ -678,10 +727,15 @@ export function saveArtilleryState(): SavedArtilleryState {
     defaultPlatformIndex: state.defaultPlatformIndex,
     nextId: state.nextId,
     nextLabelNum: state.nextLabelNum,
+    windDirection,
+    windStrength,
   };
 }
 
 export function restoreArtilleryState(saved: SavedArtilleryState, map: maplibregl.Map, sync = false): void {
+  if (saved.windDirection !== undefined) {
+    useArtilleryStore.getState().setWind(saved.windDirection, saved.windStrength ?? 0);
+  }
   state.positions = saved.positions.map((p) => ({
     id: p.id,
     point: toMapPoint(p.latlng[0], p.latlng[1]),

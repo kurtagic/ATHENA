@@ -4,7 +4,7 @@ export const PROTOCOL_VERSION = 2;
 
 // ── Entity type system ──
 
-export type EntityType = 'stroke' | 'artillery-platform' | 'artillery-target' | 'artillery-impact';
+export type EntityType = 'stroke' | 'artillery-platform' | 'artillery-target' | 'artillery-impact' | 'artillery-wind';
 
 export interface SyncEntity {
   id: string;
@@ -39,7 +39,13 @@ export interface ArtilleryImpactEntity extends SyncEntity {
   position: [number, number];
 }
 
-export type Entity = StrokeEntity | ArtilleryPlatformEntity | ArtilleryTargetEntity | ArtilleryImpactEntity;
+export interface ArtilleryWindEntity extends SyncEntity {
+  entityType: 'artillery-wind';
+  windDirection: number | null;
+  windStrength: number;
+}
+
+export type Entity = StrokeEntity | ArtilleryPlatformEntity | ArtilleryTargetEntity | ArtilleryImpactEntity | ArtilleryWindEntity;
 
 // ── Session snapshot ──
 

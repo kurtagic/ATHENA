@@ -27,6 +27,7 @@ export interface ArtilleryPlatformRange {
   maxRange: number;
   minInaccuracy: number;
   maxInaccuracy: number;
+  windDrift: [number, number];
 }
 
 export function interpolateInaccuracy(platform: ArtilleryPlatformRange, distanceM: number): number {
@@ -40,6 +41,44 @@ export interface CorrectionResult {
   corrected: MapPoint;
   correctionDistM: number;
   correctionAzDeg: number;
+}
+
+export function interpolateWindDrift(platform: ArtilleryPlatformRange, distanceM: number): number {
+  const rangeSpan = platform.maxRange - platform.minRange;
+  if (rangeSpan <= 0) return platform.windDrift[1];
+  const t = Math.max(0, Math.min(1, (distanceM - platform.minRange) / rangeSpan));
+  return platform.windDrift[0] + t * (platform.windDrift[1] - platform.windDrift[0]);
+}
+
+export function windOffset(
+  windDirection: number,
+  windStrength: number,
+  platform: ArtilleryPlatformRange,
+  distanceM: number,
+): { dx: number; dy: number } {
+  const baseDrift = interpolateWindDrift(platform, distanceM);
+  const driftMeters = baseDrift * (windStrength / 5);
+  const dirRad = (windDirection * Math.PI) / 180;
+  const dxMeters = Math.sin(dirRad) * driftMeters;
+  const dyMeters = Math.cos(dirRad) * driftMeters;
+  return {
+    dx: dxMeters / METERS_PER_CRS_UNIT,
+    dy: dyMeters / METERS_PER_CRS_UNIT,
+  };
+}
+
+export function windCompensatedTarget(
+  target: MapPoint,
+  windDirection: number,
+  windStrength: number,
+  platform: ArtilleryPlatformRange,
+  distanceM: number,
+): MapPoint {
+  const offset = windOffset(windDirection, windStrength, platform, distanceM);
+  return {
+    x: target.x - offset.dx,
+    y: target.y - offset.dy,
+  };
 }
 
 export function calculateCorrection(target: MapPoint, impact: MapPoint): CorrectionResult {
