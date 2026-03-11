@@ -79,7 +79,7 @@ export function createMap(container: HTMLElement): maplibregl.Map {
           tiles: [tileUrlTemplate()],
           tileSize: 256,
           minzoom: 2,
-          maxzoom: 7,
+          maxzoom: 4,
           scheme: 'xyz',
         },
       },

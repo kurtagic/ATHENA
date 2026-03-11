@@ -1,11 +1,26 @@
 import type { ForgeConfig } from '@electron-forge/shared-types';
 import { VitePlugin } from '@electron-forge/plugin-vite';
+import { rmSync } from 'node:fs';
+import path from 'node:path';
 
 const config: ForgeConfig = {
   packagerConfig: {
     asar: true,
     icon: './athena',
     extraResource: ['./static', './assets', './athena.ico'],
+  },
+  hooks: {
+    postPackage: async (_forgeConfig, options) => {
+      const outDir = options.outputPaths[0];
+      const tilesDir = path.join(outDir, 'resources', 'assets', 'tiles');
+      for (const z of [5, 6]) {
+        const dir = path.join(tilesDir, String(z));
+        try {
+          rmSync(dir, { recursive: true, force: true });
+          console.log(`[forge] Removed: ${dir}`);
+        } catch {}
+      }
+    },
   },
   makers: [
     { name: '@electron-forge/maker-squirrel', config: { iconUrl: 'file:///athena.ico', setupIcon: './athena.ico' } },
