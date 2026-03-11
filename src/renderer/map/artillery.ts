@@ -3,7 +3,7 @@ import type { GeoJSONSource } from 'maplibre-gl';
 import type { MapPoint } from '../data/coords';
 import { toMapPoint, mapPointToLngLat, lngLatToMapPoint } from '../data/coords';
 import type { SavedArtilleryState } from '../data/store';
-import { ARTILLERY_PLATFORMS } from '../data/artilleryPlatforms';
+import { ARTILLERY_PLATFORMS, DEFAULT_PLATFORM_INDEX } from '../data/artilleryPlatforms';
 import { crsDistanceMeters, crsAzimuth, metersToRadius, calculateCorrection, interpolateInaccuracy, windCompensatedTarget, interpolateWindDrift } from '../data/artilleryCalc';
 import { useArtilleryStore, type ArtillerySolution } from '../stores/artilleryStore';
 import { syncWindOnly } from '../multiplayer/artillerySync';
@@ -44,7 +44,7 @@ const state: ArtyState = {
   impact: null,
   corrected: null,
   mainGunIndex: 0,
-  defaultPlatformIndex: 0,
+  defaultPlatformIndex: DEFAULT_PLATFORM_INDEX,
   nextId: 1,
   nextLabelNum: 1,
   markers: [],
@@ -265,6 +265,15 @@ export function removeArtillery(posIndex: number, map: maplibregl.Map): void {
   if (idx === -1) return;
   state.positions.splice(idx, 1);
 
+  // Update pinned guns: remove the deleted index and shift down any above it
+  const oldPinned = useArtilleryStore.getState().pinnedGuns;
+  const newPinned = new Set<number>();
+  for (const pi of oldPinned) {
+    if (pi === idx) continue;
+    newPinned.add(pi > idx ? pi - 1 : pi);
+  }
+  useArtilleryStore.setState({ pinnedGuns: newPinned });
+
   if (state.positions.length === 0) {
     state.mainGunIndex = 0;
   } else if (state.mainGunIndex >= state.positions.length) {
@@ -474,10 +483,23 @@ function refreshAll(map: maplibregl.Map, sync = true): void {
   }
 
   // Inaccuracy circles
-  if (defaultPlatform && state.positions.length > 0 && state.target) {
-    const minInaccRadius = metersToRadius(defaultPlatform.minInaccuracy);
-    const maxInaccRadius = metersToRadius(defaultPlatform.maxInaccuracy);
-    for (const r of [minInaccRadius, maxInaccRadius]) {
+  if (state.positions.length > 0 && state.target) {
+    let overallMin = Infinity;
+    let overallMax = -Infinity;
+    let currentMax = -Infinity;
+
+    for (const pos of state.positions) {
+      const gunPlat = ARTILLERY_PLATFORMS[pos.platformIndex ?? state.defaultPlatformIndex];
+      if (!gunPlat) continue;
+      if (gunPlat.minInaccuracy < overallMin) overallMin = gunPlat.minInaccuracy;
+      if (gunPlat.maxInaccuracy > overallMax) overallMax = gunPlat.maxInaccuracy;
+      const dist = crsDistanceMeters(pos.point, state.target);
+      const inacc = interpolateInaccuracy(gunPlat, dist);
+      if (inacc > currentMax) currentMax = inacc;
+    }
+
+    // Min and max inaccuracy bounds across all guns (gray dashed)
+    for (const r of [metersToRadius(overallMin), metersToRadius(overallMax)]) {
       inaccFeatures.push({
         type: 'Feature',
         properties: { color: '#444444', weight: 1, opacity: 0.5, fillColor: 'transparent', fillOpacity: 0 },
@@ -488,22 +510,13 @@ function refreshAll(map: maplibregl.Map, sync = true): void {
       });
     }
 
-    // Average inaccuracy circle
-    let totalInaccuracy = 0;
-    for (const pos of state.positions) {
-      const gunPlat = ARTILLERY_PLATFORMS[pos.platformIndex ?? state.defaultPlatformIndex];
-      const dist = crsDistanceMeters(pos.point, state.target);
-      totalInaccuracy += interpolateInaccuracy(gunPlat || defaultPlatform, dist);
-    }
-    const avgInaccuracy = totalInaccuracy / state.positions.length;
-    const avgRadius = metersToRadius(avgInaccuracy);
-
+    // Current worst-case inaccuracy across all guns (red solid)
     inaccFeatures.push({
       type: 'Feature',
       properties: { color: '#ef5350', weight: 1.5, opacity: 1, fillColor: '#ef5350', fillOpacity: 0.05 },
       geometry: {
         type: 'Polygon',
-        coordinates: [circleCoords(state.target, avgRadius)],
+        coordinates: [circleCoords(state.target, metersToRadius(currentMax))],
       },
     });
   }

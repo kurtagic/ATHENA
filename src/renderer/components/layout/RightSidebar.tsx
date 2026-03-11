@@ -147,7 +147,7 @@ function PlatformCell({
             {platformShortName(platformIndex)}
           </span>
         </SelectTrigger>
-        <SelectContent className="bg-[#1a1a1e] border-[var(--color-border-tactical)] text-white">
+        <SelectContent className="bg-[#1a1a1e] border-[var(--color-border-tactical)] text-white max-h-[600px]">
           {groups.map(([type, platforms], gi) => (
             <React.Fragment key={type}>
               {gi > 0 && <SelectSeparator className="bg-white/10 my-1.5" />}
@@ -155,7 +155,7 @@ function PlatformCell({
                 <SelectLabel className="text-[var(--color-gold)]/70 text-[14px] font-medium uppercase tracking-[0.1em] mb-0.5">{type}</SelectLabel>
                 {platforms.map(({ platform, index }) => (
                   <SelectItem key={index} value={String(index)} className="text-[12px] focus:bg-white/10 focus:text-white">
-                    <span className={factionColor(platform.faction)}>{platformDisplayName(platform)}</span>
+                    <span className={factionColor(platform.faction)}>{platformDisplayName(platform, type === 'Ships')}</span>
                   </SelectItem>
                 ))}
               </SelectGroup>
@@ -186,12 +186,11 @@ function RecommendedSolution({ solution }: { solution: ArtillerySolution }) {
       style={{ borderLeftColor: borderColor }}
     >
       <div className="flex items-center gap-1.5 mb-1.5">
-        <span className="text-[var(--color-gold)] text-[11px] font-bold">&#9733; {solution.label}</span>
+        <span className="text-[var(--color-gold)] text-[14px] font-bold">&#9733; {solution.label}</span>
       </div>
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3 font-mono text-[14px] text-[var(--color-gold)] tabular-nums">
-          <span>Dist: {solution.distanceM.toFixed(1)}m</span>
-          <span>Az: {solution.azimuthDeg.toFixed(1)}&deg;</span>
+        <div className="flex items-center gap-3 font-mono text-[17px] text-[var(--color-gold)] tabular-nums">
+          <span>Fire Solution: {solution.distanceM.toFixed(1)}m, {solution.azimuthDeg.toFixed(1)}&deg;</span>
         </div>
       </div>
       {solution.windDriftM > 0 && (
@@ -206,10 +205,10 @@ function RecommendedSolution({ solution }: { solution: ArtillerySolution }) {
           <span className="arty-badge-oor">Out of Range</span>
         )}
         <button
-          className="flex items-center gap-1 text-[10px] text-white/40 hover:text-white/70 transition-colors cursor-pointer bg-transparent border-none"
+          className="flex items-center gap-1.5 text-[13px] text-white/40 hover:text-white/70 transition-colors cursor-pointer bg-transparent border-none"
           onClick={handleCopy}
         >
-          <Copy size={10} />
+          <Copy size={13} />
           {copied ? 'Copied!' : 'Copy'}
         </button>
       </div>
@@ -225,6 +224,12 @@ export function RightSidebar() {
   const hasTarget = useArtilleryStore((s) => s.hasTarget);
   const hasImpact = useArtilleryStore((s) => s.hasImpact);
   const pinnedGuns = useArtilleryStore((s) => s.pinnedGuns);
+  const showWarden = useArtilleryStore((s) => s.showWarden);
+  const showColonial = useArtilleryStore((s) => s.showColonial);
+  const showShips = useArtilleryStore((s) => s.showShips);
+  const toggleShowWarden = useArtilleryStore((s) => s.toggleShowWarden);
+  const toggleShowColonial = useArtilleryStore((s) => s.toggleShowColonial);
+  const toggleShowShips = useArtilleryStore((s) => s.toggleShowShips);
   const map = useMapStore((s) => s.mapInstance);
   const detailMode = useMapStore((s) => s.detailMode);
   const artSidebarOpen = useMapStore((s) => s.artSidebarOpen);
@@ -233,14 +238,42 @@ export function RightSidebar() {
   const hasGuns = solutions.length > 0;
 
   const groups = useMemo(() => {
-    const map = new Map<string, { platform: typeof ARTILLERY_PLATFORMS[number]; index: number }[]>();
+    const typeOrder = ['120mm', '150mm', '3C-High Explosive Rocket', '4C-Fire Rocket', 'Mortar', '300mm'];
+    const factionOrder = (a: { platform: typeof ARTILLERY_PLATFORMS[number] }, b: { platform: typeof ARTILLERY_PLATFORMS[number] }) => {
+      const rank = (f: string) => f === 'WARDEN' ? 0 : f === 'BOTH' ? 1 : 2;
+      return rank(a.platform.faction) - rank(b.platform.faction);
+    };
+    const factionVisible = (faction: string) => {
+      if (faction === 'BOTH') return showWarden || showColonial;
+      if (faction === 'WARDEN') return showWarden;
+      if (faction === 'COLONIAL') return showColonial;
+      return true;
+    };
+
+    const typeMap = new Map<string, { platform: typeof ARTILLERY_PLATFORMS[number]; index: number }[]>();
+    const ships: { platform: typeof ARTILLERY_PLATFORMS[number]; index: number }[] = [];
+
     ARTILLERY_PLATFORMS.forEach((p, i) => {
-      const list = map.get(p.type) || [];
+      if (!factionVisible(p.faction)) return;
+      if (p.chassis === 'ship') {
+        ships.push({ platform: p, index: i });
+        return;
+      }
+      const list = typeMap.get(p.type) || [];
       list.push({ platform: p, index: i });
-      map.set(p.type, list);
+      typeMap.set(p.type, list);
     });
-    return Array.from(map.entries());
-  }, []);
+
+    const result: [string, { platform: typeof ARTILLERY_PLATFORMS[number]; index: number }[]][] = [];
+    for (const type of typeOrder) {
+      const list = typeMap.get(type);
+      if (list && list.length > 0) result.push([type, list.sort(factionOrder)]);
+    }
+    if (showShips && ships.length > 0) {
+      result.push(['Ships', ships.sort(factionOrder)]);
+    }
+    return result;
+  }, [showWarden, showColonial, showShips]);
 
   const mainSolution = useMemo(() => {
     if (!hasTarget || solutions.length === 0) return null;
@@ -332,6 +365,25 @@ export function RightSidebar() {
           >
             Platform
           </label>
+          <div className="flex items-center gap-1.5">
+            {([
+              { label: 'Warden', active: showWarden, toggle: toggleShowWarden },
+              { label: 'Colonial', active: showColonial, toggle: toggleShowColonial },
+              { label: 'Ships', active: showShips, toggle: toggleShowShips },
+            ] as const).map(({ label, active, toggle }) => (
+              <button
+                key={label}
+                className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-[0.08em] cursor-pointer transition-all duration-150 border ${
+                  active
+                    ? 'bg-[var(--color-gold-dim)] border-[var(--color-gold)] text-[var(--color-gold)]'
+                    : 'bg-transparent border-white/15 text-white/35 hover:border-white/30 hover:text-white/55'
+                }`}
+                onClick={toggle}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
           <Select
             value={String(platformIndex)}
             onValueChange={(v) => { if (map) setPlatformFromUI(Number(v), map); }}
@@ -339,7 +391,7 @@ export function RightSidebar() {
             <SelectTrigger className="bg-[var(--color-surface-inset)] border-[var(--color-border-tactical)] text-white text-[13px] h-10">
               <SelectValue />
             </SelectTrigger>
-            <SelectContent className="bg-[#1a1a1e] border-[var(--color-border-tactical)] text-white">
+            <SelectContent className="bg-[#1a1a1e] border-[var(--color-border-tactical)] text-white max-h-[600px]">
               {groups.map(([type, platforms], gi) => (
                 <React.Fragment key={type}>
                   {gi > 0 && <SelectSeparator className="bg-white/10 my-1.5" />}
@@ -347,7 +399,7 @@ export function RightSidebar() {
                     <SelectLabel className="text-[var(--color-gold)]/70 text-[14px] font-medium uppercase tracking-[0.1em] mb-0.5">{type}</SelectLabel>
                     {platforms.map(({ platform, index }) => (
                       <SelectItem key={index} value={String(index)} className="text-[13px] focus:bg-white/10 focus:text-white">
-                        <span className={factionColor(platform.faction)}>{platformDisplayName(platform)}</span>
+                        <span className={factionColor(platform.faction)}>{platformDisplayName(platform, type === 'Ships')}</span>
                       </SelectItem>
                     ))}
                   </SelectGroup>

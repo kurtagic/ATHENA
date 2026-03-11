@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { DEFAULT_PLATFORM_INDEX } from '../data/artilleryPlatforms';
 
 export type PlacementMode = 'idle' | 'placing-arty' | 'placing-target' | 'placing-impact';
 
@@ -27,18 +28,24 @@ interface ArtilleryStoreState {
   windDirection: number | null;
   windStrength: number;
   pinnedGuns: Set<number>;
+  showWarden: boolean;
+  showColonial: boolean;
+  showShips: boolean;
   setPlacementMode: (mode: PlacementMode) => void;
   setPlatformIndex: (index: number) => void;
   setSolutions: (solutions: ArtillerySolution[], hasTarget: boolean, hasImpact: boolean) => void;
   setStatusText: (text: string) => void;
   setWind: (direction: number | null, strength: number) => void;
   togglePin: (posIndex: number) => void;
+  toggleShowWarden: () => void;
+  toggleShowColonial: () => void;
+  toggleShowShips: () => void;
   reset: () => void;
 }
 
 export const useArtilleryStore = create<ArtilleryStoreState>((set) => ({
   placementMode: 'idle',
-  platformIndex: 0,
+  platformIndex: DEFAULT_PLATFORM_INDEX,
   statusText: '',
   solutions: [],
   hasTarget: false,
@@ -46,6 +53,9 @@ export const useArtilleryStore = create<ArtilleryStoreState>((set) => ({
   windDirection: null,
   windStrength: 0,
   pinnedGuns: new Set<number>(),
+  showWarden: true,
+  showColonial: false,
+  showShips: false,
   setPlacementMode: (mode) => set({ placementMode: mode }),
   setPlatformIndex: (index) => set({ platformIndex: index }),
   setSolutions: (solutions, hasTarget, hasImpact) => set({ solutions, hasTarget, hasImpact }),
@@ -57,9 +67,12 @@ export const useArtilleryStore = create<ArtilleryStoreState>((set) => ({
     else next.add(posIndex);
     return { pinnedGuns: next };
   }),
+  toggleShowWarden: () => set((state) => ({ showWarden: !state.showWarden })),
+  toggleShowColonial: () => set((state) => ({ showColonial: !state.showColonial })),
+  toggleShowShips: () => set((state) => ({ showShips: !state.showShips })),
   reset: () => set({
     placementMode: 'idle',
-    platformIndex: 0,
+    platformIndex: DEFAULT_PLATFORM_INDEX,
     statusText: '',
     solutions: [],
     hasTarget: false,
@@ -67,5 +80,8 @@ export const useArtilleryStore = create<ArtilleryStoreState>((set) => ({
     windDirection: null,
     windStrength: 0,
     pinnedGuns: new Set<number>(),
+    showWarden: true,
+    showColonial: false,
+    showShips: false,
   }),
 }));

@@ -11,7 +11,7 @@ const KEYBIND_DEFAULTS: Record<string, string> = {
 
 const KEYBIND_ACTIONS = [
   { key: 'toggleOverlay' as const, label: 'Toggle Overlay' },
-  { key: 'pushToTalk' as const, label: 'Push to Talk' },
+  { key: 'pushToTalk' as const, label: 'Toggle to Talk' },
 ];
 
 export function KeybindsTab() {
