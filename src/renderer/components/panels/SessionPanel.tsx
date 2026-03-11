@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Users, Crown, X, Check, Copy, LogOut, Loader2, Volume2, Phone, PhoneOff } from 'lucide-react';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useVoiceStore } from '../../stores/voiceStore';
@@ -7,7 +7,7 @@ import { session } from '../../multiplayer/sessionManager';
 import { voice } from '../../multiplayer/voiceManager';
 import { acceleratorToDisplay } from '../../lib/keybindUtils';
 
-import { ensureConnected } from '../../multiplayer/connectionHelper';
+import { ensureConnected, getSavedDisplayName } from '../../multiplayer/connectionHelper';
 
 export function SessionPanel() {
   const status = useSessionStore((s) => s.status);
@@ -73,6 +73,13 @@ function MainView() {
   );
   const [joinCode, setJoinCode] = useState('');
   const [busy, setBusy] = useState(false);
+
+  // Load saved display name from settings on mount
+  useEffect(() => {
+    getSavedDisplayName().then((saved) => {
+      if (saved) setName(saved);
+    });
+  }, []);
 
   const handleCreate = async () => {
     if (!name.trim()) return;
@@ -236,7 +243,7 @@ function LobbyView({
 
       {/* Member list */}
       <span className="text-[10px] uppercase tracking-[0.12em] text-white/30 font-semibold px-1 mt-1">
-        Members ({members.length})
+        Members ({members.length}/16)
       </span>
       <div className="flex flex-col gap-0.5 max-h-[150px] overflow-y-auto">
         {members.map((m) => {

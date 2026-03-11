@@ -1,11 +1,13 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import type maplibregl from 'maplibre-gl';
-import { Crosshair, Target, Flame, Trash2, Shield, Check, Copy, ChevronRight, ChevronLeft, Pin } from 'lucide-react';
+import { Crosshair, Target, Flame, Trash2, Shield, Check, Copy, ChevronRight, ChevronLeft, Pin, Megaphone } from 'lucide-react';
 import { useArtilleryStore } from '../../stores/artilleryStore';
 import { useMapStore } from '../../stores/mapStore';
 import { ARTILLERY_PLATFORMS, platformDisplayName } from '../../data/artilleryPlatforms';
 import { setPlacementMode, clearAll, clearTarget, clearImpact, setMainGun, removeArtillery, renameGun, setPlatformFromUI, setGunPlatform, refreshPinnedData } from '../../map/artillery';
 import { WindCompass } from '../artillery/WindCompass';
+import { session } from '../../multiplayer/sessionManager';
+import { useSessionStore } from '../../stores/sessionStore';
 import type { PlacementMode, ArtillerySolution } from '../../stores/artilleryStore';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectSeparator, SelectTrigger, SelectValue } from '../ui/select';
 
@@ -235,6 +237,7 @@ export function RightSidebar() {
   const artSidebarOpen = useMapStore((s) => s.artSidebarOpen);
   const setArtSidebarOpen = useMapStore((s) => s.setArtSidebarOpen);
 
+  const isConnected = useSessionStore((s) => s.lobbyId) !== null;
   const hasGuns = solutions.length > 0;
 
   const groups = useMemo(() => {
@@ -413,6 +416,28 @@ export function RightSidebar() {
             <ActionButton id="arty-set-target-btn" icon={<Target size={14} />} label="Mark Target" variant={getSetTargetVariant()} onClick={handleSetTarget} />
             <ActionButton id="arty-mark-impact-btn" icon={<Flame size={14} />} label="Mark Impact" variant={getMarkImpactVariant()} colSpan onClick={handleMarkImpact} />
           </div>
+          {isConnected && (
+            <div className="grid grid-cols-2 gap-1.5">
+              <button
+                className="flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-[var(--radius-sm)] font-bold text-[12px] uppercase tracking-[0.1em] cursor-pointer transition-all duration-150 active:scale-[0.97] bg-emerald-950/40 text-emerald-400 border border-emerald-500/50 hover:bg-emerald-950/60 hover:text-emerald-300 hover:border-emerald-400/70 shadow-[0_1px_3px_rgba(0,0,0,0.3)]"
+                onClick={() => {
+                  session.sendCommandBanner('fire');
+                }}
+              >
+                <Megaphone size={14} />
+                Fire
+              </button>
+              <button
+                className="flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-[var(--radius-sm)] font-bold text-[12px] uppercase tracking-[0.1em] cursor-pointer transition-all duration-150 active:scale-[0.97] bg-red-950/40 text-red-400 border border-red-500/50 hover:bg-red-950/60 hover:text-red-300 hover:border-red-400/70 shadow-[0_1px_3px_rgba(0,0,0,0.3)]"
+                onClick={() => {
+                  session.sendCommandBanner('stop');
+                }}
+              >
+                <Megaphone size={14} />
+                Stop
+              </button>
+            </div>
+          )}
           <div className="flex items-center gap-0 text-[10px] uppercase tracking-[0.06em]">
             <span className="text-white/30 mr-1.5">Clear:</span>
             <button className="arty-clear-link" onClick={handleClearTarget}>Target</button>

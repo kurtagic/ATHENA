@@ -135,6 +135,12 @@ export class SessionManager {
     this.send({ type: 'voice-ice', targetId, candidate });
   }
 
+  // ── Command banner ──
+
+  sendCommandBanner(command: 'fire' | 'stop'): void {
+    this.send({ type: 'command-banner', command });
+  }
+
   // ── Internal ──
 
   private openWebSocket(url: string, displayName: string): void {

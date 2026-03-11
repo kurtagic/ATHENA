@@ -31,6 +31,9 @@ contextBridge.exposeInMainWorld('athena', {
   updatePinnedArtillery: (data: unknown[]) => {
     ipcRenderer.send('update-pinned-artillery', data);
   },
+  showCommandBanner: (command: string) => {
+    ipcRenderer.send('show-command-banner', command);
+  },
   quit: () => {
     ipcRenderer.send('quit');
   },

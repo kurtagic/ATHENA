@@ -7,6 +7,7 @@ import { setArtilleryHexId, restoreArtilleryState } from '../map/artillery';
 import { hexEntityData, hexDrawingData, hexArtilleryData } from '../data/store';
 import { useSessionStore } from '../stores/sessionStore';
 import { useMapStore } from '../stores/mapStore';
+import { useBannerStore } from '../stores/bannerStore';
 import type { ServerMessage, ServerBroadcast, FullSnapshotMsg, StrokeEntity } from './protocol';
 
 let initialized = false;
@@ -53,10 +54,10 @@ export function initMultiplayerSync(): void {
 }
 
 function routeMessage(msg: ServerMessage): void {
-  // All entity broadcasts are echo — skip messages from self
+  // All entity broadcasts are echo — skip messages from self (except command-banner)
   const senderId = (msg as any).senderId;
   const myId = useSessionStore.getState().memberId;
-  if (senderId && myId && senderId === myId) return;
+  if (senderId && myId && senderId === myId && msg.type !== 'command-banner') return;
 
   const currentHexId = useMapStore.getState().detailMode?.apiName || '';
 
@@ -115,6 +116,13 @@ function routeMessage(msg: ServerMessage): void {
     case 'full-snapshot':
       applyFullSnapshot(msg as FullSnapshotMsg, currentHexId);
       break;
+
+    case 'command-banner': {
+      const bannerPayload = (msg as any).payload ?? msg;
+      useBannerStore.getState().showBanner(bannerPayload.command);
+      window.athena.showCommandBanner(bannerPayload.command);
+      break;
+    }
   }
 }
 

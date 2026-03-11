@@ -8,6 +8,7 @@ import { loadSettings } from './settings';
 import { registerOverlayHotkey, registerPttHotkey } from './hotkeys';
 import { unmuteOtherApps } from './audioSilencer';
 import { destroyPip } from './pipWindow';
+import { showBannerWindow, destroyBannerWindow } from './bannerWindow';
 
 // Handle Squirrel install/update/uninstall events
 const squirrelArg = process.argv[1];
@@ -92,6 +93,7 @@ function createWindow(): void {
   mainWindow.on('closed', () => {
     mainWindow = null;
     destroyPip();
+    destroyBannerWindow();
   });
 }
 
@@ -104,11 +106,21 @@ ipcMain.on('quit', () => {
   app.quit();
 });
 
+ipcMain.on('show-command-banner', (_event, command: string) => {
+  if (command === 'fire' || command === 'stop') {
+    // Only show the Electron banner window when the overlay is hidden
+    if (mainWindow && !mainWindow.isDestroyed() && mainWindow.getOpacity() === 0) {
+      showBannerWindow(command);
+    }
+  }
+});
+
 app.on('will-quit', () => {
   globalShortcut.unregisterAll();
   stopPoller();
   unmuteOtherApps();
   destroyPip();
+  destroyBannerWindow();
 });
 
 app.on('window-all-closed', () => {

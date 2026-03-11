@@ -21,7 +21,7 @@ interface DrawStoreState {
 }
 
 export const useDrawStore = create<DrawStoreState>((set) => ({
-  activeColor: '#ff0000',
+  activeColor: '#ef4444',
   eraserActive: false,
   eraserPosition: null,
   eraserRadius: 20,
@@ -46,7 +46,7 @@ export const useDrawStore = create<DrawStoreState>((set) => ({
   setStrokeWidth: (width) => set({ strokeWidth: width }),
   setStrokeOpacity: (opacity) => set({ strokeOpacity: opacity }),
   reset: () => set({
-    activeColor: '#ff0000',
+    activeColor: '#ef4444',
     eraserActive: false,
     eraserPosition: null,
     eraserRadius: 20,

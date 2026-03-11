@@ -347,8 +347,8 @@ function handleMapClick(e: maplibregl.MapMouseEvent, map: maplibregl.Map): void 
 
   switch (state.placementMode) {
     case 'placing-arty':
-      if (state.positions.length >= 10) {
-        useArtilleryStore.getState().setStatusText('Max 10 gun positions');
+      if (state.positions.length >= 32) {
+        useArtilleryStore.getState().setStatusText('Max 32 gun positions');
         setPlacementMode('idle');
         return;
       }

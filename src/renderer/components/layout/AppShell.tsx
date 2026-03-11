@@ -10,6 +10,7 @@ import { RightSidebar } from './RightSidebar';
 import { BottomBar } from './BottomBar';
 import { SessionPanel } from '../panels/SessionPanel';
 import { SettingsPage } from '../settings/SettingsPage';
+import { CommandBanner } from '../artillery/CommandBanner';
 
 export function AppShell() {
   const detailMode = useMapStore((s) => s.detailMode);
@@ -73,6 +74,7 @@ export function AppShell() {
       <LeftSidebar />
       <RightSidebar />
       {settingsOpen && <SettingsPage />}
+      <CommandBanner />
     </>
   );
 }

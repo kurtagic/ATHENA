@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Loader2 } from 'lucide-react';
-import { ensureConnected } from '../../multiplayer/connectionHelper';
+import { ensureConnected, getSavedDisplayName } from '../../multiplayer/connectionHelper';
 import { session } from '../../multiplayer/sessionManager';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useAppStore } from '../../stores/appStore';
@@ -16,6 +16,12 @@ export function CreateLobbyScreen({ onBack }: Props) {
   const [lobbyName, setLobbyName] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    getSavedDisplayName().then((saved) => {
+      if (saved) setName(saved);
+    });
+  }, []);
 
   const [settings, setSettings] = useState({
     requireApproval: true,

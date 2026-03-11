@@ -554,3 +554,15 @@ html, body {
   border-width: 0 2px 2px 0;
   transform: rotate(45deg);
 }
+
+/* ── Command banner animation ──────────────────────────── */
+@keyframes banner-flash {
+  0% { opacity: 0; transform: scale(0.95); }
+  10% { opacity: 1; transform: scale(1); }
+  80% { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(1.02); }
+}
+
+.animate-banner-flash {
+  animation: banner-flash 1.5s ease-out forwards;
+}

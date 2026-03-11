@@ -144,6 +144,11 @@ export interface EntityClearMsg {
   entityType?: EntityType;
 }
 
+export interface CommandBannerMsg {
+  type: 'command-banner';
+  command: 'fire' | 'stop';
+}
+
 export interface VoiceJoinMsg { type: 'voice-join'; }
 export interface VoiceLeaveMsg { type: 'voice-leave'; }
 
@@ -287,7 +292,8 @@ export type ClientMessage =
   | VoiceLeaveMsg
   | VoiceOfferMsg
   | VoiceAnswerMsg
-  | VoiceIceMsg;
+  | VoiceIceMsg
+  | CommandBannerMsg;
 
 export type ServerMessage =
   | WelcomeMsg

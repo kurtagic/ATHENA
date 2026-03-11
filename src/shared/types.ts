@@ -54,6 +54,7 @@ export interface AudioSettings {
 
 export interface GeneralSettings {
   windowedMode: boolean;
+  displayName: string;
 }
 
 export interface Settings {
@@ -83,6 +84,7 @@ export interface AthenaAPI {
   getSettings: () => Promise<Settings>;
   setSettings: (partial: SettingsPartial) => Promise<{ settings: Settings; error?: string }>;
   updatePinnedArtillery: (data: PinnedSolution[]) => void;
+  showCommandBanner: (command: 'fire' | 'stop') => void;
   quit: () => void;
 }
 
