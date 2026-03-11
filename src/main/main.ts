@@ -5,10 +5,11 @@ import { registerTileProtocol } from './protocol';
 import { registerIpcHandlers } from './ipc';
 import { startPoller, stopPoller } from './warPoller';
 import { loadSettings } from './settings';
-import { registerOverlayHotkey, registerPttHotkey } from './hotkeys';
+import { registerOverlayHotkey, registerPttHotkey, registerQuickNotifHotkey } from './hotkeys';
 import { unmuteOtherApps } from './audioSilencer';
 import { destroyPip } from './pipWindow';
-import { showBannerWindow, destroyBannerWindow } from './bannerWindow';
+import { showBannerWindow, destroyBannerWindow, showNotificationWindow, destroyNotificationWindow } from './bannerWindow';
+import { destroyQuickNotifWindow } from './quickNotifWindow';
 
 // Handle Squirrel install/update/uninstall events
 const squirrelArg = process.argv[1];
@@ -89,11 +90,14 @@ function createWindow(): void {
 
   registerOverlayHotkey(settings.keybinds.toggleOverlay, mainWindow);
   registerPttHotkey(settings.keybinds.pushToTalk, mainWindow);
+  registerQuickNotifHotkey(settings.keybinds.quickNotification, mainWindow);
 
   mainWindow.on('closed', () => {
     mainWindow = null;
     destroyPip();
     destroyBannerWindow();
+    destroyNotificationWindow();
+    destroyQuickNotifWindow();
   });
 }
 
@@ -115,12 +119,22 @@ ipcMain.on('show-command-banner', (_event, command: string) => {
   }
 });
 
+ipcMain.on('show-custom-notification', (_event, text: string, senderName: string) => {
+  if (typeof text === 'string' && text.length > 0 && typeof senderName === 'string') {
+    if (mainWindow && !mainWindow.isDestroyed() && mainWindow.getOpacity() === 0) {
+      showNotificationWindow(text, senderName);
+    }
+  }
+});
+
 app.on('will-quit', () => {
   globalShortcut.unregisterAll();
   stopPoller();
   unmuteOtherApps();
   destroyPip();
   destroyBannerWindow();
+  destroyNotificationWindow();
+  destroyQuickNotifWindow();
 });
 
 app.on('window-all-closed', () => {

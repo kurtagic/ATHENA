@@ -107,6 +107,169 @@ export function showBannerWindow(command: 'fire' | 'stop'): void {
   }, 1600);
 }
 
+// ── Custom notification native window (single window, stacked cards) ──
+
+let notifWin: BrowserWindow | null = null;
+let notifId = 0;
+const activeNotifs: { id: number; timer: ReturnType<typeof setTimeout> }[] = [];
+
+const NOTIF_WIN_W = 600;
+const NOTIF_WIN_H = 400;
+
+function getNotifHTML(): string {
+  return `<!DOCTYPE html>
+<html><head><style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { background: transparent; overflow: hidden; }
+  body {
+    display: flex; flex-direction: column; align-items: center;
+    width: 100vw; padding-top: 16px; gap: 8px;
+  }
+  .card {
+    padding: 16px 32px;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 213, 79, 0.4);
+    background: linear-gradient(180deg, rgba(40, 32, 8, 0.85) 0%, rgba(24, 20, 6, 0.92) 100%);
+    box-shadow: 0 0 20px rgba(255, 213, 79, 0.15), 0 4px 16px rgba(0, 0, 0, 0.4);
+    animation: notif-enter 3s ease-out forwards;
+    max-width: 500px;
+  }
+  .sender {
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: rgba(255, 213, 79, 0.6);
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+  .text {
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    font-size: 24px;
+    font-weight: 700;
+    color: #ffd54f;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  @keyframes notif-enter {
+    0% { opacity: 0; transform: translateY(-12px); }
+    8% { opacity: 1; transform: translateY(0); }
+    75% { opacity: 1; transform: translateY(0); }
+    100% { opacity: 0; transform: translateY(-4px); }
+  }
+</style></head><body>
+<script>
+  function addNotification(id, text, senderName) {
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.dataset.id = id;
+    card.innerHTML = '<div class="sender">' + esc(senderName) + '</div><div class="text">' + esc(text) + '</div>';
+    document.body.appendChild(card);
+  }
+  function removeNotification(id) {
+    const el = document.querySelector('[data-id="' + id + '"]');
+    if (el) el.remove();
+  }
+  function esc(s) {
+    const d = document.createElement('div');
+    d.textContent = s;
+    return d.innerHTML;
+  }
+</script>
+</body></html>`;
+}
+
+function ensureNotifWindow(): void {
+  if (notifWin && !notifWin.isDestroyed()) return;
+
+  const { width: screenW } = screen.getPrimaryDisplay().bounds;
+
+  notifWin = new BrowserWindow({
+    width: NOTIF_WIN_W,
+    height: NOTIF_WIN_H,
+    x: Math.round((screenW - NOTIF_WIN_W) / 2),
+    y: 0,
+    frame: false,
+    transparent: true,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    resizable: false,
+    focusable: false,
+    show: false,
+    webPreferences: {
+      contextIsolation: false,
+      nodeIntegration: false,
+    },
+  });
+
+  notifWin.setAlwaysOnTop(true, 'screen-saver');
+  notifWin.setIgnoreMouseEvents(true);
+
+  const html = getNotifHTML();
+  notifWin.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+
+  notifWin.webContents.once('did-finish-load', () => {
+    if (notifWin && !notifWin.isDestroyed()) {
+      notifWin.showInactive();
+    }
+  });
+
+  notifWin.on('closed', () => {
+    notifWin = null;
+    for (const n of activeNotifs) clearTimeout(n.timer);
+    activeNotifs.length = 0;
+  });
+}
+
+function removeNotif(id: number): void {
+  const idx = activeNotifs.findIndex((n) => n.id === id);
+  if (idx !== -1) activeNotifs.splice(idx, 1);
+
+  if (notifWin && !notifWin.isDestroyed()) {
+    notifWin.webContents.executeJavaScript(`removeNotification(${id})`).catch(() => {});
+  }
+
+  // Destroy window when all notifications are gone
+  if (activeNotifs.length === 0 && notifWin && !notifWin.isDestroyed()) {
+    notifWin.destroy();
+    notifWin = null;
+  }
+}
+
+export function showNotificationWindow(text: string, senderName: string): void {
+  ensureNotifWindow();
+
+  const id = ++notifId;
+  const escaped = (s: string) => JSON.stringify(s);
+
+  const ready = () => {
+    if (notifWin && !notifWin.isDestroyed()) {
+      notifWin.webContents.executeJavaScript(
+        `addNotification(${id}, ${escaped(text)}, ${escaped(senderName)})`
+      ).catch(() => {});
+    }
+  };
+
+  // If window just created, wait for load; otherwise inject immediately
+  if (notifWin && !notifWin.isDestroyed() && !notifWin.webContents.isLoading()) {
+    ready();
+  } else if (notifWin && !notifWin.isDestroyed()) {
+    notifWin.webContents.once('did-finish-load', ready);
+  }
+
+  const timer = setTimeout(() => removeNotif(id), 3100);
+  activeNotifs.push({ id, timer });
+}
+
+export function destroyNotificationWindow(): void {
+  for (const n of activeNotifs) clearTimeout(n.timer);
+  activeNotifs.length = 0;
+  if (notifWin && !notifWin.isDestroyed()) {
+    notifWin.destroy();
+    notifWin = null;
+  }
+}
+
 export function destroyBannerWindow(): void {
   if (hideTimer) {
     clearTimeout(hideTimer);

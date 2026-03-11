@@ -46,6 +46,7 @@ export interface WarStatus {
 export interface KeybindSettings {
   toggleOverlay: string; // Electron accelerator, e.g. "`", "F1", "CommandOrControl+Shift+O"
   pushToTalk: string; // e.g. "Y", "F2"
+  quickNotification: string; // e.g. "-"
 }
 
 export interface AudioSettings {
@@ -85,6 +86,10 @@ export interface AthenaAPI {
   setSettings: (partial: SettingsPartial) => Promise<{ settings: Settings; error?: string }>;
   updatePinnedArtillery: (data: PinnedSolution[]) => void;
   showCommandBanner: (command: 'fire' | 'stop') => void;
+  showCustomNotification: (text: string, senderName: string) => void;
+  onSendQuickNotification: (callback: (text: string) => void) => void;
+  onCheckLobbyStatus: (callback: () => void) => void;
+  sendLobbyStatusResult: (inLobby: boolean) => void;
   quit: () => void;
 }
 

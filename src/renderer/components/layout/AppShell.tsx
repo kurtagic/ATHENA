@@ -11,6 +11,7 @@ import { BottomBar } from './BottomBar';
 import { SessionPanel } from '../panels/SessionPanel';
 import { SettingsPage } from '../settings/SettingsPage';
 import { CommandBanner } from '../artillery/CommandBanner';
+import { NotificationStack } from '../notifications/NotificationStack';
 
 export function AppShell() {
   const detailMode = useMapStore((s) => s.detailMode);
@@ -75,6 +76,7 @@ export function AppShell() {
       <RightSidebar />
       {settingsOpen && <SettingsPage />}
       <CommandBanner />
+      <NotificationStack />
     </>
   );
 }

@@ -6,7 +6,8 @@ import type { Settings, SettingsPartial } from '../shared/types';
 const DEFAULT_SETTINGS: Settings = {
   keybinds: {
     toggleOverlay: '`',
-    pushToTalk: 'Y',
+    pushToTalk: 'F5',
+    quickNotification: '-',
   },
   audio: {
     autoSilenceOnVoice: false,

@@ -141,6 +141,12 @@ export class SessionManager {
     this.send({ type: 'command-banner', command });
   }
 
+  // ── Custom notifications ──
+
+  sendCustomNotification(text: string): void {
+    this.send({ type: 'custom-notification', text });
+  }
+
   // ── Internal ──
 
   private openWebSocket(url: string, displayName: string): void {

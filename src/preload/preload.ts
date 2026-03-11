@@ -34,6 +34,18 @@ contextBridge.exposeInMainWorld('athena', {
   showCommandBanner: (command: string) => {
     ipcRenderer.send('show-command-banner', command);
   },
+  showCustomNotification: (text: string, senderName: string) => {
+    ipcRenderer.send('show-custom-notification', text, senderName);
+  },
+  onSendQuickNotification: (callback: (text: string) => void) => {
+    ipcRenderer.on('send-quick-notification', (_event, text) => callback(text));
+  },
+  onCheckLobbyStatus: (callback: () => void) => {
+    ipcRenderer.on('check-lobby-status', () => callback());
+  },
+  sendLobbyStatusResult: (inLobby: boolean) => {
+    ipcRenderer.send('lobby-status-result', inLobby);
+  },
   quit: () => {
     ipcRenderer.send('quit');
   },

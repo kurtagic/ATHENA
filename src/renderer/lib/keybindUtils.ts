@@ -19,6 +19,24 @@ const KEY_MAP: Record<string, string> = {
   '/': '/',
 };
 
+const VALID_KEYS = new Set([
+  // Letters
+  ...'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split(''),
+  // Digits
+  ...'0123456789'.split(''),
+  // Function keys
+  ...Array.from({ length: 24 }, (_, i) => `F${i + 1}`),
+  // Named keys
+  'Space', 'Tab', 'Enter', 'Backspace', 'Delete', 'Escape',
+  'Up', 'Down', 'Left', 'Right',
+  'Home', 'End', 'PageUp', 'PageDown', 'Insert',
+  'PrintScreen', 'ScrollLock', 'Pause',
+  'MediaPlayPause', 'MediaStop', 'MediaNextTrack', 'MediaPreviousTrack',
+  'VolumeUp', 'VolumeDown', 'VolumeMute',
+  // Punctuation Electron supports
+  '`', '-', '=', '[', ']', '\\', ';', "'", ',', '.', '/',
+]);
+
 export function keyEventToAccelerator(e: KeyboardEvent): string | null {
   if (MODIFIER_KEYS.has(e.key)) return null;
 
@@ -33,6 +51,8 @@ export function keyEventToAccelerator(e: KeyboardEvent): string | null {
   if (key.length === 1 && key >= 'a' && key <= 'z') {
     key = key.toUpperCase();
   }
+
+  if (!VALID_KEYS.has(key)) return null;
 
   parts.push(key);
   return parts.join('+');

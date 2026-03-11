@@ -329,7 +329,7 @@ function VoiceButton() {
       ) : (
         <>
           <Phone size={11} />
-          Join Voice (PTT: {acceleratorToDisplay(pttKey)})
+          Join Voice (TTT: {acceleratorToDisplay(pttKey)})
         </>
       )}
     </button>

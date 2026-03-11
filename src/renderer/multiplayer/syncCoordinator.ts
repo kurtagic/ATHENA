@@ -8,6 +8,7 @@ import { hexEntityData, hexDrawingData, hexArtilleryData } from '../data/store';
 import { useSessionStore } from '../stores/sessionStore';
 import { useMapStore } from '../stores/mapStore';
 import { useBannerStore } from '../stores/bannerStore';
+import { useNotificationStore } from '../stores/notificationStore';
 import type { ServerMessage, ServerBroadcast, FullSnapshotMsg, StrokeEntity } from './protocol';
 
 let initialized = false;
@@ -57,7 +58,7 @@ function routeMessage(msg: ServerMessage): void {
   // All entity broadcasts are echo — skip messages from self (except command-banner)
   const senderId = (msg as any).senderId;
   const myId = useSessionStore.getState().memberId;
-  if (senderId && myId && senderId === myId && msg.type !== 'command-banner') return;
+  if (senderId && myId && senderId === myId && msg.type !== 'command-banner' && msg.type !== 'custom-notification') return;
 
   const currentHexId = useMapStore.getState().detailMode?.apiName || '';
 
@@ -121,6 +122,17 @@ function routeMessage(msg: ServerMessage): void {
       const bannerPayload = (msg as any).payload ?? msg;
       useBannerStore.getState().showBanner(bannerPayload.command);
       window.athena.showCommandBanner(bannerPayload.command);
+      break;
+    }
+
+    case 'custom-notification': {
+      const notifPayload = (msg as any).payload ?? msg;
+      const notifSenderId = (msg as any).senderId;
+      const members = useSessionStore.getState().members;
+      const sender = members.find((m) => m.id === notifSenderId);
+      const senderName = sender?.displayName ?? 'Unknown';
+      useNotificationStore.getState().showNotification(notifPayload.text, senderName);
+      window.athena.showCustomNotification(notifPayload.text, senderName);
       break;
     }
   }

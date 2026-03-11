@@ -15,13 +15,15 @@ export interface SavedStroke {
 }
 
 export interface SavedArtilleryState {
-  positions: { id: number; latlng: [number, number]; label: string; platformIndex?: number }[];
+  positions: { id: number; latlng: [number, number]; label: string; platformIndex?: number; entityId?: string }[];
   target: [number, number] | null;
   impact: [number, number] | null;
   mainGunIndex: number;
   defaultPlatformIndex: number;
   nextId: number;
   nextLabelNum: number;
+  targetEntityId?: string | null;
+  impactEntityId?: string | null;
   windDirection?: number | null;
   windStrength?: number;
 }

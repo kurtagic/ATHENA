@@ -6,12 +6,14 @@ import type { Settings } from '../../../shared/types';
 
 const KEYBIND_DEFAULTS: Record<string, string> = {
   toggleOverlay: '`',
-  pushToTalk: 'Y',
+  pushToTalk: 'F5',
+  quickNotification: '-',
 };
 
 const KEYBIND_ACTIONS = [
   { key: 'toggleOverlay' as const, label: 'Toggle Overlay' },
   { key: 'pushToTalk' as const, label: 'Toggle to Talk' },
+  { key: 'quickNotification' as const, label: 'Quick Notification' },
 ];
 
 export function KeybindsTab() {
@@ -19,6 +21,7 @@ export function KeybindsTab() {
   const error = useSettingsStore((s) => s.error);
   const updateKeybind = useSettingsStore((s) => s.updateKeybind);
   const [listening, setListening] = useState<string | null>(null);
+  const [unsupportedKey, setUnsupportedKey] = useState<string | null>(null);
 
   const handleCapture = useCallback(
     (e: KeyboardEvent) => {
@@ -29,13 +32,21 @@ export function KeybindsTab() {
 
       if (e.key === 'Escape') {
         setListening(null);
+        setUnsupportedKey(null);
         return;
       }
 
       const accel = keyEventToAccelerator(e);
-      if (!accel) return; // modifier-only press
+      if (!accel) {
+        // Show message for non-modifier unsupported keys
+        if (!['Control', 'Shift', 'Alt', 'Meta'].includes(e.key)) {
+          setUnsupportedKey(e.key);
+        }
+        return;
+      }
 
       setListening(null);
+      setUnsupportedKey(null);
       updateKeybind(listening as keyof Settings['keybinds'], accel);
     },
     [listening, updateKeybind, settings]
@@ -83,7 +94,7 @@ export function KeybindsTab() {
                   ? 'bg-white/10 border-white/20 text-white/60'
                   : 'bg-white/[0.05] border-white/10 text-white/50 hover:bg-white/10 hover:text-white/70'
               }`}
-              onClick={() => setListening(isListening ? null : action.key)}
+              onClick={() => { setListening(isListening ? null : action.key); setUnsupportedKey(null); }}
             >
               {isListening ? 'Cancel' : 'Rebind'}
             </button>
@@ -101,6 +112,12 @@ export function KeybindsTab() {
           </div>
         );
       })}
+
+      {unsupportedKey && (
+        <div className="mt-2 px-3 py-2 rounded-[var(--radius-sm)] bg-yellow-500/10 border border-yellow-500/20 text-yellow-400 text-[11px]">
+          "{unsupportedKey}" is not supported. Try a standard key (A-Z, 0-9, F1-F24).
+        </div>
+      )}
 
       {error && (
         <div className="mt-2 px-3 py-2 rounded-[var(--radius-sm)] bg-red-500/10 border border-red-500/20 text-red-400 text-[11px]">

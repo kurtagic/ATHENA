@@ -128,6 +128,7 @@ function renderDataScript(data: PinnedSolution[]): { script: string; needsResize
     return `(() => {
       const row = rows[${i}];
       if (!row) return;
+      row.querySelector('.label').textContent = ${JSON.stringify(d.label)};
       row.querySelector('.dist').textContent = ${JSON.stringify(distText)};
       row.querySelector('.az').textContent = ${JSON.stringify(azText)};
       ${d.inRange ? "row.classList.remove('oor');" : "row.classList.add('oor');"}

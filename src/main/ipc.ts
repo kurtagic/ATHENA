@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { setSelectedHexes } from './warPoller';
 import { getSettings, updateSettings } from './settings';
-import { registerOverlayHotkey, registerPttHotkey } from './hotkeys';
+import { registerOverlayHotkey, registerPttHotkey, registerQuickNotifHotkey } from './hotkeys';
 import { muteOtherApps, unmuteOtherApps } from './audioSilencer';
 import { updatePipData } from './pipWindow';
 import type { SettingsPartial, PinnedSolution } from '../shared/types';
@@ -33,6 +33,7 @@ export function registerIpcHandlers(win: BrowserWindow): void {
   ipcMain.handle('set-settings', (_event, partial: SettingsPartial) => {
     const oldSettings = getSettings();
     const oldKey = oldSettings.keybinds.toggleOverlay;
+    const oldPttKey = oldSettings.keybinds.pushToTalk;
 
     const newSettings = updateSettings(partial);
 
@@ -49,15 +50,27 @@ export function registerIpcHandlers(win: BrowserWindow): void {
       }
     }
 
-    if (partial.keybinds?.pushToTalk && partial.keybinds.pushToTalk !== oldSettings.keybinds.pushToTalk) {
+    if (partial.keybinds?.pushToTalk && partial.keybinds.pushToTalk !== oldPttKey) {
       const pttSuccess = registerPttHotkey(newSettings.keybinds.pushToTalk, win);
       if (!pttSuccess) {
-        const oldPtt = oldSettings.keybinds.pushToTalk;
-        updateSettings({ keybinds: { pushToTalk: oldPtt } });
-        registerPttHotkey(oldPtt, win);
+        updateSettings({ keybinds: { pushToTalk: oldPttKey } });
+        registerPttHotkey(oldPttKey, win);
         return {
           settings: getSettings(),
           error: `Could not register "${partial.keybinds.pushToTalk}". It may be in use by another application.`,
+        };
+      }
+    }
+
+    if (partial.keybinds?.quickNotification && partial.keybinds.quickNotification !== oldSettings.keybinds.quickNotification) {
+      const qnSuccess = registerQuickNotifHotkey(newSettings.keybinds.quickNotification, win);
+      if (!qnSuccess) {
+        const oldQnKey = oldSettings.keybinds.quickNotification;
+        updateSettings({ keybinds: { quickNotification: oldQnKey } });
+        registerQuickNotifHotkey(oldQnKey, win);
+        return {
+          settings: getSettings(),
+          error: `Could not register "${partial.keybinds.quickNotification}". It may be in use by another application.`,
         };
       }
     }

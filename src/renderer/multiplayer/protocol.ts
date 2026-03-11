@@ -149,6 +149,11 @@ export interface CommandBannerMsg {
   command: 'fire' | 'stop';
 }
 
+export interface CustomNotificationMsg {
+  type: 'custom-notification';
+  text: string;
+}
+
 export interface VoiceJoinMsg { type: 'voice-join'; }
 export interface VoiceLeaveMsg { type: 'voice-leave'; }
 
@@ -293,7 +298,8 @@ export type ClientMessage =
   | VoiceOfferMsg
   | VoiceAnswerMsg
   | VoiceIceMsg
-  | CommandBannerMsg;
+  | CommandBannerMsg
+  | CustomNotificationMsg;
 
 export type ServerMessage =
   | WelcomeMsg
