@@ -38,8 +38,8 @@ export function buildMarkerHtml(it: MapItem): { html: string; size: number } {
   return { html, size };
 }
 
-export function updateWarStatus(data: WarStatus): void {
-  console.log('[Athena] War status data:', data);
+export function updateWarStatus(_data: WarStatus): void {
+  // Currently unused — war status displayed via other channels
 }
 
 // Callback for refreshing detail markers when hex items update
@@ -51,8 +51,6 @@ export function setDetailRefreshCallback(cb: (mapName: string) => void): void {
 
 export function updateHexItems(data: HexItemsPayload): void {
   const { mapName, items } = data;
-  console.log('[Athena] updateHexItems:', mapName, 'items =', items.length);
-
   // Cache for detail view
   hexDynamicData[mapName] = items;
 
@@ -72,8 +70,6 @@ export function updateStaticLabels(data: StaticLabelsPayload, map: maplibregl.Ma
     console.warn(`[dataHandlers] updateStaticLabels: resolveHex("${mapName}") returned undefined — skipping ${labels.length} labels`);
     return;
   }
-  console.log('[Athena] updateStaticLabels:', mapName, 'labels =', labels.length);
-
   // Cache for detail view
   hexStaticData[mapName] = labels;
 

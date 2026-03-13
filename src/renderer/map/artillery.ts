@@ -715,9 +715,13 @@ function refreshAll(map: maplibregl.Map): void {
   }
 
   // Update GeoJSON sources
-  (map.getSource('arty-rings') as GeoJSONSource).setData({ type: 'FeatureCollection', features: ringFeatures });
-  (map.getSource('arty-lines') as GeoJSONSource).setData({ type: 'FeatureCollection', features: lineFeatures });
-  (map.getSource('arty-inaccuracy') as GeoJSONSource).setData({ type: 'FeatureCollection', features: inaccFeatures });
+  const ringSrc = map.getSource('arty-rings') as GeoJSONSource | undefined;
+  const lineSrc = map.getSource('arty-lines') as GeoJSONSource | undefined;
+  const inaccSrc = map.getSource('arty-inaccuracy') as GeoJSONSource | undefined;
+  if (!ringSrc || !lineSrc || !inaccSrc) return;
+  ringSrc.setData({ type: 'FeatureCollection', features: ringFeatures });
+  lineSrc.setData({ type: 'FeatureCollection', features: lineFeatures });
+  inaccSrc.setData({ type: 'FeatureCollection', features: inaccFeatures });
   map.triggerRepaint();
 
   // Corrected dot marker

@@ -12,6 +12,7 @@ import { SessionPanel } from '../panels/SessionPanel';
 import { SettingsPage } from '../settings/SettingsPage';
 import { CommandBanner } from '../artillery/CommandBanner';
 import { NotificationStack } from '../notifications/NotificationStack';
+import { DebugPanel } from '../panels/DebugPanel';
 
 export function AppShell() {
   const detailMode = useMapStore((s) => s.detailMode);
@@ -77,6 +78,7 @@ export function AppShell() {
       {settingsOpen && <SettingsPage />}
       <CommandBanner />
       <NotificationStack />
+      <DebugPanel />
     </>
   );
 }

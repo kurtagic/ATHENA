@@ -24,7 +24,6 @@ for (const hex of hexes) {
   hexLookup[hex.hexId] = hex;
   if (hex.apiName !== hex.hexId) hexLookup[hex.apiName] = hex;
 }
-console.log(`[hexMapping] loaded ${hexes.length} hexes, lookup keys: ${Object.keys(hexLookup).length}`);
 
 export function hexImageUrl(hexId: string): string {
   const hex = hexLookup[hexId];

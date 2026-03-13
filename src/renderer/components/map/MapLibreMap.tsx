@@ -73,14 +73,13 @@ export function MapLibreMap() {
 
         athena.loadStaticData().then((staticData: Record<string, any[]> | null) => {
           if (!staticData) {
-            console.log('[Athena] static_data.json not found — run fetch-static first');
+            // static_data.json not found
             return;
           }
           for (const [mapName, labels] of Object.entries(staticData)) {
             updateStaticLabels({ mapName, labels }, map);
           }
-          console.log(`[Athena] Loaded static labels for ${Object.keys(staticData).length} hexes from disk`);
-          onZoomChange();
+                    onZoomChange();
         });
 
         setInterval(() => {
@@ -93,14 +92,13 @@ export function MapLibreMap() {
 
         webAdapter.loadStaticData().then((staticData) => {
           if (!staticData) {
-            console.log('[Athena] static_data.json not found — run fetch-static first');
+            // static_data.json not found
             return;
           }
           for (const [mapName, labels] of Object.entries(staticData)) {
             updateStaticLabels({ mapName, labels }, map);
           }
-          console.log(`[Athena] Loaded static labels for ${Object.keys(staticData).length} hexes from disk`);
-          onZoomChange();
+                    onZoomChange();
         });
 
         setInterval(() => {

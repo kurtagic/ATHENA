@@ -86,7 +86,7 @@ async function poll(): Promise<void> {
     }
 
     if (consecutiveFailures > 0) {
-      console.log('[webAdapter] API connection restored');
+      // connection restored
     }
     consecutiveFailures = 0;
   } catch (err) {

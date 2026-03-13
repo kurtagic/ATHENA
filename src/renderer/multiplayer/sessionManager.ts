@@ -6,6 +6,7 @@ import type {
 } from './protocol';
 import { PROTOCOL_VERSION } from './protocol';
 import { useSessionStore } from '../stores/sessionStore';
+import { debugLog } from '../stores/debugStore';
 
 type MessageHandler = (msg: ServerMessage) => void;
 
@@ -34,6 +35,7 @@ export class SessionManager {
 
     useSessionStore.getState().setStatus('connecting');
     useSessionStore.getState().setError(null);
+    debugLog('ws', `Connecting to ${url}`);
 
     this.openWebSocket(url, displayName);
   }
@@ -45,6 +47,7 @@ export class SessionManager {
       this.ws.close(1000, 'user disconnect');
       this.ws = null;
     }
+    debugLog('ws', 'Disconnected (user)');
     useSessionStore.getState().reset();
   }
 
@@ -153,12 +156,14 @@ export class SessionManager {
     try {
       this.ws = new WebSocket(url);
     } catch {
+      debugLog('error', 'Invalid server URL');
       useSessionStore.getState().setError('Invalid server URL');
       useSessionStore.getState().setStatus('disconnected');
       return;
     }
 
     this.ws.onopen = () => {
+      debugLog('ws', 'WebSocket opened');
       this.reconnectAttempts = 0;
       this.send({ type: 'hello', version: PROTOCOL_VERSION, displayName });
     };
@@ -169,19 +174,20 @@ export class SessionManager {
         this.handleInternalMessage(msg);
         if (this.messageHandler) this.messageHandler(msg);
       } catch {
-        // Ignore malformed messages
+        debugLog('error', 'Malformed WS message');
       }
     };
 
     this.ws.onclose = () => {
       this.ws = null;
+      debugLog('ws', `WebSocket closed${this.intentionalClose ? ' (intentional)' : ''}`);
       if (!this.intentionalClose) {
         this.attemptReconnect();
       }
     };
 
     this.ws.onerror = () => {
-      // onclose will fire after this
+      debugLog('error', 'WebSocket error');
     };
   }
 
@@ -194,9 +200,11 @@ export class SessionManager {
       case 'welcome':
         store.setMemberId(m.memberId);
         store.setStatus('connected');
+        debugLog('session', `Welcomed as ${m.memberId}`);
         break;
       case 'error':
         store.setError(m.message);
+        debugLog('error', `Server error: ${m.message}`);
         break;
       case 'lobby-created':
         store.setLobby(m.lobbyId, m.name);
@@ -208,19 +216,24 @@ export class SessionManager {
           connectedAt: Date.now(),
           voiceEnabled: false,
         }]);
+        debugLog('session', `Lobby created: ${m.name}`);
         break;
       case 'join-accepted':
         store.setLobby(m.lobbyId, m.name);
         store.setMembers(m.members);
+        debugLog('session', `Joined lobby: ${m.name}`);
         break;
       case 'join-rejected':
         store.setError(`Join rejected: ${m.reason}`);
+        debugLog('error', `Join rejected: ${m.reason}`);
         break;
       case 'peer-joined':
         store.addMember(m.member);
+        debugLog('session', `${m.member?.displayName ?? m.memberId} joined`);
         break;
       case 'peer-left':
         store.removeMember(m.memberId);
+        debugLog('session', `${m.memberId} left`);
         break;
       case 'peer-kicked':
         if (m.memberId === store.memberId) {
@@ -228,8 +241,10 @@ export class SessionManager {
           store.setMembers([]);
           store.setPendingApprovals([]);
           store.setError('You were kicked from the lobby');
+          debugLog('session', 'You were kicked');
         } else {
           store.removeMember(m.memberId);
+          debugLog('session', `Kicked: ${m.memberId}`);
         }
         break;
       case 'owner-changed':
@@ -241,6 +256,7 @@ export class SessionManager {
         store.setPendingApprovals([]);
         store.setIsOwner(false);
         store.setOwnerId(null);
+        debugLog('session', 'Lobby closed');
         break;
       case 'full-snapshot':
         store.setMembers(m.members);
@@ -257,6 +273,7 @@ export class SessionManager {
 
   private attemptReconnect(): void {
     if (this.reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+      debugLog('error', `Max reconnect attempts (${MAX_RECONNECT_ATTEMPTS}) exceeded`);
       useSessionStore.getState().setStatus('disconnected');
       useSessionStore.getState().setError('Reconnection failed after maximum attempts');
       return;
@@ -265,6 +282,7 @@ export class SessionManager {
     useSessionStore.getState().setStatus('reconnecting');
     const delay = Math.min(BASE_RECONNECT_MS * Math.pow(2, this.reconnectAttempts), MAX_RECONNECT_MS);
     this.reconnectAttempts++;
+    debugLog('ws', `Reconnect attempt ${this.reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS}, delay ${delay}ms`);
 
     this.reconnectTimer = setTimeout(() => {
       this.openWebSocket(this.lastUrl, this.lastDisplayName);
