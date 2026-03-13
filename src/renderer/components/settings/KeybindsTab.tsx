@@ -5,9 +5,9 @@ import { keyEventToAccelerator, acceleratorToDisplay } from '../../lib/keybindUt
 import type { Settings } from '../../../shared/types';
 
 const KEYBIND_DEFAULTS: Record<string, string> = {
-  toggleOverlay: '`',
+  toggleOverlay: 'N',
   pushToTalk: 'F5',
-  quickNotification: '-',
+  quickNotification: 'F6',
 };
 
 const KEYBIND_ACTIONS = [

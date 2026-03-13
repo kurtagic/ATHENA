@@ -44,9 +44,9 @@ export interface WarStatus {
 }
 
 export interface KeybindSettings {
-  toggleOverlay: string; // Electron accelerator, e.g. "`", "F1", "CommandOrControl+Shift+O"
+  toggleOverlay: string; // Electron accelerator, e.g. "N", "F1", "CommandOrControl+Shift+O"
   pushToTalk: string; // e.g. "Y", "F2"
-  quickNotification: string; // e.g. "-"
+  quickNotification: string; // e.g. "F6"
 }
 
 export interface AudioSettings {

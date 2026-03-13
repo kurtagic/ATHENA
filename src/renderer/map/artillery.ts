@@ -4,7 +4,7 @@ import type { MapPoint } from '../data/coords';
 import { toMapPoint, mapPointToLngLat, lngLatToMapPoint } from '../data/coords';
 import type { SavedArtilleryState } from '../data/store';
 import { ARTILLERY_PLATFORMS, DEFAULT_PLATFORM_INDEX } from '../data/artilleryPlatforms';
-import { crsDistanceMeters, crsAzimuth, metersToRadius, calculateCorrection, interpolateInaccuracy, windCompensatedTarget, interpolateWindDrift } from '../data/artilleryCalc';
+import { crsDistanceMeters, crsAzimuth, metersToRadius, calculateCorrection, interpolateInaccuracy, windCompensatedTarget, interpolateWindDrift, windOffset } from '../data/artilleryCalc';
 import { useArtilleryStore, type ArtillerySolution } from '../stores/artilleryStore';
 import {
   syncWindOnly,
@@ -13,8 +13,10 @@ import {
   syncGunUpdate,
   syncTargetSet,
   syncTargetDelete,
+  syncTargetUpdate,
   syncImpactSet,
   syncImpactDelete,
+  syncImpactUpdate,
   syncArtilleryClearAll,
 } from '../multiplayer/artillerySync';
 import { useMapStore } from '../stores/mapStore';
@@ -65,6 +67,9 @@ const state: ArtyState = {
   markers: [],
   sourcesAdded: false,
 };
+
+// Wind drift marker (managed separately for lightweight wind recalc)
+let windDriftMarker: maplibregl.Marker | null = null;
 
 // Drag state
 let dragInfo: { type: 'gun' | 'target' | 'impact'; gunIndex: number } | null = null;
@@ -174,6 +179,7 @@ export function showArtillery(map: maplibregl.Map): void {
     if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', 'visible');
   }
   for (const m of state.markers) m.getElement().style.display = '';
+  if (windDriftMarker) windDriftMarker.getElement().style.display = '';
 }
 
 export function hideArtillery(map: maplibregl.Map): void {
@@ -181,6 +187,7 @@ export function hideArtillery(map: maplibregl.Map): void {
     if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', 'none');
   }
   for (const m of state.markers) m.getElement().style.display = 'none';
+  if (windDriftMarker) windDriftMarker.getElement().style.display = 'none';
 }
 
 export function showArtilleryRings(map: maplibregl.Map): void {
@@ -201,6 +208,7 @@ export function cleanupArtillery(map: maplibregl.Map): void {
   // Remove markers
   for (const m of state.markers) m.remove();
   state.markers = [];
+  if (windDriftMarker) { windDriftMarker.remove(); windDriftMarker = null; }
 
   // Remove layers and sources
   if (state.sourcesAdded) {
@@ -364,7 +372,7 @@ export function clearImpact(map: maplibregl.Map): void {
 
 export function recalcWind(map: maplibregl.Map): void {
   const { windDirection, windStrength } = useArtilleryStore.getState();
-  refreshAll(map);
+  refreshWindOnly(map);
   if (artilleryHexId) syncWindOnly(windDirection, windStrength, artilleryHexId);
 }
 
@@ -494,27 +502,113 @@ function createDotElement(dotSize: number, cssClass: string, interactive: boolea
   return wrapper;
 }
 
+function computeOorSet(): Set<number> {
+  const targetPos = state.corrected ?? state.target;
+  const oorSet = new Set<number>();
+  if (!targetPos) return oorSet;
+  const { windDirection, windStrength } = useArtilleryStore.getState();
+  const hasWind = windDirection !== null && windStrength > 0;
+  for (let i = 0; i < state.positions.length; i++) {
+    const gunPlatform = ARTILLERY_PLATFORMS[state.positions[i].platformIndex ?? state.defaultPlatformIndex];
+    if (!gunPlatform) continue;
+    let dist: number;
+    if (hasWind) {
+      const rawDist = crsDistanceMeters(state.positions[i].point, targetPos);
+      const compensated = windCompensatedTarget(targetPos, windDirection, windStrength, gunPlatform, rawDist);
+      dist = crsDistanceMeters(state.positions[i].point, compensated);
+    } else {
+      dist = crsDistanceMeters(state.positions[i].point, targetPos);
+    }
+    if (dist < gunPlatform.minRange || dist > gunPlatform.maxRange) oorSet.add(i);
+  }
+  return oorSet;
+}
+
+/** Where the main gun's shell would land if wind isn't compensated for. */
+function computeWindDriftPoint(): MapPoint | null {
+  const target = state.corrected ?? state.target;
+  if (!target || state.positions.length === 0) return null;
+  const { windDirection, windStrength } = useArtilleryStore.getState();
+  if (windDirection === null || windStrength <= 0) return null;
+  const mainPos = state.positions[state.mainGunIndex];
+  if (!mainPos) return null;
+  const platform = ARTILLERY_PLATFORMS[mainPos.platformIndex ?? state.defaultPlatformIndex];
+  if (!platform) return null;
+  const dist = crsDistanceMeters(mainPos.point, target);
+  const off = windOffset(windDirection, windStrength, platform, dist);
+  return { x: target.x + off.dx, y: target.y + off.dy };
+}
+
+function updateWindDriftMarker(map: maplibregl.Map): void {
+  if (windDriftMarker) {
+    windDriftMarker.remove();
+    windDriftMarker = null;
+  }
+  const driftPt = computeWindDriftPoint();
+  if (!driftPt) return;
+  const el = createDotElement(12, 'arty-dot-wind-drift', false);
+  windDriftMarker = new maplibregl.Marker({ element: el, anchor: 'center' })
+    .setLngLat(mapPointToLngLat(driftPt))
+    .addTo(map);
+  // Respect artillery layer visibility
+  const artilleryLayerVisible = useLayerStore.getState().layers.artillery?.visible ?? true;
+  if (!artilleryLayerVisible) {
+    windDriftMarker.getElement().style.display = 'none';
+  }
+}
+
+function refreshWindOnly(map: maplibregl.Map): void {
+  if (!state.sourcesAdded) return;
+  const targetPos = state.corrected ?? state.target;
+  const oorSet = computeOorSet();
+
+  // Rebuild only ring GeoJSON (colors may change with OOR)
+  const ringFeatures: GeoJSON.Feature[] = [];
+  for (let i = 0; i < state.positions.length; i++) {
+    const pos = state.positions[i];
+    const isMain = i === state.mainGunIndex;
+    const isOOR = targetPos !== null && oorSet.has(i);
+    const gunPlatform = ARTILLERY_PLATFORMS[pos.platformIndex ?? state.defaultPlatformIndex];
+    if (gunPlatform) {
+      const maxRadius = metersToRadius(gunPlatform.maxRange);
+      const minRadius = metersToRadius(gunPlatform.minRange);
+      const outerRing = circleCoords(pos.point, maxRadius);
+      const innerRing = [...circleCoords(pos.point, minRadius)].reverse();
+      const ringColor = isOOR ? '#b33030' : isMain ? '#003380' : '#4488cc';
+      ringFeatures.push({
+        type: 'Feature',
+        properties: { color: ringColor, fillOpacity: isOOR ? 0.12 : 0.2 },
+        geometry: { type: 'Polygon', coordinates: [outerRing, innerRing] },
+      });
+    }
+  }
+  (map.getSource('arty-rings') as GeoJSONSource).setData({ type: 'FeatureCollection', features: ringFeatures });
+  map.triggerRepaint();
+
+  // Recompute solutions + update store + pinned data
+  const solutions = computeSolutions();
+  useArtilleryStore.getState().setSolutions(solutions, state.target !== null, state.impact !== null);
+  const pinnedData = solutions
+    .filter((s) => s.isPinned && state.target !== null)
+    .map((s) => ({ label: s.label, distanceM: s.distanceM, azimuthDeg: s.azimuthDeg, inRange: s.inRange }));
+  window.athena.updatePinnedArtillery(pinnedData);
+
+  // Update wind drift marker (shows where shells land without wind compensation)
+  updateWindDriftMarker(map);
+}
+
 function refreshAll(map: maplibregl.Map): void {
   if (!state.sourcesAdded) return;
 
-  // Clear old markers
+  // Clear old markers (including wind drift marker tracked separately)
   for (const m of state.markers) m.remove();
   state.markers = [];
+  if (windDriftMarker) { windDriftMarker.remove(); windDriftMarker = null; }
 
   const defaultPlatform = ARTILLERY_PLATFORMS[state.defaultPlatformIndex];
   const targetPos = state.corrected ?? state.target;
 
-  const oorSet = new Set<number>();
-  if (targetPos) {
-    for (let i = 0; i < state.positions.length; i++) {
-      const gunPlatform = ARTILLERY_PLATFORMS[state.positions[i].platformIndex ?? state.defaultPlatformIndex];
-      if (!gunPlatform) continue;
-      const dist = crsDistanceMeters(state.positions[i].point, targetPos);
-      if (dist < gunPlatform.minRange || dist > gunPlatform.maxRange) {
-        oorSet.add(i);
-      }
-    }
-  }
+  const oorSet = computeOorSet();
 
   // Build ring GeoJSON
   const ringFeatures: GeoJSON.Feature[] = [];
@@ -697,6 +791,9 @@ function refreshAll(map: maplibregl.Map): void {
     });
   }
 
+  // Wind drift dot (where shells land without wind compensation)
+  updateWindDriftMarker(map);
+
   // Hide newly created markers if artillery layer is toggled off
   const artilleryLayerVisible = useLayerStore.getState().layers.artillery?.visible ?? true;
   if (!artilleryLayerVisible) {
@@ -862,11 +959,17 @@ export function setupArtilleryEvents(map: maplibregl.Map): void {
           state.positions[dragInfo.gunIndex].point = point;
         }
         break;
-      case 'target':
+      case 'target': {
+        const oldTarget = state.target;
         state.target = point;
-        state.impact = null;
-        state.corrected = null;
+        if (state.impact && oldTarget) {
+          const dx = point.x - oldTarget.x;
+          const dy = point.y - oldTarget.y;
+          state.impact = { x: state.impact.x + dx, y: state.impact.y + dy };
+        }
+        recalcCorrected();
         break;
+      }
       case 'impact':
         state.impact = point;
         recalcCorrected();
@@ -898,20 +1001,16 @@ export function setupArtilleryEvents(map: maplibregl.Map): void {
           }
           case 'target': {
             if (state.target && state.targetEntityId) {
-              syncTargetDelete(artilleryHexId, state.targetEntityId);
-              const newEntityId = crypto.randomUUID();
-              state.targetEntityId = newEntityId;
-              state.impactEntityId = null;
-              syncTargetSet(artilleryHexId, newEntityId, [state.target.x, state.target.y]);
+              syncTargetUpdate(artilleryHexId, state.targetEntityId, { position: [state.target.x, state.target.y] });
+              if (state.impact && state.impactEntityId) {
+                syncImpactUpdate(artilleryHexId, state.impactEntityId, { position: [state.impact.x, state.impact.y] });
+              }
             }
             break;
           }
           case 'impact': {
             if (state.impact && state.impactEntityId) {
-              syncImpactDelete(artilleryHexId, state.impactEntityId);
-              const newEntityId = crypto.randomUUID();
-              state.impactEntityId = newEntityId;
-              syncImpactSet(artilleryHexId, newEntityId, [state.impact.x, state.impact.y]);
+              syncImpactUpdate(artilleryHexId, state.impactEntityId, { position: [state.impact.x, state.impact.y] });
             }
             break;
           }
@@ -1018,6 +1117,27 @@ export function removeRemoteImpact(map: maplibregl.Map): void {
   scheduleRefresh(map);
 }
 
+export function updateRemoteTarget(map: maplibregl.Map, entityId: string, changes: Record<string, unknown>): void {
+  if (dragInfo?.type === 'target') return;
+  if ('position' in changes) {
+    const [x, y] = changes.position as [number, number];
+    state.target = toMapPoint(x, y);
+  }
+  recalcCorrected();
+  scheduleRefresh(map);
+}
+
+export function updateRemoteImpact(map: maplibregl.Map, entityId: string, changes: Record<string, unknown>): void {
+  if (dragInfo?.type === 'impact') return;
+  if ('position' in changes) {
+    const [x, y] = changes.position as [number, number];
+    state.impact = toMapPoint(x, y);
+    state.impactEntityId = entityId;
+  }
+  recalcCorrected();
+  scheduleRefresh(map);
+}
+
 // RAF-based debounce: batch multiple inbound messages into one refreshAll per frame
 let refreshScheduled = false;
 let refreshMap: maplibregl.Map | null = null;
@@ -1029,5 +1149,17 @@ function scheduleRefresh(map: maplibregl.Map): void {
   requestAnimationFrame(() => {
     refreshScheduled = false;
     if (refreshMap) refreshAll(refreshMap);
+  });
+}
+
+let windRefreshScheduled = false;
+
+export function scheduleWindRefresh(map: maplibregl.Map): void {
+  refreshMap = map;
+  if (windRefreshScheduled) return;
+  windRefreshScheduled = true;
+  requestAnimationFrame(() => {
+    windRefreshScheduled = false;
+    if (refreshMap) refreshWindOnly(refreshMap);
   });
 }

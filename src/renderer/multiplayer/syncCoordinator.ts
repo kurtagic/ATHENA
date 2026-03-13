@@ -91,7 +91,6 @@ function routeMessage(msg: ServerMessage): void {
     case 'entity-clear': {
       const payload = (msg as any).payload ?? msg;
       const entityType = payload.entity?.entityType ?? payload.entityType;
-
       if (entityType === 'stroke') {
         handleDrawingBroadcast(msg as unknown as ServerBroadcast, currentHexId);
       } else if (entityType?.startsWith('artillery-')) {

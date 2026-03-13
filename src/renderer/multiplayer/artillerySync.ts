@@ -7,6 +7,9 @@ import {
   removeRemoteTarget,
   setRemoteImpact,
   removeRemoteImpact,
+  updateRemoteTarget,
+  updateRemoteImpact,
+  scheduleWindRefresh,
 } from '../map/artillery';
 import type { SavedArtilleryState } from '../data/store';
 import { DEFAULT_PLATFORM_INDEX } from '../data/artilleryPlatforms';
@@ -80,6 +83,16 @@ export function syncImpactDelete(hexId: string, entityId: string): void {
   session.sendEntityDelete(hexId, entityId);
 }
 
+export function syncTargetUpdate(hexId: string, entityId: string, changes: Record<string, unknown>): void {
+  if (!session.connected) return;
+  session.sendEntityUpdate(hexId, entityId, 'artillery-target', changes);
+}
+
+export function syncImpactUpdate(hexId: string, entityId: string, changes: Record<string, unknown>): void {
+  if (!session.connected) return;
+  session.sendEntityUpdate(hexId, entityId, 'artillery-impact', changes);
+}
+
 export function syncArtilleryClearAll(hexId: string): void {
   if (!session.connected) return;
   session.sendEntityClear(hexId, 'artillery-platform');
@@ -92,8 +105,9 @@ export function syncWindOnly(windDirection: number | null, windStrength: number,
   if (!session.connected) return;
   session.sendEntityClear(hexId, 'artillery-wind');
   if (windDirection !== null && windStrength > 0) {
+    const id = crypto.randomUUID();
     session.sendEntityCreate({
-      id: crypto.randomUUID(),
+      id,
       hexId,
       entityType: 'artillery-wind',
       windDirection,
@@ -252,8 +266,7 @@ export function handleArtilleryBroadcast(
           case 'artillery-wind': {
             const w = entity as ArtilleryWindEntity;
             useArtilleryStore.getState().setWind(w.windDirection, w.windStrength);
-            // Wind changes need a full refresh to recalculate solutions
-            rebuildArtilleryFromCache(entity.hexId);
+            if (map) scheduleWindRefresh(map);
             break;
           }
         }
@@ -273,8 +286,11 @@ export function handleArtilleryBroadcast(
       if (hexId === currentHexId && map) {
         if (entityType === 'artillery-platform') {
           updateRemoteGun(map, entityId, changes);
+        } else if (entityType === 'artillery-target') {
+          updateRemoteTarget(map, entityId, changes);
+        } else if (entityType === 'artillery-impact') {
+          updateRemoteImpact(map, entityId, changes);
         }
-        // target/impact/wind don't have update semantics — they use delete+create
       }
       break;
     }
@@ -321,7 +337,12 @@ export function handleArtilleryBroadcast(
       syncLegacyArtilleryCache(hexId);
 
       if (hexId === currentHexId) {
-        rebuildArtilleryFromCache(hexId);
+        if (entityType === 'artillery-wind') {
+          useArtilleryStore.getState().setWind(null, 0);
+          if (map) scheduleWindRefresh(map);
+        } else {
+          rebuildArtilleryFromCache(hexId);
+        }
       }
       break;
     }
