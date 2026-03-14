@@ -25,8 +25,8 @@ contextBridge.exposeInMainWorld('athena', {
   setSettings: (partial: unknown) => {
     return ipcRenderer.invoke('set-settings', partial);
   },
-  onPttToggle: (callback: () => void) => {
-    ipcRenderer.on('ptt-toggle', () => callback());
+  onTttToggle: (callback: () => void) => {
+    ipcRenderer.on('ttt-toggle', () => callback());
   },
   updatePinnedArtillery: (data: unknown[]) => {
     ipcRenderer.send('update-pinned-artillery', data);

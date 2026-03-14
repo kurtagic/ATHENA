@@ -8,11 +8,11 @@ export interface VoicePeer {
 
 interface VoiceState {
   joined: boolean;
-  pttActive: boolean;
+  tttActive: boolean;
   peers: VoicePeer[];
 
   setJoined: (joined: boolean) => void;
-  setPttActive: (active: boolean) => void;
+  setTttActive: (active: boolean) => void;
   setPeers: (peers: VoicePeer[]) => void;
   addPeer: (peer: VoicePeer) => void;
   removePeer: (id: string) => void;
@@ -21,13 +21,13 @@ interface VoiceState {
 
 export const useVoiceStore = create<VoiceState>((set) => ({
   joined: false,
-  pttActive: false,
+  tttActive: false,
   peers: [],
 
   setJoined: (joined) => set({ joined }),
-  setPttActive: (pttActive) => set({ pttActive }),
+  setTttActive: (tttActive) => set({ tttActive }),
   setPeers: (peers) => set({ peers }),
   addPeer: (peer) => set((s) => ({ peers: [...s.peers, peer] })),
   removePeer: (id) => set((s) => ({ peers: s.peers.filter((p) => p.id !== id) })),
-  reset: () => set({ joined: false, pttActive: false, peers: [] }),
+  reset: () => set({ joined: false, tttActive: false, peers: [] }),
 }));

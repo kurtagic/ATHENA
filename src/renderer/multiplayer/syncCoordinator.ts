@@ -1,15 +1,16 @@
 import { session } from './sessionManager';
-import { initDrawingSync, handleDrawingBroadcast } from './drawingSync';
-import { initArtillerySync, handleArtilleryBroadcast, cleanupArtillerySync, entitiesToArtilleryState } from './artillerySync';
+import { initDrawingSync, setupDrawingObserver, teardownDrawingObserver, loadHexStrokes } from './drawingSync';
+import { setupArtilleryObserver, teardownArtilleryObserver, loadHexArtillery } from './artillerySync';
 import { voice } from './voiceManager';
 import { setSyncMode, setCurrentHexId, clearAllStrokes, restoreDrawState } from '../map/drawing';
 import { setArtilleryHexId, restoreArtilleryState } from '../map/artillery';
-import { hexEntityData, hexDrawingData, hexArtilleryData } from '../data/store';
+import { hexDrawingData, hexArtilleryData } from '../data/store';
 import { useSessionStore } from '../stores/sessionStore';
 import { useMapStore } from '../stores/mapStore';
 import { useBannerStore } from '../stores/bannerStore';
 import { useNotificationStore } from '../stores/notificationStore';
-import type { ServerMessage, ServerBroadcast, FullSnapshotMsg, StrokeEntity } from './protocol';
+import { connectYjs, disconnectYjs, getRootMap } from './yjsSync';
+import type { ServerMessage, FullSnapshotMsg } from './protocol';
 import { debugLog } from '../stores/debugStore';
 
 let initialized = false;
@@ -18,9 +19,8 @@ export function initMultiplayerSync(): void {
   if (initialized) return;
   initialized = true;
 
-  // Wire drawing and artillery sync outbound callbacks
+  // Wire drawing sync outbound callbacks
   initDrawingSync();
-  initArtillerySync();
 
   // Handle connection status changes for syncMode
   useSessionStore.subscribe((state, prev) => {
@@ -28,17 +28,14 @@ export function initMultiplayerSync(): void {
       setSyncMode(true);
     } else if (state.status !== 'connected' && prev.status === 'connected') {
       setSyncMode(false);
-      cleanupArtillerySync();
-      initArtillerySync();
     }
   });
 
-  // Clear all local state when joining a lobby
+  // Yjs lifecycle: connect on lobby join, disconnect on lobby leave
   useSessionStore.subscribe((state, prev) => {
     if (state.lobbyId && !prev.lobbyId) {
       debugLog('session', 'Lobby joined — cleared local state');
       // Transitioning from no lobby to having a lobby — clear stale local state
-      for (const key of Object.keys(hexEntityData)) delete hexEntityData[key];
       for (const key of Object.keys(hexDrawingData)) delete hexDrawingData[key];
       for (const key of Object.keys(hexArtilleryData)) delete hexArtilleryData[key];
       clearAllStrokes();
@@ -46,8 +43,44 @@ export function initMultiplayerSync(): void {
       if (map) {
         restoreArtilleryState({ positions: [], target: null, impact: null, mainGunIndex: 0, defaultPlatformIndex: 0, nextId: 1, nextLabelNum: 1 }, map);
       }
+
+      // Connect Yjs and start observing
+      const { provider } = connectYjs(state.lobbyId);
+      setupDrawingObserver();
+      setupArtilleryObserver();
+
+      // When Yjs finishes initial sync, restore strokes for current hex
+      (provider as any).on('synced', () => {
+        const hexId = useMapStore.getState().detailMode?.apiName || '';
+        if (!hexId) return;
+        const strokes = loadHexStrokes(hexId);
+        if (strokes.length > 0) {
+          const map = useMapStore.getState().mapInstance;
+          if (map) {
+            clearAllStrokes();
+            restoreDrawState(strokes, map);
+            hexDrawingData[hexId] = strokes;
+            debugLog('yjs', `Synced: restored ${strokes.length} strokes for ${hexId}`);
+          }
+        }
+      });
+    } else if (!state.lobbyId && prev.lobbyId) {
+      // Lobby left — tear down Yjs
+      teardownDrawingObserver();
+      teardownArtilleryObserver();
+      disconnectYjs();
     }
   });
+
+  // If already in a lobby when init runs (e.g. menu → app view transition),
+  // connect Yjs immediately since the subscribe above missed the transition
+  const currentLobbyId = useSessionStore.getState().lobbyId;
+  if (currentLobbyId) {
+    debugLog('yjs', `Already in lobby ${currentLobbyId} at init — connecting Yjs`);
+    connectYjs(currentLobbyId);
+    setupDrawingObserver();
+    setupArtilleryObserver();
+  }
 
   // Initialize with current hex (in case detail view is already active)
   const currentHex = useMapStore.getState().detailMode?.apiName || '';
@@ -56,12 +89,28 @@ export function initMultiplayerSync(): void {
     setArtilleryHexId(currentHex);
   }
 
-  // Track detail view hex changes
+  // Track detail view hex changes — load Yjs data on hex enter
   useMapStore.subscribe((state, prev) => {
     if (state.detailMode?.apiName !== prev.detailMode?.apiName) {
       const hexId = state.detailMode?.apiName || '';
       setCurrentHexId(hexId);
       setArtilleryHexId(hexId);
+
+      if (hexId) {
+        // Load strokes from Yjs into hexDrawingData
+        const strokes = loadHexStrokes(hexId);
+        if (strokes.length > 0) {
+          hexDrawingData[hexId] = strokes;
+          debugLog('yjs', `Loaded ${strokes.length} strokes for ${hexId} from Y.Doc`);
+        }
+
+        // Load artillery from Yjs into hexArtilleryData
+        const artilleryState = loadHexArtillery(hexId);
+        if (artilleryState) {
+          hexArtilleryData[hexId] = artilleryState;
+          debugLog('yjs', `Loaded artillery for ${hexId} from Y.Doc`);
+        }
+      }
     }
   });
 
@@ -72,7 +121,7 @@ export function initMultiplayerSync(): void {
 }
 
 function routeMessage(msg: ServerMessage): void {
-  // All entity broadcasts are echo — skip messages from self (except command-banner)
+  // Skip echo messages (except banners and notifications)
   const senderId = (msg as any).senderId;
   const myId = useSessionStore.getState().memberId;
   if (senderId && myId && senderId === myId && msg.type !== 'command-banner' && msg.type !== 'custom-notification') {
@@ -83,52 +132,10 @@ function routeMessage(msg: ServerMessage): void {
   const currentHexId = useMapStore.getState().detailMode?.apiName || '';
 
   switch (msg.type) {
-    // entity-delete payload has no entityType — look it up from cache
-    case 'entity-delete': {
-      const delPayload = (msg as any).payload ?? msg;
-      debugLog('sync', `entity-delete in ${delPayload.hexId}`);
-      const cached = hexEntityData[delPayload.hexId];
-      const cachedEntity = cached?.find((e: any) => e.id === delPayload.entityId);
-      const delType = cachedEntity?.entityType as string | undefined;
-
-      if (delType === 'stroke' || !delType) {
-        handleDrawingBroadcast(msg as unknown as ServerBroadcast, currentHexId);
-      }
-      if (delType?.startsWith('artillery-') || !delType) {
-        handleArtilleryBroadcast(msg as unknown as Record<string, any>, currentHexId);
-      }
-
-      // Remove from local cache
-      if (cached && cachedEntity) {
-        const idx = cached.indexOf(cachedEntity);
-        if (idx !== -1) cached.splice(idx, 1);
-      }
-      break;
-    }
-
-    // Entity operations — dispatch based on entityType in payload
-    case 'entity-create':
-    case 'entity-update':
-    case 'entity-clear': {
-      const payload = (msg as any).payload ?? msg;
-      const entityType = payload.entity?.entityType ?? payload.entityType;
-      debugLog('sync', `${msg.type} ${entityType || 'all'} in ${payload.hexId}`);
-      if (entityType === 'stroke') {
-        handleDrawingBroadcast(msg as unknown as ServerBroadcast, currentHexId);
-      } else if (entityType?.startsWith('artillery-')) {
-        handleArtilleryBroadcast(msg as unknown as Record<string, any>, currentHexId);
-      } else if (!entityType && msg.type === 'entity-clear') {
-        // Full hex clear — handle both
-        handleDrawingBroadcast(msg as unknown as ServerBroadcast, currentHexId);
-        handleArtilleryBroadcast(msg as unknown as Record<string, any>, currentHexId);
-      }
-      break;
-    }
-
     // Voice signaling
     case 'voice-peer-joined':
     case 'voice-peer-left':
-      debugLog('session', `${msg.type}: ${(msg as any).memberId}`);
+      debugLog('session', `${msg.type}: ${(msg as any).peerId}`);
       voice.handleSignaling(msg as any);
       break;
     case 'voice-offer':
@@ -140,9 +147,7 @@ function routeMessage(msg: ServerMessage): void {
     // Full snapshot on join/reconnect
     case 'full-snapshot': {
       const snap = msg as FullSnapshotMsg;
-      const hexCount = Object.keys(snap.snapshot?.entities ?? {}).length;
-      const entityCount = Object.values(snap.snapshot?.entities ?? {}).reduce((n, arr) => n + arr.length, 0);
-      debugLog('session', `Snapshot: ${entityCount} entities in ${hexCount} hexes`);
+      debugLog('session', `Snapshot received`);
       applyFullSnapshot(snap, currentHexId);
       break;
     }
@@ -168,60 +173,39 @@ function routeMessage(msg: ServerMessage): void {
 }
 
 function applyFullSnapshot(msg: FullSnapshotMsg, currentHexId: string): void {
-  const { snapshot } = msg;
-
-  // Clear existing caches
-  for (const key of Object.keys(hexEntityData)) delete hexEntityData[key];
+  // Clear view caches
   for (const key of Object.keys(hexDrawingData)) delete hexDrawingData[key];
   for (const key of Object.keys(hexArtilleryData)) delete hexArtilleryData[key];
 
-  // Always clear live map state before populating from snapshot
+  // Clear live map state
   clearAllStrokes();
   const mapInstance = useMapStore.getState().mapInstance;
   if (mapInstance) {
     restoreArtilleryState({ positions: [], target: null, impact: null, mainGunIndex: 0, defaultPlatformIndex: 0, nextId: 1, nextLabelNum: 1 }, mapInstance);
   }
 
-  // Populate entity cache
-  for (const [hexId, entities] of Object.entries(snapshot.entities)) {
-    hexEntityData[hexId] = [...entities];
-
-    // Extract strokes for drawing system
-    const strokes = entities.filter(e => e.entityType === 'stroke') as StrokeEntity[];
-    if (strokes.length > 0) {
-      const savedStrokes = strokes.map(s => ({
-        id: s.id,
-        points: s.points as [number, number][],
-        color: s.color,
-        weight: s.weight,
-        opacity: s.opacity,
-      }));
-
-      if (hexId === currentHexId) {
-        if (mapInstance) {
-          restoreDrawState(savedStrokes, mapInstance);
-        }
-      } else {
-        hexDrawingData[hexId] = savedStrokes;
-      }
+  // Load from Yjs for current hex
+  if (currentHexId) {
+    const strokes = loadHexStrokes(currentHexId);
+    if (strokes.length > 0 && mapInstance) {
+      restoreDrawState(strokes, mapInstance);
+      debugLog('yjs', `Restored ${strokes.length} strokes for ${currentHexId} from Y.Doc after snapshot`);
     }
 
-    // Extract artillery entities
-    const artilleryEntities = entities.filter(e =>
-      e.entityType === 'artillery-platform' ||
-      e.entityType === 'artillery-target' ||
-      e.entityType === 'artillery-impact'
-    );
-    if (artilleryEntities.length > 0) {
-      const savedState = entitiesToArtilleryState(artilleryEntities);
-
-      if (hexId === currentHexId) {
-        if (mapInstance) {
-          restoreArtilleryState(savedState, mapInstance);
-        }
-      } else {
-        hexArtilleryData[hexId] = savedState;
-      }
+    const artilleryState = loadHexArtillery(currentHexId);
+    if (artilleryState && mapInstance) {
+      restoreArtilleryState(artilleryState, mapInstance);
+      debugLog('yjs', `Restored artillery for ${currentHexId} from Y.Doc after snapshot`);
     }
+  }
+
+  // Repopulate hexDrawingData cache for all other hexes from Yjs
+  const allStrokesMap = getRootMap('strokes');
+  if (allStrokesMap) {
+    allStrokesMap.forEach((_hexMap, hexId) => {
+      if (hexId === currentHexId) return;
+      const strokes = loadHexStrokes(hexId);
+      if (strokes.length > 0) hexDrawingData[hexId] = strokes;
+    });
   }
 }

@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 
-export type ActiveTool = 'pen' | 'eraser';
+export type ActiveTool = 'pen' | 'eraser' | 'area' | 'ruler';
+export type BrushPattern = 'diagonal' | 'crosshatch' | 'border';
 
 interface DrawStoreState {
   activeColor: string;
@@ -8,6 +9,7 @@ interface DrawStoreState {
   eraserPosition: { x: number; y: number } | null;
   eraserRadius: number;
   activeTool: ActiveTool;
+  brushPattern: BrushPattern;
   strokeWidth: number;
   strokeOpacity: number;
   setActiveColor: (color: string) => void;
@@ -15,6 +17,7 @@ interface DrawStoreState {
   toggleEraser: () => void;
   setEraserPosition: (pos: { x: number; y: number } | null) => void;
   setActiveTool: (tool: ActiveTool) => void;
+  setBrushPattern: (pattern: BrushPattern) => void;
   setStrokeWidth: (width: number) => void;
   setStrokeOpacity: (opacity: number) => void;
   reset: () => void;
@@ -26,9 +29,15 @@ export const useDrawStore = create<DrawStoreState>((set) => ({
   eraserPosition: null,
   eraserRadius: 20,
   activeTool: 'pen',
+  brushPattern: 'diagonal',
   strokeWidth: 3,
   strokeOpacity: 1.0,
-  setActiveColor: (color) => set({ activeColor: color, eraserActive: false, activeTool: 'pen' }),
+  setActiveColor: (color) => set((s) => ({
+    activeColor: color,
+    eraserActive: false,
+    // Preserve current tool unless switching away from eraser
+    activeTool: s.activeTool === 'eraser' ? 'pen' : s.activeTool,
+  })),
   setEraserActive: (active) => set({ eraserActive: active, activeTool: active ? 'eraser' : 'pen' }),
   toggleEraser: () => set((s) => {
     const newEraser = !s.eraserActive;
@@ -43,6 +52,7 @@ export const useDrawStore = create<DrawStoreState>((set) => ({
     activeTool: tool,
     eraserActive: tool === 'eraser',
   }),
+  setBrushPattern: (pattern) => set({ brushPattern: pattern }),
   setStrokeWidth: (width) => set({ strokeWidth: width }),
   setStrokeOpacity: (opacity) => set({ strokeOpacity: opacity }),
   reset: () => set({
@@ -51,6 +61,7 @@ export const useDrawStore = create<DrawStoreState>((set) => ({
     eraserPosition: null,
     eraserRadius: 20,
     activeTool: 'pen',
+    brushPattern: 'diagonal',
     strokeWidth: 3,
     strokeOpacity: 1.0,
   }),

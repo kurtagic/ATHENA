@@ -1,5 +1,6 @@
 import { session } from './sessionManager';
 import { useVoiceStore } from '../stores/voiceStore';
+import { debugLog } from '../stores/debugStore';
 import type { ServerBroadcast } from './protocol';
 
 const RTC_CONFIG: RTCConfiguration = {
@@ -30,8 +31,9 @@ export class VoiceManager {
           autoGainControl: true,
         },
       });
+      debugLog('voice', `Got microphone stream (${this.localStream.getAudioTracks().length} tracks)`);
 
-      // Start muted (PTT)
+      // Start muted (TTT)
       for (const track of this.localStream.getAudioTracks()) {
         track.enabled = false;
       }
@@ -40,7 +42,9 @@ export class VoiceManager {
       useVoiceStore.getState().setJoined(true);
 
       this.startSpeakingDetection();
+      debugLog('voice', 'Voice joined, waiting for peers');
     } catch (err) {
+      debugLog('voice', `Microphone access failed: ${err}`);
       console.error('Failed to get microphone access:', err);
     }
   }
@@ -64,13 +68,15 @@ export class VoiceManager {
 
     session.sendVoiceLeave();
     useVoiceStore.getState().reset();
+    debugLog('voice', 'Voice left');
   }
 
-  setPttActive(active: boolean): void {
+  setTttActive(active: boolean): void {
     if (this.localStream) {
       for (const track of this.localStream.getAudioTracks()) {
         track.enabled = active;
       }
+      debugLog('voice', `TTT ${active ? 'ON' : 'OFF'}`);
     }
   }
 
@@ -95,6 +101,7 @@ export class VoiceManager {
   }
 
   private async onPeerJoined(msg: { peerId: string; displayName: string }): Promise<void> {
+    debugLog('voice', `Peer joined: ${msg.displayName} (${msg.peerId}), hasStream=${!!this.localStream}`);
     if (!this.localStream) return;
 
     useVoiceStore.getState().addPeer({ id: msg.peerId, name: msg.displayName, speaking: false });
@@ -108,6 +115,7 @@ export class VoiceManager {
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
     session.sendVoiceOffer(msg.peerId, JSON.stringify(offer));
+    debugLog('voice', `Sent offer to ${msg.peerId}`);
   }
 
   private onPeerLeft(msg: { peerId: string }): void {
@@ -119,13 +127,17 @@ export class VoiceManager {
       this.peers.delete(msg.peerId);
     }
     useVoiceStore.getState().removePeer(msg.peerId);
+    debugLog('voice', `Peer left: ${msg.peerId}`);
   }
 
-  private async onOffer(msg: { from: string; sdp: string }): Promise<void> {
+  private async onOffer(msg: { from: string; displayName?: string; sdp: string }): Promise<void> {
+    debugLog('voice', `Received offer from ${msg.from} (${msg.displayName ?? '?'}), hasStream=${!!this.localStream}`);
     if (!this.localStream) return;
 
     let peerConn = this.peers.get(msg.from);
     if (!peerConn) {
+      const name = msg.displayName ?? msg.from;
+      useVoiceStore.getState().addPeer({ id: msg.from, name, speaking: false });
       this.createPeerConnection(msg.from);
       peerConn = this.peers.get(msg.from)!;
     }
@@ -141,6 +153,7 @@ export class VoiceManager {
     const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
     session.sendVoiceAnswer(msg.from, JSON.stringify(answer));
+    debugLog('voice', `Sent answer to ${msg.from}`);
   }
 
   private async onAnswer(msg: { from: string; sdp: string }): Promise<void> {
@@ -148,6 +161,7 @@ export class VoiceManager {
     if (!peer) return;
     const answer = JSON.parse(msg.sdp) as RTCSessionDescriptionInit;
     await peer.pc.setRemoteDescription(new RTCSessionDescription(answer));
+    debugLog('voice', `Answer set for ${msg.from}`);
   }
 
   private async onIce(msg: { from: string; candidate: string }): Promise<void> {
@@ -162,6 +176,8 @@ export class VoiceManager {
     const audioEl = document.createElement('audio');
     audioEl.autoplay = true;
 
+    document.body.appendChild(audioEl);
+
     const peerData: PeerConnection = { pc, audioEl, analyser: null, audioCtx: null };
 
     pc.onicecandidate = (e) => {
@@ -171,8 +187,10 @@ export class VoiceManager {
     };
 
     pc.ontrack = (e) => {
+      debugLog('voice', `Remote track received from ${peerId}`);
       const stream = e.streams[0] || new MediaStream([e.track]);
       audioEl.srcObject = stream;
+      audioEl.play().catch((err) => debugLog('voice', `Audio play failed: ${err}`));
 
       // Set up audio analyser for speaking detection
       try {
@@ -190,6 +208,7 @@ export class VoiceManager {
     };
 
     pc.onconnectionstatechange = () => {
+      debugLog('voice', `Peer ${peerId} connection: ${pc.connectionState}`);
       if (pc.connectionState === 'failed' || pc.connectionState === 'closed') {
         this.onPeerLeft({ peerId });
       }

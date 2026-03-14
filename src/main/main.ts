@@ -5,7 +5,7 @@ import { registerTileProtocol } from './protocol';
 import { registerIpcHandlers } from './ipc';
 import { startPoller, stopPoller } from './warPoller';
 import { loadSettings } from './settings';
-import { registerOverlayHotkey, registerPttHotkey, registerQuickNotifHotkey } from './hotkeys';
+import { registerOverlayHotkey, registerTttHotkey, registerQuickNotifHotkey } from './hotkeys';
 import { unmuteOtherApps } from './audioSilencer';
 import { destroyPip } from './pipWindow';
 import { showBannerWindow, destroyBannerWindow, showNotificationWindow, destroyNotificationWindow } from './bannerWindow';
@@ -89,7 +89,7 @@ function createWindow(): void {
   startPoller(mainWindow);
 
   registerOverlayHotkey(settings.keybinds.toggleOverlay, mainWindow);
-  registerPttHotkey(settings.keybinds.pushToTalk, mainWindow);
+  registerTttHotkey(settings.keybinds.toggleToTalk, mainWindow);
   registerQuickNotifHotkey(settings.keybinds.quickNotification, mainWindow);
 
   mainWindow.on('closed', () => {

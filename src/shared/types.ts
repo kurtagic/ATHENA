@@ -45,7 +45,7 @@ export interface WarStatus {
 
 export interface KeybindSettings {
   toggleOverlay: string; // Electron accelerator, e.g. "N", "F1", "CommandOrControl+Shift+O"
-  pushToTalk: string; // e.g. "Y", "F2"
+  toggleToTalk: string; // e.g. "Y", "F2"
   quickNotification: string; // e.g. "F6"
 }
 
@@ -81,7 +81,7 @@ export interface AthenaAPI {
   onStaticLabels: (callback: (data: StaticLabelsPayload) => void) => void;
   setSelectedHexes: (hexes: string[]) => void;
   setAppSilence: (mute: boolean) => void;
-  onPttToggle: (callback: () => void) => void;
+  onTttToggle: (callback: () => void) => void;
   getSettings: () => Promise<Settings>;
   setSettings: (partial: SettingsPartial) => Promise<{ settings: Settings; error?: string }>;
   updatePinnedArtillery: (data: PinnedSolution[]) => void;

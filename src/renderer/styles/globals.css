@@ -163,8 +163,8 @@ html, body {
 }
 
 .draw-swatch.selected {
-  border-color: rgba(255, 255, 255, 0.6);
-  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 0 0 2.5px rgba(255, 255, 255, 0.4), 0 0 10px rgba(255, 255, 255, 0.25);
 }
 
 .draw-swatch.light {

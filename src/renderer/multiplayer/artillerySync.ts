@@ -1,3 +1,4 @@
+import * as Y from 'yjs';
 import {
   restoreArtilleryState,
   addRemoteGun,
@@ -13,17 +14,11 @@ import {
 } from '../map/artillery';
 import type { SavedArtilleryState } from '../data/store';
 import { DEFAULT_PLATFORM_INDEX } from '../data/artilleryPlatforms';
-import { hexEntityData, hexArtilleryData } from '../data/store';
+import { hexArtilleryData } from '../data/store';
 import { useMapStore } from '../stores/mapStore';
 import { useArtilleryStore } from '../stores/artilleryStore';
-import { session } from './sessionManager';
-import type {
-  Entity,
-  ArtilleryPlatformEntity,
-  ArtilleryTargetEntity,
-  ArtilleryImpactEntity,
-  ArtilleryWindEntity,
-} from './protocol';
+import { getRootMap, getHexMap } from './yjsSync';
+import { debugLog } from '../stores/debugStore';
 
 // ── Granular outbound sync functions ──
 
@@ -31,98 +26,263 @@ export function syncGunCreate(
   hexId: string,
   entity: { entityId: string; position: [number, number]; label: string; platformIndex?: number; isMain: boolean },
 ): void {
-  if (!session.connected) return;
-  session.sendEntityCreate({
-    id: entity.entityId,
-    hexId,
-    entityType: 'artillery-platform',
+  const hexMap = getHexMap('artillery', hexId);
+  if (!hexMap) return;
+  hexMap.set(entity.entityId, {
+    type: 'platform',
     position: entity.position,
     label: entity.label,
     platformIndex: entity.platformIndex,
     isMain: entity.isMain,
-  } as Omit<ArtilleryPlatformEntity, 'authorId'>);
+  });
+  debugLog('yjs', `Gun created in ${hexId}: ${entity.entityId}`);
 }
 
 export function syncGunDelete(hexId: string, entityId: string): void {
-  if (!session.connected) return;
-  session.sendEntityDelete(hexId, entityId);
+  const hexMap = getHexMap('artillery', hexId);
+  if (!hexMap) return;
+  hexMap.delete(entityId);
+  debugLog('yjs', `Gun deleted in ${hexId}: ${entityId}`);
 }
 
 export function syncGunUpdate(hexId: string, entityId: string, changes: Record<string, unknown>): void {
-  if (!session.connected) return;
-  session.sendEntityUpdate(hexId, entityId, 'artillery-platform', changes);
+  const hexMap = getHexMap('artillery', hexId);
+  if (!hexMap) return;
+  const current = hexMap.get(entityId);
+  if (!current) return;
+  hexMap.set(entityId, { ...current, ...changes });
+  debugLog('yjs', `Gun updated in ${hexId}: ${entityId}`);
 }
 
 export function syncTargetSet(hexId: string, entityId: string, position: [number, number]): void {
-  if (!session.connected) return;
-  session.sendEntityCreate({
-    id: entityId,
-    hexId,
-    entityType: 'artillery-target',
-    position,
-  } as Omit<ArtilleryTargetEntity, 'authorId'>);
+  const hexMap = getHexMap('artillery', hexId);
+  if (!hexMap) return;
+  hexMap.set(entityId, { type: 'target', position });
+  debugLog('yjs', `Target set in ${hexId}: ${entityId}`);
 }
 
 export function syncTargetDelete(hexId: string, entityId: string): void {
-  if (!session.connected) return;
-  session.sendEntityDelete(hexId, entityId);
-}
-
-export function syncImpactSet(hexId: string, entityId: string, position: [number, number]): void {
-  if (!session.connected) return;
-  session.sendEntityCreate({
-    id: entityId,
-    hexId,
-    entityType: 'artillery-impact',
-    position,
-  } as Omit<ArtilleryImpactEntity, 'authorId'>);
-}
-
-export function syncImpactDelete(hexId: string, entityId: string): void {
-  if (!session.connected) return;
-  session.sendEntityDelete(hexId, entityId);
+  const hexMap = getHexMap('artillery', hexId);
+  if (!hexMap) return;
+  hexMap.delete(entityId);
+  debugLog('yjs', `Target deleted in ${hexId}: ${entityId}`);
 }
 
 export function syncTargetUpdate(hexId: string, entityId: string, changes: Record<string, unknown>): void {
-  if (!session.connected) return;
-  session.sendEntityUpdate(hexId, entityId, 'artillery-target', changes);
+  const hexMap = getHexMap('artillery', hexId);
+  if (!hexMap) return;
+  const current = hexMap.get(entityId);
+  if (!current) return;
+  hexMap.set(entityId, { ...current, ...changes });
+  debugLog('yjs', `Target updated in ${hexId}: ${entityId}`);
+}
+
+export function syncImpactSet(hexId: string, entityId: string, position: [number, number]): void {
+  const hexMap = getHexMap('artillery', hexId);
+  if (!hexMap) return;
+  hexMap.set(entityId, { type: 'impact', position });
+  debugLog('yjs', `Impact set in ${hexId}: ${entityId}`);
+}
+
+export function syncImpactDelete(hexId: string, entityId: string): void {
+  const hexMap = getHexMap('artillery', hexId);
+  if (!hexMap) return;
+  hexMap.delete(entityId);
+  debugLog('yjs', `Impact deleted in ${hexId}: ${entityId}`);
 }
 
 export function syncImpactUpdate(hexId: string, entityId: string, changes: Record<string, unknown>): void {
-  if (!session.connected) return;
-  session.sendEntityUpdate(hexId, entityId, 'artillery-impact', changes);
+  const hexMap = getHexMap('artillery', hexId);
+  if (!hexMap) return;
+  const current = hexMap.get(entityId);
+  if (!current) return;
+  hexMap.set(entityId, { ...current, ...changes });
+  debugLog('yjs', `Impact updated in ${hexId}: ${entityId}`);
 }
 
 export function syncArtilleryClearAll(hexId: string): void {
-  if (!session.connected) return;
-  session.sendEntityClear(hexId, 'artillery-platform');
-  session.sendEntityClear(hexId, 'artillery-target');
-  session.sendEntityClear(hexId, 'artillery-impact');
-  session.sendEntityClear(hexId, 'artillery-wind');
+  const hexMap = getHexMap('artillery', hexId);
+  if (!hexMap) return;
+  const keys = Array.from(hexMap.keys());
+  for (const key of keys) {
+    hexMap.delete(key);
+  }
+  debugLog('yjs', `Artillery cleared in ${hexId}`);
 }
 
 export function syncWindOnly(windDirection: number | null, windStrength: number, hexId: string): void {
-  if (!session.connected) return;
-  session.sendEntityClear(hexId, 'artillery-wind');
+  const hexMap = getHexMap('artillery', hexId);
+  if (!hexMap) return;
+  // Remove existing wind entries
+  for (const [key, value] of hexMap.entries()) {
+    if (value && value.type === 'wind') {
+      hexMap.delete(key);
+    }
+  }
   if (windDirection !== null && windStrength > 0) {
-    const id = crypto.randomUUID();
-    session.sendEntityCreate({
-      id,
-      hexId,
-      entityType: 'artillery-wind',
-      windDirection,
-      windStrength,
-    } as Omit<ArtilleryWindEntity, 'authorId'>);
+    hexMap.set('wind', { type: 'wind', direction: windDirection, strength: windStrength });
+  }
+  debugLog('yjs', `Wind set in ${hexId}: dir=${windDirection} str=${windStrength}`);
+}
+
+// ── Observer ──
+
+let observer: ((events: Y.YEvent<any>[], tx: Y.Transaction) => void) | null = null;
+
+export function setupArtilleryObserver(): void {
+  teardownArtilleryObserver();
+
+  const artilleryMap = getRootMap('artillery');
+  if (!artilleryMap) return;
+
+  observer = (events: Y.YEvent<any>[], transaction: Y.Transaction) => {
+    if (transaction.local) return;
+
+    const currentHexId = useMapStore.getState().detailMode?.apiName || '';
+    const map = useMapStore.getState().mapInstance;
+
+    for (const event of events) {
+      if (!(event instanceof Y.YMapEvent)) continue;
+
+      // Skip root-level hex map additions/removals
+      if (event.target === artilleryMap) continue;
+
+      const hexId = findHexId(artilleryMap, event.target as Y.Map<any>);
+      if (!hexId) continue;
+
+      event.changes.keys.forEach((change, entityId) => {
+        if (change.action === 'add' || change.action === 'update') {
+          const data = (event.target as Y.Map<any>).get(entityId);
+          if (!data) return;
+
+          if (hexId === currentHexId && map) {
+            applyRemoteAdd(map, entityId, data, change.action);
+          } else {
+            // Update off-screen cache
+            updateArtilleryCache(hexId);
+          }
+          debugLog('yjs', `Remote artillery ${change.action} in ${hexId}: ${entityId} (${data.type})`);
+        } else if (change.action === 'delete') {
+          const oldData = change.oldValue;
+          if (hexId === currentHexId && map) {
+            applyRemoteDelete(map, entityId, oldData);
+          } else {
+            updateArtilleryCache(hexId);
+          }
+          debugLog('yjs', `Remote artillery delete in ${hexId}: ${entityId} (${oldData?.type})`);
+        }
+      });
+    }
+  };
+
+  artilleryMap.observeDeep(observer);
+  debugLog('yjs', 'Artillery observer attached');
+}
+
+export function teardownArtilleryObserver(): void {
+  if (observer) {
+    const artilleryMap = getRootMap('artillery');
+    if (artilleryMap) {
+      artilleryMap.unobserveDeep(observer);
+    }
+    observer = null;
+    debugLog('yjs', 'Artillery observer detached');
   }
 }
 
-// ── Entity → State conversion (used for full-snapshot restore and entity-clear rebuild) ──
+function applyRemoteAdd(map: maplibregl.Map, entityId: string, data: any, action: string): void {
+  switch (data.type) {
+    case 'platform': {
+      if (action === 'update') {
+        updateRemoteGun(map, entityId, data);
+      } else {
+        addRemoteGun(map, entityId, data.position, data.label, data.platformIndex, data.isMain);
+      }
+      break;
+    }
+    case 'target': {
+      if (action === 'update') {
+        updateRemoteTarget(map, entityId, data);
+      } else {
+        setRemoteTarget(map, entityId, data.position);
+      }
+      break;
+    }
+    case 'impact': {
+      if (action === 'update') {
+        updateRemoteImpact(map, entityId, data);
+      } else {
+        setRemoteImpact(map, entityId, data.position);
+      }
+      break;
+    }
+    case 'wind': {
+      useArtilleryStore.getState().setWind(data.direction, data.strength);
+      scheduleWindRefresh(map);
+      break;
+    }
+  }
+}
 
-export function entitiesToArtilleryState(entities: Entity[]): SavedArtilleryState {
-  const platforms = entities.filter(e => e.entityType === 'artillery-platform') as ArtilleryPlatformEntity[];
-  const targets = entities.filter(e => e.entityType === 'artillery-target') as ArtilleryTargetEntity[];
-  const impacts = entities.filter(e => e.entityType === 'artillery-impact') as ArtilleryImpactEntity[];
-  const winds = entities.filter(e => e.entityType === 'artillery-wind') as ArtilleryWindEntity[];
+function applyRemoteDelete(map: maplibregl.Map, entityId: string, oldData: any): void {
+  if (!oldData) return;
+  switch (oldData.type) {
+    case 'platform':
+      removeRemoteGun(map, entityId);
+      break;
+    case 'target':
+      removeRemoteTarget(map);
+      break;
+    case 'impact':
+      removeRemoteImpact(map);
+      break;
+    case 'wind':
+      useArtilleryStore.getState().setWind(null, 0);
+      scheduleWindRefresh(map);
+      break;
+  }
+}
+
+// ── Load function ──
+
+export function loadHexArtillery(hexId: string): SavedArtilleryState | null {
+  const artilleryMap = getRootMap('artillery');
+  if (!artilleryMap || !artilleryMap.has(hexId)) return null;
+
+  const hexMap = artilleryMap.get(hexId) as Y.Map<any>;
+  const platforms: { entityId: string; position: [number, number]; label: string; platformIndex?: number; isMain: boolean }[] = [];
+  let target: { entityId: string; position: [number, number] } | null = null;
+  let impact: { entityId: string; position: [number, number] } | null = null;
+  let wind: { direction: number | null; strength: number } | null = null as { direction: number | null; strength: number } | null;
+
+  hexMap.forEach((data: any, entityId: string) => {
+    switch (data.type) {
+      case 'platform':
+        platforms.push({
+          entityId,
+          position: data.position,
+          label: data.label,
+          platformIndex: data.platformIndex,
+          isMain: data.isMain,
+        });
+        break;
+      case 'target':
+        target = { entityId, position: data.position };
+        break;
+      case 'impact':
+        impact = { entityId, position: data.position };
+        break;
+      case 'wind':
+        wind = { direction: data.direction, strength: data.strength };
+        break;
+    }
+  });
+
+  if (platforms.length === 0 && !target && !impact && !wind) return null;
+
+  // Extract wind values here to avoid TS closure narrowing issue
+  const windDirection = wind ? wind.direction : undefined;
+  const windStrength = wind ? wind.strength : undefined;
 
   let mainGunIndex = 0;
   const positions = platforms.map((p, i) => {
@@ -132,219 +292,41 @@ export function entitiesToArtilleryState(entities: Entity[]): SavedArtilleryStat
       latlng: p.position,
       label: p.label,
       platformIndex: p.platformIndex,
-      entityId: p.id,
+      entityId: p.entityId,
     };
   });
 
-  const lastTarget = targets.length > 0 ? targets[targets.length - 1] : null;
-  const lastImpact = impacts.length > 0 ? impacts[impacts.length - 1] : null;
-  const wind = winds.length > 0 ? winds[winds.length - 1] : null;
-
   return {
     positions,
-    target: lastTarget ? lastTarget.position : null,
-    impact: lastImpact ? lastImpact.position : null,
+    target: target ? (target as any).position : null,
+    impact: impact ? (impact as any).position : null,
     mainGunIndex,
     defaultPlatformIndex: DEFAULT_PLATFORM_INDEX,
     nextId: positions.length + 1,
     nextLabelNum: positions.length + 1,
-    targetEntityId: lastTarget ? lastTarget.id : null,
-    impactEntityId: lastImpact ? lastImpact.id : null,
-    windDirection: wind ? wind.windDirection : undefined,
-    windStrength: wind ? wind.windStrength : undefined,
+    targetEntityId: target ? (target as any).entityId : null,
+    impactEntityId: impact ? (impact as any).entityId : null,
+    windDirection,
+    windStrength,
   };
 }
 
-// ── Init (no-op now — no callback to register) ──
+// ── Cache helper ──
 
-export function initArtillerySync(): void {
-  // Granular sync is wired directly in artillery.ts mutation points
-}
-
-export function cleanupArtillerySync(): void {
-  // No callback to clean up
-}
-
-// ── Cache helpers ──
-
-function isArtilleryType(entityType: string): boolean {
-  return entityType === 'artillery-platform' || entityType === 'artillery-target' || entityType === 'artillery-impact' || entityType === 'artillery-wind';
-}
-
-function cacheEntity(entity: Entity): void {
-  if (!hexEntityData[entity.hexId]) hexEntityData[entity.hexId] = [];
-  hexEntityData[entity.hexId].push(entity);
-  syncLegacyArtilleryCache(entity.hexId);
-}
-
-function removeCachedEntity(hexId: string, entityId: string): void {
-  const cached = hexEntityData[hexId];
-  if (cached) {
-    const idx = cached.findIndex(e => e.id === entityId);
-    if (idx !== -1) cached.splice(idx, 1);
-  }
-  syncLegacyArtilleryCache(hexId);
-}
-
-function updateCachedEntity(hexId: string, entityId: string, changes: Record<string, unknown>): void {
-  const cached = hexEntityData[hexId];
-  if (cached) {
-    const entity = cached.find(e => e.id === entityId);
-    if (entity) Object.assign(entity, changes);
-  }
-  syncLegacyArtilleryCache(hexId);
-}
-
-function syncLegacyArtilleryCache(hexId: string): void {
-  const cached = hexEntityData[hexId] || [];
-  const artilleryEntities = cached.filter(e => isArtilleryType(e.entityType));
-  if (artilleryEntities.length > 0) {
-    hexArtilleryData[hexId] = entitiesToArtilleryState(artilleryEntities);
+function updateArtilleryCache(hexId: string): void {
+  const state = loadHexArtillery(hexId);
+  if (state) {
+    hexArtilleryData[hexId] = state;
   } else {
     delete hexArtilleryData[hexId];
   }
 }
 
-function rebuildArtilleryFromCache(hexId: string): void {
-  const map = useMapStore.getState().mapInstance;
-  if (!map) return;
+// ── Helpers ──
 
-  const cached = hexEntityData[hexId] || [];
-  const artilleryEntities = cached.filter(e => isArtilleryType(e.entityType));
-  if (artilleryEntities.length > 0) {
-    const savedState = entitiesToArtilleryState(artilleryEntities);
-    restoreArtilleryState(savedState, map);
-  } else {
-    // Empty state — restore clean
-    restoreArtilleryState({
-      positions: [],
-      target: null,
-      impact: null,
-      mainGunIndex: 0,
-      defaultPlatformIndex: DEFAULT_PLATFORM_INDEX,
-      nextId: 1,
-      nextLabelNum: 1,
-      targetEntityId: null,
-      impactEntityId: null,
-    }, map);
+function findHexId(root: Y.Map<Y.Map<any>>, target: Y.Map<any>): string | null {
+  for (const [hexId, hexMap] of root.entries()) {
+    if (hexMap === target) return hexId;
   }
-}
-
-// ── Granular inbound handler ──
-
-export function handleArtilleryBroadcast(
-  msg: Record<string, any>,
-  currentHexId: string,
-): void {
-  const data = msg.payload ?? msg;
-  const map = useMapStore.getState().mapInstance;
-
-  switch (msg.type) {
-    case 'entity-create': {
-      const entity = data.entity as Entity;
-      if (!isArtilleryType(entity.entityType)) return;
-
-      cacheEntity(entity);
-
-      if (entity.hexId === currentHexId && map) {
-        switch (entity.entityType) {
-          case 'artillery-platform': {
-            const p = entity as ArtilleryPlatformEntity;
-            addRemoteGun(map, p.id, p.position, p.label, p.platformIndex, p.isMain);
-            break;
-          }
-          case 'artillery-target': {
-            const t = entity as ArtilleryTargetEntity;
-            setRemoteTarget(map, t.id, t.position);
-            break;
-          }
-          case 'artillery-impact': {
-            const i = entity as ArtilleryImpactEntity;
-            setRemoteImpact(map, i.id, i.position);
-            break;
-          }
-          case 'artillery-wind': {
-            const w = entity as ArtilleryWindEntity;
-            useArtilleryStore.getState().setWind(w.windDirection, w.windStrength);
-            if (map) scheduleWindRefresh(map);
-            break;
-          }
-        }
-      }
-      break;
-    }
-    case 'entity-update': {
-      const hexId = data.hexId as string;
-      const entityId = data.entityId as string;
-      const changes = data.changes as Record<string, unknown>;
-      const entityType = data.entityType as string;
-
-      if (!isArtilleryType(entityType)) return;
-
-      updateCachedEntity(hexId, entityId, changes);
-
-      if (hexId === currentHexId && map) {
-        if (entityType === 'artillery-platform') {
-          updateRemoteGun(map, entityId, changes);
-        } else if (entityType === 'artillery-target') {
-          updateRemoteTarget(map, entityId, changes);
-        } else if (entityType === 'artillery-impact') {
-          updateRemoteImpact(map, entityId, changes);
-        }
-      }
-      break;
-    }
-    case 'entity-delete': {
-      const hexId = data.hexId as string;
-      const entityId = data.entityId as string;
-
-      const cached = hexEntityData[hexId];
-      if (!cached) return;
-      const entity = cached.find(e => e.id === entityId);
-      if (!entity || !isArtilleryType(entity.entityType)) return;
-
-      const entityType = entity.entityType;
-      removeCachedEntity(hexId, entityId);
-
-      if (hexId === currentHexId && map) {
-        switch (entityType) {
-          case 'artillery-platform':
-            removeRemoteGun(map, entityId);
-            break;
-          case 'artillery-target':
-            removeRemoteTarget(map);
-            break;
-          case 'artillery-impact':
-            removeRemoteImpact(map);
-            break;
-        }
-      }
-      break;
-    }
-    case 'entity-clear': {
-      const hexId = data.hexId as string;
-      const entityType = data.entityType as string | undefined;
-
-      if (entityType && !isArtilleryType(entityType)) return;
-
-      if (entityType) {
-        const cached = hexEntityData[hexId];
-        if (cached) {
-          hexEntityData[hexId] = cached.filter(e => e.entityType !== entityType);
-        }
-      }
-
-      syncLegacyArtilleryCache(hexId);
-
-      if (hexId === currentHexId) {
-        if (entityType === 'artillery-wind') {
-          useArtilleryStore.getState().setWind(null, 0);
-          if (map) scheduleWindRefresh(map);
-        } else {
-          rebuildArtilleryFromCache(hexId);
-        }
-      }
-      break;
-    }
-  }
+  return null;
 }

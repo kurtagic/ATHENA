@@ -19,7 +19,7 @@ export function useVoiceSilencer(): void {
         return;
       }
 
-      const anyActive = state.pttActive || state.peers.some((p) => p.speaking);
+      const anyActive = state.tttActive || state.peers.some((p) => p.speaking);
 
       if (anyActive) {
         // Mute immediately

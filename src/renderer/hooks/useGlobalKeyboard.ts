@@ -8,13 +8,13 @@ import { voice } from '../multiplayer/voiceManager';
 import { session } from '../multiplayer/sessionManager';
 
 export function useGlobalKeyboard(mapRef: React.MutableRefObject<maplibregl.Map | null>): void {
-  // Global PTT toggle via main process hotkey
+  // Global TTT toggle via main process hotkey
   useEffect(() => {
-    window.athena.onPttToggle(() => {
+    window.athena.onTttToggle(() => {
       if (!useVoiceStore.getState().joined) return;
-      const active = useVoiceStore.getState().pttActive;
-      voice.setPttActive(!active);
-      useVoiceStore.getState().setPttActive(!active);
+      const active = useVoiceStore.getState().tttActive;
+      voice.setTttActive(!active);
+      useVoiceStore.getState().setTttActive(!active);
     });
   }, []);
 

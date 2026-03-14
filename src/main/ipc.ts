@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { setSelectedHexes } from './warPoller';
 import { getSettings, updateSettings } from './settings';
-import { registerOverlayHotkey, registerPttHotkey, registerQuickNotifHotkey } from './hotkeys';
+import { registerOverlayHotkey, registerTttHotkey, registerQuickNotifHotkey } from './hotkeys';
 import { muteOtherApps, unmuteOtherApps } from './audioSilencer';
 import { updatePipData } from './pipWindow';
 import type { SettingsPartial, PinnedSolution } from '../shared/types';
@@ -33,7 +33,7 @@ export function registerIpcHandlers(win: BrowserWindow): void {
   ipcMain.handle('set-settings', (_event, partial: SettingsPartial) => {
     const oldSettings = getSettings();
     const oldKey = oldSettings.keybinds.toggleOverlay;
-    const oldPttKey = oldSettings.keybinds.pushToTalk;
+    const oldTttKey = oldSettings.keybinds.toggleToTalk;
 
     const newSettings = updateSettings(partial);
 
@@ -50,14 +50,14 @@ export function registerIpcHandlers(win: BrowserWindow): void {
       }
     }
 
-    if (partial.keybinds?.pushToTalk && partial.keybinds.pushToTalk !== oldPttKey) {
-      const pttSuccess = registerPttHotkey(newSettings.keybinds.pushToTalk, win);
-      if (!pttSuccess) {
-        updateSettings({ keybinds: { pushToTalk: oldPttKey } });
-        registerPttHotkey(oldPttKey, win);
+    if (partial.keybinds?.toggleToTalk && partial.keybinds.toggleToTalk !== oldTttKey) {
+      const tttSuccess = registerTttHotkey(newSettings.keybinds.toggleToTalk, win);
+      if (!tttSuccess) {
+        updateSettings({ keybinds: { toggleToTalk: oldTttKey } });
+        registerTttHotkey(oldTttKey, win);
         return {
           settings: getSettings(),
-          error: `Could not register "${partial.keybinds.pushToTalk}". It may be in use by another application.`,
+          error: `Could not register "${partial.keybinds.toggleToTalk}". It may be in use by another application.`,
         };
       }
     }

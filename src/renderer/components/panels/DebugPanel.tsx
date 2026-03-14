@@ -7,6 +7,8 @@ const CATEGORY_COLORS: Record<DebugCategory, string> = {
   sync: 'bg-cyan-400/20 text-cyan-400',
   session: 'bg-blue-400/20 text-blue-400',
   error: 'bg-red-400/20 text-red-400',
+  yjs: 'bg-green-400/20 text-green-400',
+  voice: 'bg-purple-400/20 text-purple-400',
 };
 
 function formatTime(ts: number): string {

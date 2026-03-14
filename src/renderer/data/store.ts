@@ -1,5 +1,4 @@
 import type { StaticLabel, MapItem } from '../../shared/types';
-import type { Entity, EntityType } from '../multiplayer/protocol';
 
 // Data caches shared between dataHandlers and detailView
 export const hexStaticData: Record<string, StaticLabel[]> = {};
@@ -12,6 +11,7 @@ export interface SavedStroke {
   color: string;
   weight: number;
   opacity: number;
+  brushPattern?: string;
 }
 
 export interface SavedArtilleryState {
@@ -28,28 +28,10 @@ export interface SavedArtilleryState {
   windStrength?: number;
 }
 
-// Unified entity cache
-export const hexEntityData: Record<string, Entity[]> = {};
-
-// Legacy caches — kept for save/restore in drawing.ts and artillery.ts
 export const hexDrawingData: Record<string, SavedStroke[]> = {};
 export const hexArtilleryData: Record<string, SavedArtilleryState> = {};
 
 export function clearHexCaches(): void {
   for (const key of Object.keys(hexDrawingData)) delete hexDrawingData[key];
   for (const key of Object.keys(hexArtilleryData)) delete hexArtilleryData[key];
-  for (const key of Object.keys(hexEntityData)) delete hexEntityData[key];
-}
-
-// Helper functions for entity cache
-export function getEntitiesByType<T extends Entity>(hexId: string, type: EntityType): T[] {
-  const entities = hexEntityData[hexId];
-  if (!entities) return [];
-  return entities.filter(e => e.entityType === type) as T[];
-}
-
-export function getEntity(hexId: string, entityId: string): Entity | undefined {
-  const entities = hexEntityData[hexId];
-  if (!entities) return undefined;
-  return entities.find(e => e.id === entityId);
 }

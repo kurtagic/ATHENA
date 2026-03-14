@@ -1,8 +1,8 @@
 import React, { useCallback, useRef } from 'react';
-import { Pencil, Eraser } from 'lucide-react';
-import { useDrawStore } from '../../stores/drawStore';
+import { Pencil, Eraser, Ruler, Slash, Hash, Square } from 'lucide-react';
+import { useDrawStore, type BrushPattern } from '../../stores/drawStore';
 import { useMapStore } from '../../stores/mapStore';
-import { setDrawColor, setDrawWeight, setDrawOpacity, toggleEraser } from '../../map/drawing';
+import { setDrawColor, setDrawWeight, setDrawOpacity, setDrawBrushPattern, toggleEraser } from '../../map/drawing';
 import { Toggle } from '../ui/toggle';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip';
 import { Separator } from '../ui/separator';
@@ -20,6 +20,7 @@ const SWATCHES = [
 export function BottomBar() {
   const activeColor = useDrawStore((s) => s.activeColor);
   const activeTool = useDrawStore((s) => s.activeTool);
+  const brushPattern = useDrawStore((s) => s.brushPattern);
   const strokeWidth = useDrawStore((s) => s.strokeWidth);
   const strokeOpacity = useDrawStore((s) => s.strokeOpacity);
   const map = useMapStore((s) => s.mapInstance);
@@ -42,7 +43,10 @@ export function BottomBar() {
   const handlePenClick = useCallback(() => {
     if (activeTool === 'eraser' && map) {
       toggleEraser(map);
+    }
+    if (activeTool !== 'pen') {
       useDrawStore.getState().setActiveTool('pen');
+      setDrawBrushPattern(undefined);
       // Restore last color if needed
       const state = useDrawStore.getState();
       if (!state.activeColor) {
@@ -64,6 +68,38 @@ export function BottomBar() {
     }
   }, [activeTool, map]);
 
+  const handleRulerClick = useCallback(() => {
+    if (activeTool === 'eraser' && map) {
+      toggleEraser(map);
+    }
+    if (activeTool === 'ruler') {
+      useDrawStore.getState().setActiveTool('pen');
+    } else {
+      useDrawStore.getState().setActiveTool('ruler');
+    }
+  }, [activeTool, map]);
+
+  const handleAreaPatternClick = useCallback((pattern: BrushPattern) => {
+    if (activeTool === 'eraser' && map) {
+      toggleEraser(map);
+    }
+    if (activeTool === 'area' && brushPattern === pattern) {
+      // Toggle back to pen
+      useDrawStore.getState().setActiveTool('pen');
+      setDrawBrushPattern(undefined);
+    } else {
+      useDrawStore.getState().setActiveTool('area');
+      useDrawStore.getState().setBrushPattern(pattern);
+      setDrawBrushPattern(pattern);
+      // Restore color if coming from eraser
+      const state = useDrawStore.getState();
+      if (!state.activeColor) {
+        useDrawStore.getState().setActiveColor('#ef4444');
+        setDrawColor('#ef4444');
+      }
+    }
+  }, [activeTool, brushPattern, map]);
+
   const handleWidthChange = useCallback((value: number[]) => {
     const w = value[0];
     useDrawStore.getState().setStrokeWidth(w);
@@ -77,10 +113,10 @@ export function BottomBar() {
   }, []);
 
   const isSwatchSelected = (color: string) =>
-    activeColor === color && activeTool === 'pen';
+    activeColor === color && (activeTool === 'pen' || activeTool === 'area');
 
   const isCustomSelected =
-    activeTool === 'pen' &&
+    (activeTool === 'pen' || activeTool === 'area') &&
     activeColor !== '' &&
     !SWATCHES.some((s) => s.color === activeColor);
 
@@ -104,7 +140,11 @@ export function BottomBar() {
                   <Toggle
                     pressed={activeTool === 'pen'}
                     onPressedChange={handlePenClick}
-                    className="h-[34px] w-[34px] bg-transparent hover:bg-white/[0.08] data-[state=on]:bg-white/[0.12] data-[state=on]:text-white text-white/50"
+                    className={`h-[34px] w-[34px] bg-transparent hover:bg-white/[0.08] text-white/50 border-b-2 transition-all ${
+                      activeTool === 'pen'
+                        ? 'border-b-white/80 bg-white/[0.12] text-white'
+                        : 'border-b-transparent'
+                    }`}
                   >
                     <Pencil size={16} />
                   </Toggle>
@@ -119,13 +159,98 @@ export function BottomBar() {
                   <Toggle
                     pressed={activeTool === 'eraser'}
                     onPressedChange={handleEraserClick}
-                    className="h-[34px] w-[34px] bg-transparent hover:bg-white/[0.08] data-[state=on]:bg-[var(--color-destructive-dim)] data-[state=on]:text-[var(--color-destructive)] text-white/50"
+                    className={`h-[34px] w-[34px] bg-transparent hover:bg-white/[0.08] text-white/50 border-b-2 transition-all ${
+                      activeTool === 'eraser'
+                        ? 'border-b-[var(--color-destructive)] bg-[var(--color-destructive-dim)] text-[var(--color-destructive)]'
+                        : 'border-b-transparent'
+                    }`}
                   >
                     <Eraser size={16} />
                   </Toggle>
                 </TooltipTrigger>
                 <TooltipContent side="top" className="bg-[#1a1a1e] border-[var(--color-border-glass)] text-white text-xs">
                   Eraser (E)
+                </TooltipContent>
+              </Tooltip>
+
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Toggle
+                    pressed={activeTool === 'ruler'}
+                    onPressedChange={handleRulerClick}
+                    className={`h-[34px] w-[34px] bg-transparent hover:bg-white/[0.08] text-white/50 border-b-2 transition-all ${
+                      activeTool === 'ruler'
+                        ? 'border-b-white/80 bg-white/[0.12] text-white'
+                        : 'border-b-transparent'
+                    }`}
+                  >
+                    <Ruler size={16} />
+                  </Toggle>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="bg-[#1a1a1e] border-[var(--color-border-glass)] text-white text-xs">
+                  Ruler (Right-click)
+                </TooltipContent>
+              </Tooltip>
+            </div>
+
+            <Separator orientation="vertical" className="h-5 bg-white/[0.08] mx-1" />
+
+            {/* Area brush group */}
+            <div className="flex items-center gap-1.5">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Toggle
+                    pressed={activeTool === 'area' && brushPattern === 'diagonal'}
+                    onPressedChange={() => handleAreaPatternClick('diagonal')}
+                    className={`h-[34px] w-[34px] bg-transparent hover:bg-white/[0.08] text-white/50 border-b-2 transition-all ${
+                      activeTool === 'area' && brushPattern === 'diagonal'
+                        ? 'border-b-white/80 bg-white/[0.12] text-white'
+                        : 'border-b-transparent'
+                    }`}
+                  >
+                    <Slash size={16} />
+                  </Toggle>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="bg-[#1a1a1e] border-[var(--color-border-glass)] text-white text-xs">
+                  Diagonal Fill
+                </TooltipContent>
+              </Tooltip>
+
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Toggle
+                    pressed={activeTool === 'area' && brushPattern === 'crosshatch'}
+                    onPressedChange={() => handleAreaPatternClick('crosshatch')}
+                    className={`h-[34px] w-[34px] bg-transparent hover:bg-white/[0.08] text-white/50 border-b-2 transition-all ${
+                      activeTool === 'area' && brushPattern === 'crosshatch'
+                        ? 'border-b-white/80 bg-white/[0.12] text-white'
+                        : 'border-b-transparent'
+                    }`}
+                  >
+                    <Hash size={16} />
+                  </Toggle>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="bg-[#1a1a1e] border-[var(--color-border-glass)] text-white text-xs">
+                  Crosshatch Fill
+                </TooltipContent>
+              </Tooltip>
+
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Toggle
+                    pressed={activeTool === 'area' && brushPattern === 'border'}
+                    onPressedChange={() => handleAreaPatternClick('border')}
+                    className={`h-[34px] w-[34px] bg-transparent hover:bg-white/[0.08] text-white/50 border-b-2 transition-all ${
+                      activeTool === 'area' && brushPattern === 'border'
+                        ? 'border-b-white/80 bg-white/[0.12] text-white'
+                        : 'border-b-transparent'
+                    }`}
+                  >
+                    <Square size={16} />
+                  </Toggle>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="bg-[#1a1a1e] border-[var(--color-border-glass)] text-white text-xs">
+                  Border Only
                 </TooltipContent>
               </Tooltip>
             </div>

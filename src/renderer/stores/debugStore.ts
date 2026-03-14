@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-export type DebugCategory = 'ws' | 'sync' | 'session' | 'error';
+export type DebugCategory = 'ws' | 'sync' | 'session' | 'error' | 'yjs' | 'voice';
 
 interface DebugLogEntry {
   id: number;

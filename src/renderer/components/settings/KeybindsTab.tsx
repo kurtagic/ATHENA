@@ -5,14 +5,14 @@ import { keyEventToAccelerator, acceleratorToDisplay } from '../../lib/keybindUt
 import type { Settings } from '../../../shared/types';
 
 const KEYBIND_DEFAULTS: Record<string, string> = {
-  toggleOverlay: 'N',
-  pushToTalk: 'F5',
+  toggleOverlay: 'Shift+N',
+  toggleToTalk: 'F5',
   quickNotification: 'F6',
 };
 
 const KEYBIND_ACTIONS = [
   { key: 'toggleOverlay' as const, label: 'Toggle Overlay' },
-  { key: 'pushToTalk' as const, label: 'Toggle to Talk' },
+  { key: 'toggleToTalk' as const, label: 'Toggle to Talk' },
   { key: 'quickNotification' as const, label: 'Quick Notification' },
 ];
 

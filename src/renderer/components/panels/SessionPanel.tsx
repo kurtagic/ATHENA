@@ -191,7 +191,7 @@ function LobbyView({
 }) {
   const [copied, setCopied] = useState(false);
   const voicePeers = useVoiceStore((s) => s.peers);
-  const pttActive = useVoiceStore((s) => s.pttActive);
+  const tttActive = useVoiceStore((s) => s.tttActive);
 
   const copyCode = () => {
     navigator.clipboard.writeText(lobbyId);
@@ -249,7 +249,7 @@ function LobbyView({
         {members.map((m) => {
           const isSelf = m.id === memberId;
           const voicePeer = voicePeers.find(p => p.id === m.id);
-          const isSpeaking = isSelf ? pttActive : voicePeer?.speaking;
+          const isSpeaking = isSelf ? tttActive : voicePeer?.speaking;
           return (
             <div key={m.id} className="flex items-center gap-1.5 px-2 py-1 rounded hover:bg-white/[0.04]">
               {m.id === ownerId && <Crown size={10} className="text-amber-400 shrink-0" />}
@@ -305,8 +305,8 @@ function LobbyView({
 
 function VoiceButton() {
   const joined = useVoiceStore((s) => s.joined);
-  const pttActive = useVoiceStore((s) => s.pttActive);
-  const pttKey = useSettingsStore((s) => s.settings?.keybinds.pushToTalk ?? 'Y');
+  const tttActive = useVoiceStore((s) => s.tttActive);
+  const tttKey = useSettingsStore((s) => s.settings?.keybinds.toggleToTalk ?? 'Y');
 
   return (
     <button
@@ -324,12 +324,12 @@ function VoiceButton() {
         <>
           <Phone size={11} />
           Voice Connected
-          {pttActive && <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />}
+          {tttActive && <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />}
         </>
       ) : (
         <>
           <Phone size={11} />
-          Join Voice (TTT: {acceleratorToDisplay(pttKey)})
+          Join Voice (TTT: {acceleratorToDisplay(tttKey)})
         </>
       )}
     </button>

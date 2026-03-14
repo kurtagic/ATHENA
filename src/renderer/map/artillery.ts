@@ -925,9 +925,7 @@ export function saveArtilleryState(): SavedArtilleryState {
 }
 
 export function restoreArtilleryState(saved: SavedArtilleryState, map: maplibregl.Map): void {
-  if (saved.windDirection !== undefined) {
-    useArtilleryStore.getState().setWind(saved.windDirection, saved.windStrength ?? 0);
-  }
+  useArtilleryStore.getState().setWind(saved.windDirection ?? null, saved.windStrength ?? 0);
   state.positions = saved.positions.map((p) => ({
     id: p.id,
     point: toMapPoint(p.latlng[0], p.latlng[1]),

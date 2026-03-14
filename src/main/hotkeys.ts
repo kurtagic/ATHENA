@@ -3,7 +3,7 @@ import { showPip, hidePip } from './pipWindow';
 import { showQuickNotifWindow } from './quickNotifWindow';
 
 let currentAccelerator: string | null = null;
-let currentPttAccelerator: string | null = null;
+let currentTttAccelerator: string | null = null;
 let currentQuickNotifAccelerator: string | null = null;
 
 export function registerOverlayHotkey(accelerator: string, mainWindow: BrowserWindow): boolean {
@@ -32,19 +32,19 @@ export function registerOverlayHotkey(accelerator: string, mainWindow: BrowserWi
   return success;
 }
 
-export function registerPttHotkey(accelerator: string, mainWindow: BrowserWindow): boolean {
-  if (currentPttAccelerator) {
-    globalShortcut.unregister(currentPttAccelerator);
-    currentPttAccelerator = null;
+export function registerTttHotkey(accelerator: string, mainWindow: BrowserWindow): boolean {
+  if (currentTttAccelerator) {
+    globalShortcut.unregister(currentTttAccelerator);
+    currentTttAccelerator = null;
   }
 
   const success = globalShortcut.register(accelerator, () => {
     if (!mainWindow || mainWindow.isDestroyed()) return;
-    mainWindow.webContents.send('ptt-toggle');
+    mainWindow.webContents.send('ttt-toggle');
   });
 
   if (success) {
-    currentPttAccelerator = accelerator;
+    currentTttAccelerator = accelerator;
   }
   return success;
 }

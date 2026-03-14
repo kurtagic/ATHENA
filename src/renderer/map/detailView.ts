@@ -1,6 +1,7 @@
 import maplibregl from 'maplibre-gl';
 import type { GeoJSONSource } from 'maplibre-gl';
 import { useMapStore } from '../stores/mapStore';
+import { useArtilleryStore } from '../stores/artilleryStore';
 import { hexLookup, hexImageUrl, detailMapPoint } from '../data/hexMapping';
 import { mapPointToLngLat, lngLatToMapPoint } from '../data/coords';
 import { hexStaticData, hexDynamicData, hexDrawingData, hexArtilleryData } from '../data/store';
@@ -8,6 +9,7 @@ import { buildMarkerHtml } from '../data/dataHandlers';
 import { CONQUERABLE_STRUCTURES } from '../data/iconTypes';
 import voronoiOwners from '../../../static/voronoi_owners.json';
 import { initDrawLayer, cleanupDrawing, setDrawColor, getDrawState, activateDrawing, saveDrawState, restoreDrawState } from './drawing';
+import { loadHexStrokes } from '../multiplayer/drawingSync';
 import { initArtilleryLayer, cleanupArtillery, activateArtillery, saveArtilleryState, restoreArtilleryState } from './artillery';
 import { removeHexLabels, addHexLabels, hideHexGrid, showHexGrid } from './hexGrid';
 import { removeStaticLabelMarkers, addStaticLabelMarkers } from '../data/dataHandlers';
@@ -472,16 +474,24 @@ export function enterDetailMode(hexId: string): void {
   setDrawColor(getDrawState().color);
   activateDrawing(_map);
 
-  // Restore saved drawing state for this hex
+  // Restore saved drawing state for this hex (fallback to Yjs if cache is empty)
+  if (!hexDrawingData[apiName]) {
+    const yjsStrokes = loadHexStrokes(apiName);
+    if (yjsStrokes.length > 0) hexDrawingData[apiName] = yjsStrokes;
+  }
   const savedDrawing = hexDrawingData[apiName];
   if (savedDrawing) restoreDrawState(savedDrawing, _map);
 
   // Init artillery layer and activate
   initArtilleryLayer(_map);
 
-  // Restore saved artillery state for this hex
+  // Restore saved artillery state for this hex, or clear stale wind
   const savedArty = hexArtilleryData[apiName];
-  if (savedArty) restoreArtilleryState(savedArty, _map);
+  if (savedArty) {
+    restoreArtilleryState(savedArty, _map);
+  } else {
+    useArtilleryStore.getState().setWind(null, 0);
+  }
 
   activateArtillery(_map);
 
