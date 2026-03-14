@@ -2,7 +2,7 @@ import * as Y from 'yjs';
 import { WebsocketProvider } from 'y-websocket';
 import { debugLog } from '../stores/debugStore';
 
-const YJS_SERVER_URL = 'ws://localhost:4321';
+const YJS_SERVER_URL = 'wss://api.athena.kurti.si/yjs';
 
 let doc: Y.Doc | null = null;
 let provider: WebsocketProvider | null = null;
