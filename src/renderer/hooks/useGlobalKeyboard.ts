@@ -45,8 +45,6 @@ export function useGlobalKeyboard(mapRef: React.MutableRefObject<maplibregl.Map 
         const as = getArtilleryState();
         if (as.placementMode !== 'idle') {
           setPlacementMode('idle');
-        } else if (getDetailMode()) {
-          exitDetailMode();
         }
       }
     };

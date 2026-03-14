@@ -90,6 +90,9 @@ export interface AthenaAPI {
   onSendQuickNotification: (callback: (text: string) => void) => void;
   onCheckLobbyStatus: (callback: () => void) => void;
   sendLobbyStatusResult: (inLobby: boolean) => void;
+  togglePip: (show: boolean) => void;
+  sendPipLobbyStatus: (connected: boolean) => void;
+  onPipCommand: (callback: (command: string) => void) => void;
   quit: () => void;
 }
 

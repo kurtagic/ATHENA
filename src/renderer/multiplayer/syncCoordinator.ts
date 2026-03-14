@@ -4,6 +4,7 @@ import { setupArtilleryObserver, teardownArtilleryObserver, loadHexArtillery } f
 import { voice } from './voiceManager';
 import { setSyncMode, setCurrentHexId, clearAllStrokes, restoreDrawState } from '../map/drawing';
 import { setArtilleryHexId, restoreArtilleryState } from '../map/artillery';
+import { DEFAULT_PLATFORM_INDEX } from '../data/artilleryPlatforms';
 import { hexDrawingData, hexArtilleryData } from '../data/store';
 import { useSessionStore } from '../stores/sessionStore';
 import { useMapStore } from '../stores/mapStore';
@@ -41,7 +42,7 @@ export function initMultiplayerSync(): void {
       clearAllStrokes();
       const map = useMapStore.getState().mapInstance;
       if (map) {
-        restoreArtilleryState({ positions: [], target: null, impact: null, mainGunIndex: 0, defaultPlatformIndex: 0, nextId: 1, nextLabelNum: 1 }, map);
+        restoreArtilleryState({ positions: [], target: null, impact: null, mainGunIndex: 0, defaultPlatformIndex: DEFAULT_PLATFORM_INDEX, nextId: 1, nextLabelNum: 1 }, map);
       }
 
       // Connect Yjs and start observing
@@ -49,18 +50,25 @@ export function initMultiplayerSync(): void {
       setupDrawingObserver();
       setupArtilleryObserver();
 
-      // When Yjs finishes initial sync, restore strokes for current hex
+      // When Yjs finishes initial sync, restore strokes and artillery for current hex
       (provider as any).on('synced', () => {
         const hexId = useMapStore.getState().detailMode?.apiName || '';
         if (!hexId) return;
+        const map = useMapStore.getState().mapInstance;
         const strokes = loadHexStrokes(hexId);
-        if (strokes.length > 0) {
-          const map = useMapStore.getState().mapInstance;
+        if (strokes.length > 0 && map) {
+          clearAllStrokes();
+          restoreDrawState(strokes, map);
+          hexDrawingData[hexId] = strokes;
+          debugLog('yjs', `Synced: restored ${strokes.length} strokes for ${hexId}`);
+        }
+
+        const artilleryState = loadHexArtillery(hexId);
+        if (artilleryState) {
+          hexArtilleryData[hexId] = artilleryState;
           if (map) {
-            clearAllStrokes();
-            restoreDrawState(strokes, map);
-            hexDrawingData[hexId] = strokes;
-            debugLog('yjs', `Synced: restored ${strokes.length} strokes for ${hexId}`);
+            restoreArtilleryState(artilleryState, map);
+            debugLog('yjs', `Synced: restored artillery for ${hexId}`);
           }
         }
       });
@@ -104,10 +112,14 @@ export function initMultiplayerSync(): void {
           debugLog('yjs', `Loaded ${strokes.length} strokes for ${hexId} from Y.Doc`);
         }
 
-        // Load artillery from Yjs into hexArtilleryData
+        // Load artillery from Yjs into hexArtilleryData and restore to map
         const artilleryState = loadHexArtillery(hexId);
         if (artilleryState) {
           hexArtilleryData[hexId] = artilleryState;
+          const map = state.mapInstance;
+          if (map) {
+            restoreArtilleryState(artilleryState, map);
+          }
           debugLog('yjs', `Loaded artillery for ${hexId} from Y.Doc`);
         }
       }
@@ -181,7 +193,7 @@ function applyFullSnapshot(msg: FullSnapshotMsg, currentHexId: string): void {
   clearAllStrokes();
   const mapInstance = useMapStore.getState().mapInstance;
   if (mapInstance) {
-    restoreArtilleryState({ positions: [], target: null, impact: null, mainGunIndex: 0, defaultPlatformIndex: 0, nextId: 1, nextLabelNum: 1 }, mapInstance);
+    restoreArtilleryState({ positions: [], target: null, impact: null, mainGunIndex: 0, defaultPlatformIndex: DEFAULT_PLATFORM_INDEX, nextId: 1, nextLabelNum: 1 }, mapInstance);
   }
 
   // Load from Yjs for current hex

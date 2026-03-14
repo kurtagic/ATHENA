@@ -46,6 +46,15 @@ contextBridge.exposeInMainWorld('athena', {
   sendLobbyStatusResult: (inLobby: boolean) => {
     ipcRenderer.send('lobby-status-result', inLobby);
   },
+  togglePip: (show: boolean) => {
+    ipcRenderer.send('toggle-pip', show);
+  },
+  sendPipLobbyStatus: (connected: boolean) => {
+    ipcRenderer.send('pip-lobby-status', connected);
+  },
+  onPipCommand: (callback: (command: string) => void) => {
+    ipcRenderer.on('pip-command', (_event, command) => callback(command));
+  },
   quit: () => {
     ipcRenderer.send('quit');
   },

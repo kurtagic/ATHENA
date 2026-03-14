@@ -1,13 +1,15 @@
 import { BrowserWindow, screen } from 'electron';
+import path from 'node:path';
 import type { PinnedSolution } from '../shared/types';
 
 let pipWin: BrowserWindow | null = null;
 let latestData: PinnedSolution[] = [];
 let prevFingerprint = '';
 let prevRowCount = -1;
+let latestLobbyConnected = false;
 
 const PIP_INITIAL_WIDTH = 240;
-const PIP_INITIAL_HEIGHT = 80;
+const PIP_INITIAL_HEIGHT = 130;
 const PIP_MARGIN = 16;
 
 const PIP_HTML = `<!DOCTYPE html>
@@ -46,6 +48,44 @@ const PIP_HTML = `<!DOCTYPE html>
     margin-bottom: 8px;
     opacity: 0.8;
   }
+  #btns {
+    display: none;
+    gap: 6px;
+    margin-bottom: 8px;
+    -webkit-app-region: no-drag;
+  }
+  #btns.visible { display: flex; }
+  #btns button {
+    flex: 1;
+    padding: 5px 10px;
+    border-radius: 6px;
+    font-family: inherit;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    cursor: pointer;
+    border: 1px solid;
+    transition: background 150ms, border-color 150ms;
+  }
+  #btn-fire {
+    background: rgba(16, 185, 129, 0.15);
+    color: #34d399;
+    border-color: rgba(16, 185, 129, 0.5);
+  }
+  #btn-fire:hover {
+    background: rgba(16, 185, 129, 0.3);
+    border-color: rgba(16, 185, 129, 0.7);
+  }
+  #btn-stop {
+    background: rgba(239, 68, 68, 0.15);
+    color: #f87171;
+    border-color: rgba(239, 68, 68, 0.5);
+  }
+  #btn-stop:hover {
+    background: rgba(239, 68, 68, 0.3);
+    border-color: rgba(239, 68, 68, 0.7);
+  }
   .row {
     display: flex;
     align-items: center;
@@ -64,6 +104,10 @@ const PIP_HTML = `<!DOCTYPE html>
 <body>
   <div class="panel">
     <div class="title">Pinned Artillery</div>
+    <div id="btns">
+      <button id="btn-fire" onclick="window.pipBridge.sendCommand('fire')">Fire</button>
+      <button id="btn-stop" onclick="window.pipBridge.sendCommand('stop')">Stop</button>
+    </div>
     <div id="root"></div>
   </div>
 </body>
@@ -85,6 +129,7 @@ function createPipWindow(): BrowserWindow {
     focusable: false,
     show: false,
     webPreferences: {
+      preload: path.join(__dirname, 'pipPreload.js'),
       contextIsolation: true,
       nodeIntegration: false,
     },
@@ -153,7 +198,6 @@ function fingerprint(data: PinnedSolution[]): string {
 function hasValuesChanged(data: PinnedSolution[]): boolean {
   const fp = fingerprint(data);
   if (fp === prevFingerprint) return false;
-  // Don't reset fingerprint when data becomes empty (transient state during overlay toggle)
   if (fp === '') return false;
   const changed = prevFingerprint !== '';
   prevFingerprint = fp;
@@ -182,11 +226,6 @@ export function updatePipData(data: PinnedSolution[]): void {
   const changed = hasValuesChanged(data);
   latestData = data;
 
-  // Skip rendering empty data to visible pip — transient state during overlay toggle
-  if (data.length === 0 && pipWin && !pipWin.isDestroyed() && pipWin.isVisible()) {
-    return;
-  }
-
   if (pipWin && !pipWin.isDestroyed() && pipWin.isVisible()) {
     const { script, needsResize } = renderDataScript(data);
     if (needsResize) {
@@ -203,8 +242,6 @@ export function updatePipData(data: PinnedSolution[]): void {
 }
 
 export function showPip(): void {
-  if (latestData.length === 0) return;
-
   const freshlyCreated = !pipWin || pipWin.isDestroyed();
   if (freshlyCreated) {
     createPipWindow();
@@ -216,13 +253,19 @@ export function showPip(): void {
   prevRowCount = -1;
   const { script } = renderDataScript(latestData);
 
+  const lobbyScript = latestLobbyConnected
+    ? `document.getElementById('btns').classList.add('visible')`
+    : `document.getElementById('btns').classList.remove('visible')`;
+
   if (freshlyCreated || win.webContents.isLoading()) {
     win.webContents.once('did-finish-load', () => {
+      win.webContents.executeJavaScript(lobbyScript).catch(() => {});
       win.webContents.executeJavaScript(script)
         .then(resizeFromResult)
         .catch(() => {});
     });
   } else {
+    win.webContents.executeJavaScript(lobbyScript).catch(() => {});
     win.webContents.executeJavaScript(script)
       .then(resizeFromResult)
       .catch(() => {});
@@ -242,4 +285,15 @@ export function destroyPip(): void {
     pipWin.destroy();
     pipWin = null;
   }
+}
+
+export function updatePipLobbyStatus(connected: boolean): void {
+  latestLobbyConnected = connected;
+  if (!pipWin || pipWin.isDestroyed()) return;
+  const script = connected
+    ? `document.getElementById('btns').classList.add('visible'); (() => { const d = document.documentElement; return { w: d.scrollWidth, h: d.scrollHeight }; })()`
+    : `document.getElementById('btns').classList.remove('visible'); (() => { const d = document.documentElement; return { w: d.scrollWidth, h: d.scrollHeight }; })()`;
+  pipWin.webContents.executeJavaScript(script)
+    .then(resizeFromResult)
+    .catch(() => {});
 }

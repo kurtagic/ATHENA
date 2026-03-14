@@ -11,6 +11,7 @@ import {
   updateRemoteTarget,
   updateRemoteImpact,
   scheduleWindRefresh,
+  refreshPinnedFromCache,
 } from '../map/artillery';
 import type { SavedArtilleryState } from '../data/store';
 import { DEFAULT_PLATFORM_INDEX } from '../data/artilleryPlatforms';
@@ -317,6 +318,11 @@ function updateArtilleryCache(hexId: string): void {
   const state = loadHexArtillery(hexId);
   if (state) {
     hexArtilleryData[hexId] = state;
+    // If this hex has pinned artillery, recompute pinned solutions for PIP
+    const pinnedHexId = useArtilleryStore.getState().pinnedHexId;
+    if (pinnedHexId === hexId) {
+      refreshPinnedFromCache(state);
+    }
   } else {
     delete hexArtilleryData[hexId];
   }

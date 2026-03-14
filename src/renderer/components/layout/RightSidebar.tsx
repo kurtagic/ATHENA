@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import type maplibregl from 'maplibre-gl';
 import { Crosshair, Target, Flame, Trash2, Shield, Check, Copy, ChevronRight, ChevronLeft, Pin, Megaphone } from 'lucide-react';
 import { useArtilleryStore } from '../../stores/artilleryStore';
@@ -226,6 +226,7 @@ export function RightSidebar() {
   const hasTarget = useArtilleryStore((s) => s.hasTarget);
   const hasImpact = useArtilleryStore((s) => s.hasImpact);
   const pinnedGuns = useArtilleryStore((s) => s.pinnedGuns);
+  const pipVisible = useArtilleryStore((s) => s.pipVisible);
   const showWarden = useArtilleryStore((s) => s.showWarden);
   const showColonial = useArtilleryStore((s) => s.showColonial);
   const showShips = useArtilleryStore((s) => s.showShips);
@@ -257,11 +258,11 @@ export function RightSidebar() {
     const ships: { platform: typeof ARTILLERY_PLATFORMS[number]; index: number }[] = [];
 
     ARTILLERY_PLATFORMS.forEach((p, i) => {
-      if (!factionVisible(p.faction)) return;
       if (p.chassis === 'ship') {
-        ships.push({ platform: p, index: i });
+        if (showShips) ships.push({ platform: p, index: i });
         return;
       }
+      if (!factionVisible(p.faction)) return;
       const list = typeMap.get(p.type) || [];
       list.push({ platform: p, index: i });
       typeMap.set(p.type, list);
@@ -277,6 +278,24 @@ export function RightSidebar() {
     }
     return result;
   }, [showWarden, showColonial, showShips]);
+
+  useEffect(() => {
+    if (!map) return;
+    const allVisible = groups.flatMap(([, platforms]) => platforms);
+    if (allVisible.length > 0 && !allVisible.some(p => p.index === platformIndex)) {
+      setPlatformFromUI(allVisible[0].index, map);
+    }
+  }, [groups, platformIndex, map]);
+
+  useEffect(() => {
+    window.athena.onPipCommand((command) => {
+      session.sendCommandBanner(command as 'fire' | 'stop');
+    });
+  }, []);
+
+  useEffect(() => {
+    window.athena.sendPipLobbyStatus(isConnected);
+  }, [isConnected]);
 
   const mainSolution = useMemo(() => {
     if (!hasTarget || solutions.length === 0) return null;
@@ -410,6 +429,21 @@ export function RightSidebar() {
               ))}
             </SelectContent>
           </Select>
+          <button
+            className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-[var(--radius-sm)] font-bold text-[11px] uppercase tracking-[0.1em] cursor-pointer transition-all duration-150 active:scale-[0.97] border shadow-[0_1px_3px_rgba(0,0,0,0.3)] ${
+              pipVisible
+                ? 'bg-[var(--color-gold-dim)] border-[var(--color-gold)] text-[var(--color-gold)]'
+                : 'bg-[var(--color-navy)] text-white/50 border-[var(--color-border-tactical)] hover:bg-[var(--color-navy-light)] hover:text-white/70'
+            }`}
+            onClick={() => {
+              const next = !pipVisible;
+              useArtilleryStore.getState().setPipVisible(next);
+              window.athena.togglePip(next);
+            }}
+          >
+            <Pin size={14} />
+            {pipVisible ? 'Unpin Artillery' : 'Pin Artillery'}
+          </button>
           <SectionHeader label="Fire Control" />
           <div id="arty-actions" className="grid grid-cols-2 gap-1.5">
             <ActionButton id="arty-place-gun-btn" icon={<Crosshair size={14} />} label="Mark Platform" variant={getPlaceGunVariant()} onClick={handlePlaceGun} />

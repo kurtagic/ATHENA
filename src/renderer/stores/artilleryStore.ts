@@ -28,6 +28,8 @@ interface ArtilleryStoreState {
   windDirection: number | null;
   windStrength: number;
   pinnedGuns: Set<number>;
+  pinnedHexId: string;
+  pipVisible: boolean;
   showWarden: boolean;
   showColonial: boolean;
   showShips: boolean;
@@ -36,7 +38,9 @@ interface ArtilleryStoreState {
   setSolutions: (solutions: ArtillerySolution[], hasTarget: boolean, hasImpact: boolean) => void;
   setStatusText: (text: string) => void;
   setWind: (direction: number | null, strength: number) => void;
+  setPinnedHexId: (hexId: string) => void;
   togglePin: (posIndex: number) => void;
+  setPipVisible: (visible: boolean) => void;
   toggleShowWarden: () => void;
   toggleShowColonial: () => void;
   toggleShowShips: () => void;
@@ -53,6 +57,8 @@ export const useArtilleryStore = create<ArtilleryStoreState>((set) => ({
   windDirection: null,
   windStrength: 0,
   pinnedGuns: new Set<number>(),
+  pinnedHexId: '',
+  pipVisible: false,
   showWarden: true,
   showColonial: false,
   showShips: false,
@@ -67,6 +73,8 @@ export const useArtilleryStore = create<ArtilleryStoreState>((set) => ({
     else next.add(posIndex);
     return { pinnedGuns: next };
   }),
+  setPinnedHexId: (hexId) => set({ pinnedHexId: hexId }),
+  setPipVisible: (visible) => set({ pipVisible: visible }),
   toggleShowWarden: () => set((state) => ({ showWarden: !state.showWarden })),
   toggleShowColonial: () => set((state) => ({ showColonial: !state.showColonial })),
   toggleShowShips: () => set((state) => ({ showShips: !state.showShips })),
@@ -80,6 +88,8 @@ export const useArtilleryStore = create<ArtilleryStoreState>((set) => ({
     windDirection: null,
     windStrength: 0,
     pinnedGuns: new Set<number>(),
+    pinnedHexId: '',
+    pipVisible: false,
     showWarden: true,
     showColonial: false,
     showShips: false,

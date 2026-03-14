@@ -5,7 +5,8 @@ import { setSelectedHexes } from './warPoller';
 import { getSettings, updateSettings } from './settings';
 import { registerOverlayHotkey, registerTttHotkey, registerQuickNotifHotkey } from './hotkeys';
 import { muteOtherApps, unmuteOtherApps } from './audioSilencer';
-import { updatePipData } from './pipWindow';
+import { updatePipData, showPip, destroyPip, updatePipLobbyStatus } from './pipWindow';
+import { showBannerWindow } from './bannerWindow';
 import type { SettingsPartial, PinnedSolution } from '../shared/types';
 
 export function registerIpcHandlers(win: BrowserWindow): void {
@@ -87,6 +88,22 @@ export function registerIpcHandlers(win: BrowserWindow): void {
       muteOtherApps(process.pid);
     } else {
       unmuteOtherApps();
+    }
+  });
+
+  ipcMain.on('toggle-pip', (_event, show: boolean) => {
+    if (show) showPip(); else destroyPip();
+  });
+
+  ipcMain.on('pip-lobby-status', (_event, connected: boolean) => {
+    updatePipLobbyStatus(connected);
+  });
+
+  ipcMain.on('pip-command', (_event, command: string) => {
+    if (command !== 'fire' && command !== 'stop') return;
+    if (win && !win.isDestroyed()) {
+      win.webContents.send('pip-command', command);
+      if (win.getOpacity() === 0) showBannerWindow(command);
     }
   });
 

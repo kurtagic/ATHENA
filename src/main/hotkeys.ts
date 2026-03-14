@@ -1,5 +1,4 @@
 import { globalShortcut, BrowserWindow, ipcMain } from 'electron';
-import { showPip, hidePip } from './pipWindow';
 import { showQuickNotifWindow } from './quickNotifWindow';
 
 let currentAccelerator: string | null = null;
@@ -17,12 +16,10 @@ export function registerOverlayHotkey(accelerator: string, mainWindow: BrowserWi
     if (mainWindow.getOpacity() > 0) {
       mainWindow.setOpacity(0);
       mainWindow.setIgnoreMouseEvents(true);
-      showPip();
     } else {
       mainWindow.setOpacity(1);
       mainWindow.setIgnoreMouseEvents(false);
       mainWindow.focus();
-      hidePip();
     }
   });
 

@@ -41,7 +41,6 @@ interface ArtyState {
   impact: MapPoint | null;
   corrected: MapPoint | null;
   mainGunIndex: number;
-  defaultPlatformIndex: number;
   nextId: number;
   nextLabelNum: number;
   targetEntityId: string | null;
@@ -59,7 +58,6 @@ const state: ArtyState = {
   impact: null,
   corrected: null,
   mainGunIndex: 0,
-  defaultPlatformIndex: DEFAULT_PLATFORM_INDEX,
   nextId: 1,
   nextLabelNum: 1,
   targetEntityId: null,
@@ -78,12 +76,19 @@ let dragOccurred = false;
 let artilleryHexId: string = '';
 
 export function setArtilleryHexId(hexId: string) { artilleryHexId = hexId; }
+export function getArtilleryHexId(): string { return artilleryHexId; }
 
 // Click handler reference
 let clickHandler: ((e: maplibregl.MapMouseEvent) => void) | null = null;
 
 export function refreshPinnedData(): void {
   const { pinnedGuns } = useArtilleryStore.getState();
+  // Track which hex owns the pinned guns
+  if (pinnedGuns.size > 0 && artilleryHexId) {
+    useArtilleryStore.getState().setPinnedHexId(artilleryHexId);
+  } else if (pinnedGuns.size === 0) {
+    useArtilleryStore.getState().setPinnedHexId('');
+  }
   const targetPos = state.corrected ?? state.target;
   if (!targetPos) {
     window.athena.updatePinnedArtillery([]);
@@ -93,6 +98,52 @@ export function refreshPinnedData(): void {
   const pinnedData = solutions
     .filter((s) => pinnedGuns.has(s.posIndex))
     .map((s) => ({ label: s.label, distanceM: s.distanceM, azimuthDeg: s.azimuthDeg, inRange: s.inRange }));
+  window.athena.updatePinnedArtillery(pinnedData);
+}
+
+export function refreshPinnedFromCache(saved: SavedArtilleryState): void {
+  const { pinnedGuns, windDirection, windStrength } = useArtilleryStore.getState();
+  if (pinnedGuns.size === 0) return;
+
+  const target = saved.target ? toMapPoint(saved.target[0], saved.target[1]) : null;
+  if (!target) {
+    window.athena.updatePinnedArtillery([]);
+    return;
+  }
+
+  const positions = saved.positions.map((p) => ({
+    point: toMapPoint(p.latlng[0], p.latlng[1]),
+    label: p.label,
+    platformIndex: p.platformIndex,
+  }));
+
+  const hasWind = windDirection !== null && windStrength > 0;
+  const pinnedData: { label: string; distanceM: number; azimuthDeg: number; inRange: boolean }[] = [];
+
+  for (let i = 0; i < positions.length; i++) {
+    if (!pinnedGuns.has(i)) continue;
+    const pos = positions[i];
+    const platformIndex = pos.platformIndex ?? DEFAULT_PLATFORM_INDEX;
+    const platform = ARTILLERY_PLATFORMS[platformIndex];
+
+    let distanceM = 0;
+    let azimuthDeg = 0;
+    let inRange = false;
+
+    if (hasWind && platform) {
+      const rawDist = crsDistanceMeters(pos.point, target);
+      const compensated = windCompensatedTarget(target, windDirection, windStrength, platform, rawDist);
+      distanceM = crsDistanceMeters(pos.point, compensated);
+      azimuthDeg = crsAzimuth(pos.point, compensated);
+    } else {
+      distanceM = crsDistanceMeters(pos.point, target);
+      azimuthDeg = crsAzimuth(pos.point, target);
+    }
+    inRange = platform ? distanceM >= platform.minRange && distanceM <= platform.maxRange : false;
+
+    pinnedData.push({ label: pos.label, distanceM, azimuthDeg, inRange });
+  }
+
   window.athena.updatePinnedArtillery(pinnedData);
 }
 
@@ -247,7 +298,6 @@ function resetState(): void {
 
 export function activateArtillery(map: maplibregl.Map): void {
   state.active = true;
-  useArtilleryStore.getState().setPlatformIndex(state.defaultPlatformIndex);
   useArtilleryStore.getState().setStatusText('');
   refreshAll(map);
 }
@@ -332,7 +382,6 @@ export function renameGun(index: number, newLabel: string, map: maplibregl.Map):
 }
 
 export function setPlatformFromUI(index: number, map: maplibregl.Map): void {
-  state.defaultPlatformIndex = index;
   useArtilleryStore.getState().setPlatformIndex(index);
   refreshAll(map);
 }
@@ -401,7 +450,7 @@ function handleMapClick(e: maplibregl.MapMouseEvent, map: maplibregl.Map): void 
       const entityId = crypto.randomUUID();
       const isMain = state.positions.length === 0;
       const label = `A${state.nextLabelNum++}`;
-      const platformIndex = state.defaultPlatformIndex;
+      const platformIndex = useArtilleryStore.getState().platformIndex;
       state.positions.push({
         id: state.nextId++,
         point,
@@ -509,7 +558,7 @@ function computeOorSet(): Set<number> {
   const { windDirection, windStrength } = useArtilleryStore.getState();
   const hasWind = windDirection !== null && windStrength > 0;
   for (let i = 0; i < state.positions.length; i++) {
-    const gunPlatform = ARTILLERY_PLATFORMS[state.positions[i].platformIndex ?? state.defaultPlatformIndex];
+    const gunPlatform = ARTILLERY_PLATFORMS[state.positions[i].platformIndex ?? useArtilleryStore.getState().platformIndex];
     if (!gunPlatform) continue;
     let dist: number;
     if (hasWind) {
@@ -532,7 +581,7 @@ function computeWindDriftPoint(): MapPoint | null {
   if (windDirection === null || windStrength <= 0) return null;
   const mainPos = state.positions[state.mainGunIndex];
   if (!mainPos) return null;
-  const platform = ARTILLERY_PLATFORMS[mainPos.platformIndex ?? state.defaultPlatformIndex];
+  const platform = ARTILLERY_PLATFORMS[mainPos.platformIndex ?? useArtilleryStore.getState().platformIndex];
   if (!platform) return null;
   const dist = crsDistanceMeters(mainPos.point, target);
   const off = windOffset(windDirection, windStrength, platform, dist);
@@ -568,7 +617,7 @@ function refreshWindOnly(map: maplibregl.Map): void {
     const pos = state.positions[i];
     const isMain = i === state.mainGunIndex;
     const isOOR = targetPos !== null && oorSet.has(i);
-    const gunPlatform = ARTILLERY_PLATFORMS[pos.platformIndex ?? state.defaultPlatformIndex];
+    const gunPlatform = ARTILLERY_PLATFORMS[pos.platformIndex ?? useArtilleryStore.getState().platformIndex];
     if (gunPlatform) {
       const maxRadius = metersToRadius(gunPlatform.maxRange);
       const minRadius = metersToRadius(gunPlatform.minRange);
@@ -605,7 +654,6 @@ function refreshAll(map: maplibregl.Map): void {
   state.markers = [];
   if (windDriftMarker) { windDriftMarker.remove(); windDriftMarker = null; }
 
-  const defaultPlatform = ARTILLERY_PLATFORMS[state.defaultPlatformIndex];
   const targetPos = state.corrected ?? state.target;
 
   const oorSet = computeOorSet();
@@ -619,7 +667,7 @@ function refreshAll(map: maplibregl.Map): void {
     const pos = state.positions[i];
     const isMain = i === state.mainGunIndex;
     const isOOR = targetPos !== null && oorSet.has(i);
-    const gunPlatform = ARTILLERY_PLATFORMS[pos.platformIndex ?? state.defaultPlatformIndex];
+    const gunPlatform = ARTILLERY_PLATFORMS[pos.platformIndex ?? useArtilleryStore.getState().platformIndex];
 
     if (gunPlatform) {
       const maxRadius = metersToRadius(gunPlatform.maxRange);
@@ -658,7 +706,7 @@ function refreshAll(map: maplibregl.Map): void {
     let currentMax = -Infinity;
 
     for (const pos of state.positions) {
-      const gunPlat = ARTILLERY_PLATFORMS[pos.platformIndex ?? state.defaultPlatformIndex];
+      const gunPlat = ARTILLERY_PLATFORMS[pos.platformIndex ?? useArtilleryStore.getState().platformIndex];
       if (!gunPlat) continue;
       if (gunPlat.minInaccuracy < overallMin) overallMin = gunPlat.minInaccuracy;
       if (gunPlat.maxInaccuracy > overallMax) overallMax = gunPlat.maxInaccuracy;
@@ -827,7 +875,7 @@ function computeSolutions(): ArtillerySolution[] {
   let mainAz = 0;
   if (targetPos && state.positions.length > 0 && state.mainGunIndex < state.positions.length) {
     const mainPos = state.positions[state.mainGunIndex];
-    const mainPlatform = ARTILLERY_PLATFORMS[state.positions[state.mainGunIndex].platformIndex ?? state.defaultPlatformIndex];
+    const mainPlatform = ARTILLERY_PLATFORMS[state.positions[state.mainGunIndex].platformIndex ?? useArtilleryStore.getState().platformIndex];
     if (hasWind && mainPlatform) {
       const rawDist = crsDistanceMeters(mainPos.point, targetPos);
       const compensated = windCompensatedTarget(targetPos, windDirection, windStrength, mainPlatform, rawDist);
@@ -842,7 +890,7 @@ function computeSolutions(): ArtillerySolution[] {
   for (let i = 0; i < state.positions.length; i++) {
     const pos = state.positions[i];
     const isMain = i === state.mainGunIndex;
-    const resolvedPlatformIndex = pos.platformIndex ?? state.defaultPlatformIndex;
+    const resolvedPlatformIndex = pos.platformIndex ?? useArtilleryStore.getState().platformIndex;
     const platform = ARTILLERY_PLATFORMS[resolvedPlatformIndex];
 
     let distanceM = 0;
@@ -914,7 +962,7 @@ export function saveArtilleryState(): SavedArtilleryState {
     target: state.target ? [state.target.x, state.target.y] : null,
     impact: state.impact ? [state.impact.x, state.impact.y] : null,
     mainGunIndex: state.mainGunIndex,
-    defaultPlatformIndex: state.defaultPlatformIndex,
+    defaultPlatformIndex: useArtilleryStore.getState().platformIndex,
     nextId: state.nextId,
     nextLabelNum: state.nextLabelNum,
     targetEntityId: state.targetEntityId,
@@ -936,7 +984,7 @@ export function restoreArtilleryState(saved: SavedArtilleryState, map: maplibreg
   state.target = saved.target ? toMapPoint(saved.target[0], saved.target[1]) : null;
   state.impact = saved.impact ? toMapPoint(saved.impact[0], saved.impact[1]) : null;
   state.mainGunIndex = saved.mainGunIndex;
-  state.defaultPlatformIndex = saved.defaultPlatformIndex;
+  useArtilleryStore.getState().setPlatformIndex(saved.defaultPlatformIndex);
   state.nextId = saved.nextId;
   state.nextLabelNum = saved.nextLabelNum;
   state.targetEntityId = saved.targetEntityId ?? null;
