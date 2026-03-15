@@ -4,13 +4,15 @@ import { useMapStore } from '../stores/mapStore';
 import { useArtilleryStore } from '../stores/artilleryStore';
 import { hexLookup, hexImageUrl, detailMapPoint } from '../data/hexMapping';
 import { mapPointToLngLat, lngLatToMapPoint } from '../data/coords';
-import { hexStaticData, hexDynamicData, hexDrawingData, hexArtilleryData } from '../data/store';
+import { hexStaticData, hexDynamicData, hexDrawingData, hexArtilleryData, hexEnemyMarkerData } from '../data/store';
 import { buildMarkerHtml } from '../data/dataHandlers';
 import { CONQUERABLE_STRUCTURES } from '../data/iconTypes';
 import voronoiOwners from '../../../static/voronoi_owners.json';
 import { initDrawLayer, cleanupDrawing, setDrawColor, getDrawState, activateDrawing, saveDrawState, restoreDrawState } from './drawing';
 import { loadHexStrokes } from '../multiplayer/drawingSync';
 import { initArtilleryLayer, cleanupArtillery, activateArtillery, saveArtilleryState, restoreArtilleryState } from './artillery';
+import { initEnemyMarkerLayer, cleanupEnemyMarkers, activateEnemyMarkers, saveEnemyMarkerState, restoreEnemyMarkerState, setEnemyMarkerHexId } from './enemyMarkers';
+import { loadHexEnemyMarkers } from '../multiplayer/enemyMarkerSync';
 import { removeHexLabels, addHexLabels, hideHexGrid, showHexGrid } from './hexGrid';
 import { removeStaticLabelMarkers, addStaticLabelMarkers } from '../data/dataHandlers';
 import voronoiData from '../../../static/voronoi.json';
@@ -495,6 +497,22 @@ export function enterDetailMode(hexId: string): void {
 
   activateArtillery(_map);
 
+  // Init enemy marker layer and activate
+  initEnemyMarkerLayer(_map);
+  setEnemyMarkerHexId(apiName);
+
+  // Restore saved enemy marker state for this hex
+  if (!hexEnemyMarkerData[apiName]) {
+    const yjsMarkers = loadHexEnemyMarkers(apiName);
+    if (yjsMarkers.length > 0) {
+      hexEnemyMarkerData[apiName] = { markers: yjsMarkers };
+    }
+  }
+  const savedEnemyMarkers = hexEnemyMarkerData[apiName];
+  if (savedEnemyMarkers) restoreEnemyMarkerState(savedEnemyMarkers, _map);
+
+  activateEnemyMarkers(_map);
+
   // Render cached data immediately
   renderDetailMarkers(apiName);
   renderDetailLabels(apiName);
@@ -510,10 +528,12 @@ export function enterDetailMode(hexId: string): void {
 export function exitDetailMode(): void {
   if (!detailMode) return;
 
-  // Save drawing and artillery state before cleanup
+  // Save drawing, artillery, and enemy marker state before cleanup
   hexDrawingData[detailMode.apiName] = saveDrawState();
   hexArtilleryData[detailMode.apiName] = saveArtilleryState();
+  hexEnemyMarkerData[detailMode.apiName] = saveEnemyMarkerState();
 
+  cleanupEnemyMarkers(_map);
   cleanupArtillery(_map);
   cleanupDrawing(_map);
 

@@ -1,11 +1,15 @@
 import { session } from './sessionManager';
 import { initDrawingSync, setupDrawingObserver, teardownDrawingObserver, loadHexStrokes } from './drawingSync';
 import { setupArtilleryObserver, teardownArtilleryObserver, loadHexArtillery } from './artillerySync';
+import { setupEnemyMarkerObserver, teardownEnemyMarkerObserver, loadHexEnemyMarkers } from './enemyMarkerSync';
 import { voice } from './voiceManager';
-import { setSyncMode, setCurrentHexId, clearAllStrokes, restoreDrawState } from '../map/drawing';
+import { setSyncMode, setCurrentHexId, clearAllStrokes, restoreDrawState, setDrawColor } from '../map/drawing';
+import { uuidToColor } from '../data/colorFromUuid';
+import { useDrawStore } from '../stores/drawStore';
 import { setArtilleryHexId, restoreArtilleryState } from '../map/artillery';
+import { setEnemyMarkerHexId, restoreEnemyMarkerState } from '../map/enemyMarkers';
 import { DEFAULT_PLATFORM_INDEX } from '../data/artilleryPlatforms';
-import { hexDrawingData, hexArtilleryData } from '../data/store';
+import { hexDrawingData, hexArtilleryData, hexEnemyMarkerData } from '../data/store';
 import { useSessionStore } from '../stores/sessionStore';
 import { useMapStore } from '../stores/mapStore';
 import { useBannerStore } from '../stores/bannerStore';
@@ -32,6 +36,16 @@ export function initMultiplayerSync(): void {
     }
   });
 
+  // Set user-unique drawing color when memberId is assigned
+  useSessionStore.subscribe((state, prev) => {
+    if (state.memberId && state.memberId !== prev.memberId) {
+      const color = uuidToColor(state.memberId);
+      useDrawStore.getState().setActiveColor(color);
+      setDrawColor(color);
+      debugLog('session', `Drawing color set to ${color} from memberId`);
+    }
+  });
+
   // Yjs lifecycle: connect on lobby join, disconnect on lobby leave
   useSessionStore.subscribe((state, prev) => {
     if (state.lobbyId && !prev.lobbyId) {
@@ -39,6 +53,7 @@ export function initMultiplayerSync(): void {
       // Transitioning from no lobby to having a lobby — clear stale local state
       for (const key of Object.keys(hexDrawingData)) delete hexDrawingData[key];
       for (const key of Object.keys(hexArtilleryData)) delete hexArtilleryData[key];
+      for (const key of Object.keys(hexEnemyMarkerData)) delete hexEnemyMarkerData[key];
       clearAllStrokes();
       const map = useMapStore.getState().mapInstance;
       if (map) {
@@ -49,6 +64,7 @@ export function initMultiplayerSync(): void {
       const { provider } = connectYjs(state.lobbyId);
       setupDrawingObserver();
       setupArtilleryObserver();
+      setupEnemyMarkerObserver();
 
       // When Yjs finishes initial sync, restore strokes and artillery for current hex
       (provider as any).on('synced', () => {
@@ -71,14 +87,31 @@ export function initMultiplayerSync(): void {
             debugLog('yjs', `Synced: restored artillery for ${hexId}`);
           }
         }
+
+        const enemyMarkers = loadHexEnemyMarkers(hexId);
+        if (enemyMarkers.length > 0 && map) {
+          hexEnemyMarkerData[hexId] = { markers: enemyMarkers };
+          restoreEnemyMarkerState({ markers: enemyMarkers }, map);
+          debugLog('yjs', `Synced: restored ${enemyMarkers.length} enemy markers for ${hexId}`);
+        }
       });
     } else if (!state.lobbyId && prev.lobbyId) {
       // Lobby left — tear down Yjs
       teardownDrawingObserver();
       teardownArtilleryObserver();
+      teardownEnemyMarkerObserver();
       disconnectYjs();
     }
   });
+
+  // If already connected when init runs, apply memberId color immediately
+  const currentMemberId = useSessionStore.getState().memberId;
+  if (currentMemberId) {
+    const color = uuidToColor(currentMemberId);
+    useDrawStore.getState().setActiveColor(color);
+    setDrawColor(color);
+    debugLog('session', `Drawing color set to ${color} from existing memberId`);
+  }
 
   // If already in a lobby when init runs (e.g. menu → app view transition),
   // connect Yjs immediately since the subscribe above missed the transition
@@ -88,6 +121,7 @@ export function initMultiplayerSync(): void {
     connectYjs(currentLobbyId);
     setupDrawingObserver();
     setupArtilleryObserver();
+    setupEnemyMarkerObserver();
   }
 
   // Initialize with current hex (in case detail view is already active)
@@ -95,6 +129,7 @@ export function initMultiplayerSync(): void {
   if (currentHex) {
     setCurrentHexId(currentHex);
     setArtilleryHexId(currentHex);
+    setEnemyMarkerHexId(currentHex);
   }
 
   // Track detail view hex changes — load Yjs data on hex enter
@@ -103,6 +138,7 @@ export function initMultiplayerSync(): void {
       const hexId = state.detailMode?.apiName || '';
       setCurrentHexId(hexId);
       setArtilleryHexId(hexId);
+      setEnemyMarkerHexId(hexId);
 
       if (hexId) {
         // Load strokes from Yjs into hexDrawingData
@@ -121,6 +157,17 @@ export function initMultiplayerSync(): void {
             restoreArtilleryState(artilleryState, map);
           }
           debugLog('yjs', `Loaded artillery for ${hexId} from Y.Doc`);
+        }
+
+        // Load enemy markers from Yjs
+        const enemyMarkers = loadHexEnemyMarkers(hexId);
+        if (enemyMarkers.length > 0) {
+          hexEnemyMarkerData[hexId] = { markers: enemyMarkers };
+          const map = state.mapInstance;
+          if (map) {
+            restoreEnemyMarkerState({ markers: enemyMarkers }, map);
+          }
+          debugLog('yjs', `Loaded ${enemyMarkers.length} enemy markers for ${hexId} from Y.Doc`);
         }
       }
     }
@@ -188,6 +235,7 @@ function applyFullSnapshot(msg: FullSnapshotMsg, currentHexId: string): void {
   // Clear view caches
   for (const key of Object.keys(hexDrawingData)) delete hexDrawingData[key];
   for (const key of Object.keys(hexArtilleryData)) delete hexArtilleryData[key];
+  for (const key of Object.keys(hexEnemyMarkerData)) delete hexEnemyMarkerData[key];
 
   // Clear live map state
   clearAllStrokes();
@@ -208,6 +256,12 @@ function applyFullSnapshot(msg: FullSnapshotMsg, currentHexId: string): void {
     if (artilleryState && mapInstance) {
       restoreArtilleryState(artilleryState, mapInstance);
       debugLog('yjs', `Restored artillery for ${currentHexId} from Y.Doc after snapshot`);
+    }
+
+    const enemyMarkers = loadHexEnemyMarkers(currentHexId);
+    if (enemyMarkers.length > 0 && mapInstance) {
+      restoreEnemyMarkerState({ markers: enemyMarkers }, mapInstance);
+      debugLog('yjs', `Restored ${enemyMarkers.length} enemy markers for ${currentHexId} from Y.Doc after snapshot`);
     }
   }
 

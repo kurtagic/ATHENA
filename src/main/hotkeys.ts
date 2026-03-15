@@ -1,5 +1,6 @@
 import { globalShortcut, BrowserWindow, ipcMain } from 'electron';
 import { showQuickNotifWindow } from './quickNotifWindow';
+import { showQuickControlsWindow } from './quickControlsWindow';
 
 let currentAccelerator: string | null = null;
 let currentTttAccelerator: string | null = null;
@@ -72,6 +73,32 @@ export function registerQuickNotifHotkey(accelerator: string, mainWindow: Browse
 
 export function getCurrentAccelerator(): string | null {
   return currentAccelerator;
+}
+
+let currentQuickControlsAccelerator: string | null = null;
+
+export function registerQuickControlsHotkey(accelerator: string, mainWindow: BrowserWindow): boolean {
+  if (currentQuickControlsAccelerator) {
+    globalShortcut.unregister(currentQuickControlsAccelerator);
+    currentQuickControlsAccelerator = null;
+  }
+
+  const success = globalShortcut.register(accelerator, () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    // Check lobby status before opening (same as quick notification)
+    mainWindow.webContents.send('check-lobby-status');
+    ipcMain.once('lobby-status-result', (_event: Electron.IpcMainEvent, inLobby: boolean) => {
+      if (!inLobby) return;
+      showQuickControlsWindow(mainWindow, currentQuickControlsAccelerator, () => {
+        registerQuickControlsHotkey(accelerator, mainWindow);
+      });
+    });
+  });
+
+  if (success) {
+    currentQuickControlsAccelerator = accelerator;
+  }
+  return success;
 }
 
 export function getCurrentQuickNotifAccelerator(): string | null {

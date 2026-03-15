@@ -8,6 +8,7 @@ import { voice } from '../../multiplayer/voiceManager';
 import { acceleratorToDisplay } from '../../lib/keybindUtils';
 
 import { ensureConnected, getSavedDisplayName } from '../../multiplayer/connectionHelper';
+import { uuidToColor } from '../../data/colorFromUuid';
 
 export function SessionPanel() {
   const status = useSessionStore((s) => s.status);
@@ -25,8 +26,10 @@ export function SessionPanel() {
   return (
     <div className="flex flex-col">
       <div className="panel-header relative px-5 pt-3.5 pb-3 flex items-center gap-2">
-        <span className="font-bold text-[13px] uppercase tracking-[0.14em] text-[var(--color-gold)]">Multiplayer</span>
-        <span className="ml-auto"><StatusDot status={status} /></span>
+        <span className="font-bold text-[13px] uppercase tracking-[0.14em] text-[var(--color-gold)]">
+          {lobbyId && lobbyName ? lobbyName : 'Multiplayer'}
+        </span>
+        <span className="ml-auto"><StatusDot status={status} error={error} /></span>
       </div>
       <div className="flex flex-col gap-2 px-4 pt-3 pb-3">
         {error && (
@@ -59,10 +62,12 @@ export function SessionPanel() {
   );
 }
 
-function StatusDot({ status }: { status: string }) {
+function StatusDot({ status, error }: { status: string; error: string | null }) {
   const color =
+    error ? 'bg-red-400' :
     status === 'connected' ? 'bg-emerald-400' :
     status === 'connecting' || status === 'reconnecting' ? 'bg-amber-400 animate-pulse' :
+    status === 'disconnected' ? 'bg-red-400' :
     'bg-white/20';
   return <div className={`w-2 h-2 rounded-full ${color}`} />;
 }
@@ -201,28 +206,38 @@ function LobbyView({
 
   const voiceJoined = useVoiceStore((s) => s.joined);
 
+  // Sort members: owner first, then rest in original order
+  const sortedMembers = [...members].sort((a, b) => {
+    if (a.id === ownerId) return -1;
+    if (b.id === ownerId) return 1;
+    return 0;
+  });
+
   return (
     <>
-      <div className="flex items-center justify-between">
-        <span className="text-[12px] text-white/80 font-medium">{lobbyName || 'Lobby'}</span>
+      {/* Lobby code — large and prominent */}
+      <div className="flex items-center justify-center gap-2 py-1">
+        <span className="text-[18px] font-mono font-bold tracking-[0.3em] text-white/90">{lobbyId}</span>
         <button
           onClick={copyCode}
-          className="flex items-center gap-1 px-2 py-0.5 bg-white/[0.06] hover:bg-white/[0.12] rounded text-[11px] text-white/60 font-mono tracking-widest transition-colors"
+          className="p-1 bg-white/[0.06] hover:bg-white/[0.12] rounded text-white/50 hover:text-white/80 transition-colors"
           title="Copy lobby code"
         >
-          {copied ? <Check size={10} className="text-emerald-400" /> : <Copy size={10} />}
-          {lobbyId}
+          {copied ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} />}
         </button>
       </div>
 
+      {/* Divider */}
+      <div className="h-px bg-white/[0.08] my-1" />
+
       {/* Pending join requests (owner only) */}
       {isOwner && pendingApprovals.length > 0 && (
-        <div className="flex flex-col gap-1 mt-1">
-          <span className="text-[10px] uppercase tracking-[0.12em] text-amber-400/60 font-semibold px-1">
-            Pending ({pendingApprovals.length})
+        <div className="flex flex-col gap-1 mt-1 border-l-2 border-amber-400/40 pl-2">
+          <span className="text-[10px] uppercase tracking-[0.12em] text-amber-400/80 font-semibold">
+            Pending Approval ({pendingApprovals.length})
           </span>
           {pendingApprovals.map((p) => (
-            <div key={p.requestId} className="flex items-center gap-1.5 px-2 py-1 bg-amber-400/5 rounded">
+            <div key={p.requestId} className="flex items-center gap-1.5 px-2 py-1.5 bg-amber-400/[0.08] rounded">
               <span className="text-[11px] text-white/70 flex-1 truncate">{p.displayName}</span>
               <button
                 onClick={() => session.approveJoin(p.requestId)}
@@ -242,18 +257,27 @@ function LobbyView({
       )}
 
       {/* Member list */}
-      <span className="text-[10px] uppercase tracking-[0.12em] text-white/30 font-semibold px-1 mt-1">
-        Members ({members.length}/16)
-      </span>
+      <div className="flex items-center gap-1.5 px-1 mt-1">
+        <span className="text-[10px] uppercase tracking-[0.12em] text-white/30 font-semibold">
+          Members
+        </span>
+        <span className="text-[10px] font-mono font-bold text-white/50 bg-white/[0.08] rounded px-1.5 py-0.5">
+          {members.length}/16
+        </span>
+      </div>
       <div className="flex flex-col gap-0.5 max-h-[150px] overflow-y-auto">
-        {members.map((m) => {
+        {sortedMembers.map((m) => {
           const isSelf = m.id === memberId;
+          const isMemberOwner = m.id === ownerId;
           const voicePeer = voicePeers.find(p => p.id === m.id);
           const isSpeaking = isSelf ? tttActive : voicePeer?.speaking;
           return (
             <div key={m.id} className="flex items-center gap-1.5 px-2 py-1 rounded hover:bg-white/[0.04]">
-              {m.id === ownerId && <Crown size={10} className="text-amber-400 shrink-0" />}
-              <span className={`text-[11px] flex-1 truncate ${isSelf ? 'text-white/90 font-medium' : 'text-white/60'}`}>
+              {isMemberOwner && <Crown size={11} className="text-amber-400 shrink-0 fill-amber-400" />}
+              <span
+                className={`text-[13px] flex-1 truncate ${isSelf ? 'font-medium' : ''}`}
+                style={{ color: uuidToColor(m.id) }}
+              >
                 {m.displayName}
                 {isSelf && ' (you)'}
               </span>
@@ -261,13 +285,22 @@ function LobbyView({
                 <Volume2 size={11} className="text-emerald-400 shrink-0 animate-pulse" />
               )}
               {isOwner && !isSelf && (
-                <button
-                  onClick={() => session.kickMember(m.id)}
-                  className="p-0.5 text-white/20 hover:text-red-400 transition-colors"
-                  title="Kick"
-                >
-                  <X size={10} />
-                </button>
+                <>
+                  <button
+                    onClick={() => session.transferOwnership(m.id)}
+                    className="p-1 text-white/20 hover:text-amber-400 transition-colors"
+                    title="Transfer ownership"
+                  >
+                    <Crown size={12} />
+                  </button>
+                  <button
+                    onClick={() => session.kickMember(m.id)}
+                    className="p-1 text-white/20 hover:text-red-400 transition-colors"
+                    title="Kick"
+                  >
+                    <X size={14} />
+                  </button>
+                </>
               )}
             </div>
           );

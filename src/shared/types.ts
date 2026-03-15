@@ -47,6 +47,7 @@ export interface KeybindSettings {
   toggleOverlay: string; // Electron accelerator, e.g. "N", "F1", "CommandOrControl+Shift+O"
   toggleToTalk: string; // e.g. "Y", "F2"
   quickNotification: string; // e.g. "F6"
+  quickControls: string; // e.g. "F2"
 }
 
 export interface AudioSettings {
@@ -70,8 +71,8 @@ export type SettingsPartial = {
 
 export interface PinnedSolution {
   label: string;
-  distanceM: number;
-  azimuthDeg: number;
+  distanceM: number | null;
+  azimuthDeg: number | null;
   inRange: boolean;
 }
 
@@ -93,6 +94,13 @@ export interface AthenaAPI {
   togglePip: (show: boolean) => void;
   sendPipLobbyStatus: (connected: boolean) => void;
   onPipCommand: (callback: (command: string) => void) => void;
+  onQuickControlsToggle: (callback: () => void) => void;
+  onQcRequestArtilleryData: (callback: () => void) => void;
+  sendQcArtilleryDataReply: (data: unknown) => void;
+  onQcSelectSpotter: (callback: (payload: any) => void) => void;
+  onQcSpotterAdjust: (callback: (payload: any) => void) => void;
+  sendQcSpotterUpdate: (data: unknown) => void;
+  onQcCloseMode: (callback: () => void) => void;
   quit: () => void;
 }
 

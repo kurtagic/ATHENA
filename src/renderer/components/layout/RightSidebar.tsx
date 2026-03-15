@@ -371,7 +371,21 @@ export function RightSidebar() {
       >
         <div className="panel-header relative px-5 pt-3.5 pb-3 flex items-center gap-2">
           <Shield size={14} className="text-[var(--color-gold)]" />
-          <span className="font-bold text-[13px] uppercase tracking-[0.14em] text-[var(--color-gold)] flex-1">Artillery</span>
+          <span className="font-bold text-[13px] uppercase tracking-[0.14em] text-[var(--color-gold)]">Artillery</span>
+          <button
+            className={`p-0 bg-transparent border-none cursor-pointer transition-colors ${
+              pipVisible ? 'text-[var(--color-gold)]' : 'text-white/30 hover:text-white/50'
+            }`}
+            title={pipVisible ? 'Unpin Artillery' : 'Pin Artillery'}
+            onClick={() => {
+              const next = !pipVisible;
+              useArtilleryStore.getState().setPipVisible(next);
+              window.athena.togglePip(next);
+            }}
+          >
+            <Pin size={13} fill={pipVisible ? 'currentColor' : 'none'} />
+          </button>
+          <div className="flex-1" />
           <button
             className="text-white/40 hover:text-white/70 transition-colors cursor-pointer bg-transparent border-none p-0"
             title="Collapse sidebar"
@@ -381,23 +395,18 @@ export function RightSidebar() {
           </button>
         </div>
         <div id="arty-sidebar-content" className="px-5 py-4 flex flex-col gap-3.5">
-          <label
-            htmlFor="arty-platform-dropdown"
-            className="font-semibold text-[11px] uppercase tracking-[0.06em] text-white/70"
-          >
-            Platform
-          </label>
+          <SectionHeader label="Platform" />
           <div className="flex items-center gap-1.5">
             {([
-              { label: 'Warden', active: showWarden, toggle: toggleShowWarden },
-              { label: 'Colonial', active: showColonial, toggle: toggleShowColonial },
-              { label: 'Ships', active: showShips, toggle: toggleShowShips },
-            ] as const).map(({ label, active, toggle }) => (
+              { label: 'Warden', active: showWarden, toggle: toggleShowWarden, activeClass: 'bg-blue-500/15 border-blue-400/60 text-blue-400' },
+              { label: 'Colonial', active: showColonial, toggle: toggleShowColonial, activeClass: 'bg-green-500/15 border-green-400/60 text-green-400' },
+              { label: 'Ships', active: showShips, toggle: toggleShowShips, activeClass: 'bg-white/10 border-white/50 text-white' },
+            ] as const).map(({ label, active, toggle, activeClass }) => (
               <button
                 key={label}
                 className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-[0.08em] cursor-pointer transition-all duration-150 border ${
                   active
-                    ? 'bg-[var(--color-gold-dim)] border-[var(--color-gold)] text-[var(--color-gold)]'
+                    ? activeClass
                     : 'bg-transparent border-white/15 text-white/35 hover:border-white/30 hover:text-white/55'
                 }`}
                 onClick={toggle}
@@ -429,21 +438,6 @@ export function RightSidebar() {
               ))}
             </SelectContent>
           </Select>
-          <button
-            className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-[var(--radius-sm)] font-bold text-[11px] uppercase tracking-[0.1em] cursor-pointer transition-all duration-150 active:scale-[0.97] border shadow-[0_1px_3px_rgba(0,0,0,0.3)] ${
-              pipVisible
-                ? 'bg-[var(--color-gold-dim)] border-[var(--color-gold)] text-[var(--color-gold)]'
-                : 'bg-[var(--color-navy)] text-white/50 border-[var(--color-border-tactical)] hover:bg-[var(--color-navy-light)] hover:text-white/70'
-            }`}
-            onClick={() => {
-              const next = !pipVisible;
-              useArtilleryStore.getState().setPipVisible(next);
-              window.athena.togglePip(next);
-            }}
-          >
-            <Pin size={14} />
-            {pipVisible ? 'Unpin Artillery' : 'Pin Artillery'}
-          </button>
           <SectionHeader label="Fire Control" />
           <div id="arty-actions" className="grid grid-cols-2 gap-1.5">
             <ActionButton id="arty-place-gun-btn" icon={<Crosshair size={14} />} label="Mark Platform" variant={getPlaceGunVariant()} onClick={handlePlaceGun} />
@@ -472,13 +466,11 @@ export function RightSidebar() {
               </button>
             </div>
           )}
-          <div className="flex items-center gap-0 text-[10px] uppercase tracking-[0.06em]">
-            <span className="text-white/30 mr-1.5">Clear:</span>
-            <button className="arty-clear-link" onClick={handleClearTarget}>Target</button>
-            <span className="text-white/20 mx-1.5">&middot;</span>
-            <button className="arty-clear-link" onClick={handleClearImpact}>Impact</button>
-            <span className="text-white/20 mx-1.5">&middot;</span>
-            <button className="arty-clear-link" onClick={handleClearAll}>All</button>
+          <div className="flex items-center gap-1.5">
+            <button className="px-2 py-1 rounded text-[9px] font-bold uppercase tracking-[0.06em] cursor-pointer transition-all duration-150 border bg-red-500/10 border-red-500/30 text-red-400 hover:bg-red-500/20 hover:border-red-400/50 hover:text-red-300" onClick={handleClearTarget}>Clear Target</button>
+            <button className="px-2 py-1 rounded text-[9px] font-bold uppercase tracking-[0.06em] cursor-pointer transition-all duration-150 border bg-red-500/10 border-red-500/30 text-red-400 hover:bg-red-500/20 hover:border-red-400/50 hover:text-red-300" onClick={handleClearImpact}>Clear Impact</button>
+            <div className="flex-1" />
+            <button className="px-2 py-1 rounded text-[9px] font-bold uppercase tracking-[0.06em] cursor-pointer transition-all duration-150 border bg-red-500/10 border-red-500/30 text-red-400 hover:bg-red-500/20 hover:border-red-400/50 hover:text-red-300" onClick={handleClearAll}>Clear All</button>
           </div>
           {statusText && (
             <div

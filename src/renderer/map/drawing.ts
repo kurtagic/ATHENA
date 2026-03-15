@@ -5,6 +5,9 @@ import { crsDistanceMeters, crsAzimuth } from '../data/artilleryCalc';
 import type { SavedStroke } from '../data/store';
 import { useMapStore } from '../stores/mapStore';
 import { useDrawStore, type BrushPattern } from '../stores/drawStore';
+import { useUndoStore } from '../stores/undoStore';
+import { useEnemyMarkerStore } from '../stores/enemyMarkerStore';
+import { eraseEnemyMarkersAtPoint } from './enemyMarkers';
 
 export interface StrokeData {
   id?: string;
@@ -445,6 +448,12 @@ function finalizeStroke(): void {
     drawState.strokes.push(stroke);
 
     if (onStrokeFinalized) onStrokeFinalized(stroke, currentHexId);
+
+    useUndoStore.getState().pushAction({
+      type: 'stroke-added',
+      hexId: currentHexId,
+      stroke: { id, points: stroke.points.map(p => [p.x, p.y] as [number, number]), color: stroke.color, weight: stroke.weight, opacity: stroke.opacity, brushPattern: stroke.brushPattern },
+    });
   }
   drawState.currentPoints = [];
   drawState.drawing = false;
@@ -466,6 +475,12 @@ function finalizePolygon(): void {
     drawState.strokes.push(stroke);
 
     if (onStrokeFinalized) onStrokeFinalized(stroke, currentHexId);
+
+    useUndoStore.getState().pushAction({
+      type: 'stroke-added',
+      hexId: currentHexId,
+      stroke: { id, points: stroke.points.map(p => [p.x, p.y] as [number, number]), color: stroke.color, weight: stroke.weight, opacity: stroke.opacity, brushPattern: stroke.brushPattern },
+    });
   }
   drawState.currentPoints = [];
   drawState.placingPolygon = false;
@@ -604,11 +619,29 @@ function eraseStrokesAtPoint(map: maplibregl.Map, lngLat: maplibregl.LngLat): vo
       drawState.strokes.splice(i, 1);
     }
   }
+
+  // Also erase enemy markers under the eraser
+  eraseEnemyMarkersAtPoint(point, radiusSq, map);
+
   redrawAllStrokes();
 }
 
 function finalizeErase(map: maplibregl.Map): void {
   if (drawState.erasedDuringDrag.length > 0) {
+    // Push undo action before clearing
+    useUndoStore.getState().pushAction({
+      type: 'strokes-erased',
+      hexId: currentHexId,
+      strokes: drawState.erasedDuringDrag.map(s => ({
+        id: s.id ?? '',
+        points: s.points,
+        color: s.color,
+        weight: s.weight,
+        opacity: s.opacity ?? 1.0,
+        brushPattern: s.brushPattern as BrushPattern | undefined,
+      })),
+    });
+
     // Notify sync of erased stroke IDs
     const erasedIds = drawState.erasedDuringDrag
       .map(s => s.id)
@@ -754,11 +787,15 @@ export function setupDrawingEvents(map: maplibregl.Map): void {
     }
   });
 
-  // Cancel polygon/ruler if tool changes mid-placement
+  // Cancel polygon/ruler/enemy-marker if tool changes mid-placement
   useDrawStore.subscribe((state, prev) => {
     if (state.activeTool !== prev.activeTool) {
       if (drawState.placingPolygon) cancelPolygon();
       if (prev.activeTool === 'ruler') cancelRuler();
+      if (prev.activeTool === 'enemy-marker') {
+        useEnemyMarkerStore.getState().setPlacingMarker(false);
+        useMapStore.getState().setMapCursor('');
+      }
     }
   });
 

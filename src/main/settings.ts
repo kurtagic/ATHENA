@@ -8,6 +8,7 @@ const DEFAULT_SETTINGS: Settings = {
     toggleOverlay: 'Shift+N',
     toggleToTalk: 'F5',
     quickNotification: 'F6',
+    quickControls: 'F2',
   },
   audio: {
     autoSilenceOnVoice: false,

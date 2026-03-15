@@ -119,6 +119,11 @@ export interface KickMemberMsg {
   memberId: string;
 }
 
+export interface TransferOwnershipMsg {
+  type: 'transfer-ownership';
+  targetMemberId: string;
+}
+
 export interface EntityCreateMsg {
   type: 'entity-create';
   entity: Omit<Entity, 'authorId'>;
@@ -289,6 +294,7 @@ export type ClientMessage =
   | ApproveJoinMsg
   | DenyJoinMsg
   | KickMemberMsg
+  | TransferOwnershipMsg
   | EntityCreateMsg
   | EntityDeleteMsg
   | EntityUpdateMsg

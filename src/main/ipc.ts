@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { setSelectedHexes } from './warPoller';
 import { getSettings, updateSettings } from './settings';
-import { registerOverlayHotkey, registerTttHotkey, registerQuickNotifHotkey } from './hotkeys';
+import { registerOverlayHotkey, registerTttHotkey, registerQuickNotifHotkey, registerQuickControlsHotkey } from './hotkeys';
 import { muteOtherApps, unmuteOtherApps } from './audioSilencer';
 import { updatePipData, showPip, destroyPip, updatePipLobbyStatus } from './pipWindow';
 import { showBannerWindow } from './bannerWindow';
@@ -72,6 +72,19 @@ export function registerIpcHandlers(win: BrowserWindow): void {
         return {
           settings: getSettings(),
           error: `Could not register "${partial.keybinds.quickNotification}". It may be in use by another application.`,
+        };
+      }
+    }
+
+    if (partial.keybinds?.quickControls && partial.keybinds.quickControls !== oldSettings.keybinds.quickControls) {
+      const qcSuccess = registerQuickControlsHotkey(newSettings.keybinds.quickControls, win);
+      if (!qcSuccess) {
+        const oldQcKey = oldSettings.keybinds.quickControls;
+        updateSettings({ keybinds: { quickControls: oldQcKey } });
+        registerQuickControlsHotkey(oldQcKey, win);
+        return {
+          settings: getSettings(),
+          error: `Could not register "${partial.keybinds.quickControls}". It may be in use by another application.`,
         };
       }
     }

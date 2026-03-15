@@ -66,7 +66,7 @@ export function DebugPanel() {
 
   return (
     <div
-      className="fixed bottom-4 right-4 w-[380px] max-h-[50vh] flex flex-col rounded-lg border border-white/10 backdrop-blur-xl overflow-hidden"
+      className="fixed bottom-4 right-4 w-[700px] max-h-[50vh] flex flex-col rounded-lg border border-white/10 backdrop-blur-xl overflow-hidden"
       style={{
         zIndex: 9997,
         background: 'linear-gradient(180deg, rgba(18,18,22,0.92) 0%, rgba(12,12,14,0.96) 100%)',
@@ -86,7 +86,7 @@ export function DebugPanel() {
       </div>
 
       {/* Body */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto p-2 space-y-0.5 min-h-0">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto p-2 space-y-0.5 min-h-0" style={{ userSelect: 'text' }}>
         {entries.length === 0 && (
           <div className="text-white/20 text-[11px] text-center py-4">No log entries</div>
         )}

@@ -8,12 +8,14 @@ const KEYBIND_DEFAULTS: Record<string, string> = {
   toggleOverlay: 'Shift+N',
   toggleToTalk: 'F5',
   quickNotification: 'F6',
+  quickControls: 'F2',
 };
 
 const KEYBIND_ACTIONS = [
   { key: 'toggleOverlay' as const, label: 'Toggle Overlay' },
   { key: 'toggleToTalk' as const, label: 'Toggle to Talk' },
   { key: 'quickNotification' as const, label: 'Quick Notification' },
+  { key: 'quickControls' as const, label: 'Quick Controls' },
 ];
 
 export function KeybindsTab() {

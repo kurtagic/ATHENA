@@ -1,7 +1,11 @@
-import React, { useCallback, useRef } from 'react';
+import React, { useCallback, useRef, useMemo, useState } from 'react';
 import { Pencil, Eraser, Ruler, Slash, Hash, Square } from 'lucide-react';
 import { useDrawStore, type BrushPattern } from '../../stores/drawStore';
 import { useMapStore } from '../../stores/mapStore';
+import { useSessionStore } from '../../stores/sessionStore';
+import { useEnemyMarkerStore } from '../../stores/enemyMarkerStore';
+import { uuidToColor } from '../../data/colorFromUuid';
+import { ARTILLERY_PLATFORMS, platformDisplayName } from '../../data/artilleryPlatforms';
 import { setDrawColor, setDrawWeight, setDrawOpacity, setDrawBrushPattern, toggleEraser } from '../../map/drawing';
 import { Toggle } from '../ui/toggle';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip';
@@ -24,8 +28,68 @@ export function BottomBar() {
   const strokeWidth = useDrawStore((s) => s.strokeWidth);
   const strokeOpacity = useDrawStore((s) => s.strokeOpacity);
   const map = useMapStore((s) => s.mapInstance);
+  const memberId = useSessionStore((s) => s.memberId);
+  const userColor = memberId ? uuidToColor(memberId) : null;
   const customColorRef = useRef('#ff8800');
-  const [customColor, setCustomColorState] = React.useState('#ff8800');
+  const [customColor, setCustomColorState] = useState('#ff8800');
+
+  const [enemyPopoverOpen, setEnemyPopoverOpen] = useState(false);
+
+  const enemyGroups = useMemo(() => {
+    const typeOrder = ['120mm', '150mm', '3C-High Explosive Rocket', '4C-Fire Rocket', 'Mortar', '300mm'];
+    const factionOrder = (a: { platform: typeof ARTILLERY_PLATFORMS[number] }, b: { platform: typeof ARTILLERY_PLATFORMS[number] }) => {
+      const rank = (f: string) => f === 'WARDEN' ? 0 : f === 'BOTH' ? 1 : 2;
+      return rank(a.platform.faction) - rank(b.platform.faction);
+    };
+
+    const typeMap = new Map<string, { platform: typeof ARTILLERY_PLATFORMS[number]; index: number }[]>();
+    const ships: { platform: typeof ARTILLERY_PLATFORMS[number]; index: number }[] = [];
+
+    ARTILLERY_PLATFORMS.forEach((p, i) => {
+      if (p.chassis === 'ship') {
+        ships.push({ platform: p, index: i });
+        return;
+      }
+      const list = typeMap.get(p.type) || [];
+      list.push({ platform: p, index: i });
+      typeMap.set(p.type, list);
+    });
+
+    const result: [string, { platform: typeof ARTILLERY_PLATFORMS[number]; index: number }[]][] = [];
+    for (const type of typeOrder) {
+      const list = typeMap.get(type);
+      if (list && list.length > 0) result.push([type, list.sort(factionOrder)]);
+    }
+    if (ships.length > 0) {
+      result.push(['Ships', ships.sort(factionOrder)]);
+    }
+    return result;
+  }, []);
+
+  const handleEnemyToggle = useCallback(() => {
+    if (activeTool === 'enemy-marker') {
+      useEnemyMarkerStore.getState().setPlacingMarker(false);
+      useDrawStore.getState().setActiveTool('pen');
+      useMapStore.getState().setMapCursor('');
+    }
+  }, [activeTool]);
+
+  const handleEnemyPlatformSelect = useCallback((index: number) => {
+    if (activeTool === 'eraser' && map) {
+      toggleEraser(map);
+    }
+    useEnemyMarkerStore.getState().setSelectedPlatformIndex(index);
+    useEnemyMarkerStore.getState().setPlacingMarker(true);
+    useDrawStore.getState().setActiveTool('enemy-marker');
+    useMapStore.getState().setMapCursor('crosshair');
+    setEnemyPopoverOpen(false);
+  }, [activeTool, map]);
+
+  const factionColor = (faction: string) => {
+    if (faction === 'WARDEN') return 'text-blue-400';
+    if (faction === 'COLONIAL') return 'text-green-400';
+    return 'text-white/70';
+  };
 
   const handleSwatchClick = useCallback((color: string) => {
     setDrawColor(color);
@@ -118,7 +182,8 @@ export function BottomBar() {
   const isCustomSelected =
     (activeTool === 'pen' || activeTool === 'area') &&
     activeColor !== '' &&
-    !SWATCHES.some((s) => s.color === activeColor);
+    !SWATCHES.some((s) => s.color === activeColor) &&
+    activeColor !== userColor;
 
   return (
     <div
@@ -132,8 +197,65 @@ export function BottomBar() {
           id="draw-toolbar"
           className="flex items-center gap-1.5 bg-white/[0.04] border border-white/[0.08] rounded-[16px] px-3 py-1.5"
         >
-          {/* Tool group */}
+          {/* Enemy Artillery */}
           <TooltipProvider delayDuration={300}>
+            <div className="flex items-center gap-1.5">
+              <Popover open={enemyPopoverOpen} onOpenChange={setEnemyPopoverOpen}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <PopoverTrigger asChild>
+                      <Toggle
+                        pressed={activeTool === 'enemy-marker'}
+                        onPressedChange={() => {
+                          if (activeTool === 'enemy-marker') {
+                            handleEnemyToggle();
+                          } else {
+                            setEnemyPopoverOpen(true);
+                          }
+                        }}
+                        className={`h-[34px] w-[34px] bg-transparent hover:bg-white/[0.08] text-white/50 border-b-2 transition-all ${
+                          activeTool === 'enemy-marker'
+                            ? 'border-b-red-500/80 bg-red-500/[0.12] text-red-400'
+                            : 'border-b-transparent'
+                        }`}
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16">
+                          <circle cx="12" cy="12" r="10"/>
+                          <line x1="12" y1="2" x2="12" y2="6"/>
+                          <line x1="12" y1="18" x2="12" y2="22"/>
+                          <line x1="2" y1="12" x2="6" y2="12"/>
+                          <line x1="18" y1="12" x2="22" y2="12"/>
+                        </svg>
+                      </Toggle>
+                    </PopoverTrigger>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="bg-[#1a1a1e] border-[var(--color-border-glass)] text-white text-xs">
+                    Enemy Artillery
+                  </TooltipContent>
+                </Tooltip>
+                <PopoverContent side="top" className="w-[240px] p-2 max-h-[400px] overflow-y-auto bg-[#1a1a1e] border-[var(--color-border-tactical)]">
+                  {enemyGroups.map(([type, platforms], gi) => (
+                    <React.Fragment key={type}>
+                      {gi > 0 && <div className="h-px bg-white/10 my-1.5" />}
+                      <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--color-gold)]/70 px-2 py-1">{type}</div>
+                      {platforms.map(({ platform, index }) => (
+                        <button
+                          key={index}
+                          className="w-full text-left px-2 py-1.5 text-[12px] rounded hover:bg-white/10 transition-colors cursor-pointer"
+                          onClick={() => handleEnemyPlatformSelect(index)}
+                        >
+                          <span className={factionColor(platform.faction)}>{platformDisplayName(platform, type === 'Ships')}</span>
+                        </button>
+                      ))}
+                    </React.Fragment>
+                  ))}
+                </PopoverContent>
+              </Popover>
+            </div>
+
+            <Separator orientation="vertical" className="h-5 bg-white/[0.08] mx-1" />
+
+            {/* Tool group */}
             <div className="flex items-center gap-1.5">
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -259,6 +381,20 @@ export function BottomBar() {
 
             {/* Color group */}
             <div className="flex items-center gap-[6px]">
+              {userColor && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div
+                      className={`draw-swatch${isSwatchSelected(userColor) ? ' selected' : ''}`}
+                      style={{ background: userColor }}
+                      onClick={() => handleSwatchClick(userColor)}
+                    />
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="bg-[#1a1a1e] border-[var(--color-border-glass)] text-white text-xs">
+                    Your Color
+                  </TooltipContent>
+                </Tooltip>
+              )}
               {SWATCHES.map((s) => (
                 <Tooltip key={s.color}>
                   <TooltipTrigger asChild>
@@ -274,33 +410,29 @@ export function BottomBar() {
                 </Tooltip>
               ))}
 
-              <Popover>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <PopoverTrigger asChild>
-                      <button
-                        className={`w-6 h-6 rounded-md border cursor-pointer transition-all duration-120 hover:scale-110 ${
-                          isCustomSelected
-                            ? 'border-white/60 ring-1 ring-white/60 ring-offset-2 ring-offset-[rgba(18,18,20,0.92)]'
-                            : 'border-white/20'
-                        }`}
-                        style={{ background: customColor }}
-                      />
-                    </PopoverTrigger>
-                  </TooltipTrigger>
-                  <TooltipContent side="top" className="bg-[#1a1a1e] border-[var(--color-border-glass)] text-white text-xs">
-                    Custom Color
-                  </TooltipContent>
-                </Tooltip>
-                <PopoverContent side="top" className="w-auto p-3">
-                  <input
-                    type="color"
-                    value={customColor}
-                    onChange={handleCustomColorChange}
-                    className="w-[200px] h-[36px] cursor-pointer border-none p-0 bg-transparent"
-                  />
-                </PopoverContent>
-              </Popover>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <label
+                    className={`relative w-6 h-6 rounded-md border cursor-pointer transition-all duration-120 hover:scale-110 ${
+                      isCustomSelected
+                        ? 'border-white/60 ring-1 ring-white/60 ring-offset-2 ring-offset-[rgba(18,18,20,0.92)]'
+                        : 'border-white/20'
+                    }`}
+                    style={{ background: customColor }}
+                    onClick={() => handleSwatchClick(customColorRef.current)}
+                  >
+                    <input
+                      type="color"
+                      value={customColor}
+                      onChange={handleCustomColorChange}
+                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                    />
+                  </label>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="bg-[#1a1a1e] border-[var(--color-border-glass)] text-white text-xs">
+                  Custom Color
+                </TooltipContent>
+              </Tooltip>
             </div>
 
             <Separator orientation="vertical" className="h-5 bg-white/[0.08] mx-1" />

@@ -98,6 +98,10 @@ export class SessionManager {
     this.send({ type: 'kick-member', memberId });
   }
 
+  transferOwnership(targetMemberId: string): void {
+    this.send({ type: 'transfer-ownership', targetMemberId });
+  }
+
   // ── Entity sync ──
 
   sendEntityCreate(entity: Omit<Entity, 'authorId'>): void {

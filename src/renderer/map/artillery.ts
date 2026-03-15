@@ -21,6 +21,8 @@ import {
 } from '../multiplayer/artillerySync';
 import { useMapStore } from '../stores/mapStore';
 import { useLayerStore } from '../stores/layerStore';
+import { useQuickControlsStore, getSpotterDisplayValues } from '../stores/quickControlsStore';
+import { useUndoStore } from '../stores/undoStore';
 const CIRCLE_SEGMENTS = 64;
 
 interface ArtyPosition {
@@ -72,6 +74,11 @@ let windDriftMarker: maplibregl.Marker | null = null;
 // Drag state
 let dragInfo: { type: 'gun' | 'target' | 'impact'; gunIndex: number } | null = null;
 let dragOccurred = false;
+let dragStartSnapshot: { position: [number, number]; impactPosition?: [number, number] | null } | null = null;
+
+// When true, mutations skip pushing to undo stack (used by undo executor)
+let suppressUndoPush = false;
+export function setSuppressUndoPush(v: boolean) { suppressUndoPush = v; }
 
 let artilleryHexId: string = '';
 
@@ -80,6 +87,7 @@ export function getArtilleryHexId(): string { return artilleryHexId; }
 
 // Click handler reference
 let clickHandler: ((e: maplibregl.MapMouseEvent) => void) | null = null;
+
 
 export function refreshPinnedData(): void {
   const { pinnedGuns } = useArtilleryStore.getState();
@@ -91,7 +99,12 @@ export function refreshPinnedData(): void {
   }
   const targetPos = state.corrected ?? state.target;
   if (!targetPos) {
-    window.athena.updatePinnedArtillery([]);
+    // No target — send pinned guns with null values
+    const pinnedData = state.positions
+      .map((p, i) => ({ label: p.label, i }))
+      .filter((p) => pinnedGuns.has(p.i))
+      .map((p) => ({ label: p.label, distanceM: null as number | null, azimuthDeg: null as number | null, inRange: false }));
+    window.athena.updatePinnedArtillery(pinnedData);
     return;
   }
   const solutions = computeSolutions();
@@ -106,10 +119,6 @@ export function refreshPinnedFromCache(saved: SavedArtilleryState): void {
   if (pinnedGuns.size === 0) return;
 
   const target = saved.target ? toMapPoint(saved.target[0], saved.target[1]) : null;
-  if (!target) {
-    window.athena.updatePinnedArtillery([]);
-    return;
-  }
 
   const positions = saved.positions.map((p) => ({
     point: toMapPoint(p.latlng[0], p.latlng[1]),
@@ -118,11 +127,17 @@ export function refreshPinnedFromCache(saved: SavedArtilleryState): void {
   }));
 
   const hasWind = windDirection !== null && windStrength > 0;
-  const pinnedData: { label: string; distanceM: number; azimuthDeg: number; inRange: boolean }[] = [];
+  const pinnedData: { label: string; distanceM: number | null; azimuthDeg: number | null; inRange: boolean }[] = [];
 
   for (let i = 0; i < positions.length; i++) {
     if (!pinnedGuns.has(i)) continue;
     const pos = positions[i];
+
+    if (!target) {
+      pinnedData.push({ label: pos.label, distanceM: null, azimuthDeg: null, inRange: false });
+      continue;
+    }
+
     const platformIndex = pos.platformIndex ?? DEFAULT_PLATFORM_INDEX;
     const platform = ARTILLERY_PLATFORMS[platformIndex];
 
@@ -151,6 +166,15 @@ export function getArtilleryState() {
   return {
     active: state.active,
     placementMode: state.placementMode,
+  };
+}
+
+/** Return the current main gun and target positions for the spotter HUD. */
+export function getLiveSpotterPositions(): { gun: [number, number] | null; target: [number, number] | null } {
+  const mainPos = state.positions[state.mainGunIndex];
+  return {
+    gun: mainPos ? [mainPos.point.x, mainPos.point.y] : null,
+    target: state.target ? [state.target.x, state.target.y] : null,
   };
 }
 
@@ -336,6 +360,17 @@ export function removeArtillery(posIndex: number, map: maplibregl.Map): void {
   const entityId = pos.entityId;
   const idx = state.positions.findIndex((p) => p.id === id);
   if (idx === -1) return;
+
+  // Capture snapshot before removal for undo
+  const gunSnapshot = {
+    entityId: entityId ?? '',
+    position: [pos.point.x, pos.point.y] as [number, number],
+    label: pos.label,
+    platformIndex: pos.platformIndex,
+    wasMain: idx === state.mainGunIndex,
+    posIndex: idx,
+  };
+
   state.positions.splice(idx, 1);
 
   // Update pinned guns: remove the deleted index and shift down any above it
@@ -357,6 +392,13 @@ export function removeArtillery(posIndex: number, map: maplibregl.Map): void {
 
   refreshAll(map);
   if (entityId && artilleryHexId) syncGunDelete(artilleryHexId, entityId);
+  if (!suppressUndoPush) {
+    useUndoStore.getState().pushAction({
+      type: 'gun-removed',
+      hexId: artilleryHexId,
+      gun: gunSnapshot,
+    });
+  }
 }
 
 export function setMainGun(index: number, map: maplibregl.Map): void {
@@ -369,7 +411,7 @@ export function setMainGun(index: number, map: maplibregl.Map): void {
       if (oldMain?.entityId) syncGunUpdate(artilleryHexId, oldMain.entityId, { isMain: false });
       if (newMain?.entityId) syncGunUpdate(artilleryHexId, newMain.entityId, { isMain: true });
     }
-  }
+    }
 }
 
 export function renameGun(index: number, newLabel: string, map: maplibregl.Map): void {
@@ -469,12 +511,21 @@ function handleMapClick(e: maplibregl.MapMouseEvent, map: maplibregl.Map): void 
         platformIndex,
         isMain,
       });
+      if (!suppressUndoPush) {
+        useUndoStore.getState().pushAction({
+          type: 'gun-added',
+          hexId: artilleryHexId,
+          gun: { entityId, position: [point.x, point.y], label, platformIndex, wasMain: isMain, posIndex: state.positions.length - 1 },
+        });
+      }
       return;
     }
 
     case 'placing-target': {
-      const oldTargetEntityId = state.targetEntityId;
-      const oldImpactEntityId = state.impactEntityId;
+      const prevTarget: [number, number] | null = state.target ? [state.target.x, state.target.y] : null;
+      const prevTargetEntityId = state.targetEntityId;
+      const prevImpact: [number, number] | null = state.impact ? [state.impact.x, state.impact.y] : null;
+      const prevImpactEntityId = state.impactEntityId;
       const targetEntityId = crypto.randomUUID();
       state.target = point;
       state.impact = null;
@@ -484,9 +535,21 @@ function handleMapClick(e: maplibregl.MapMouseEvent, map: maplibregl.Map): void 
       setPlacementMode('idle');
       refreshAll(map);
       if (artilleryHexId) {
-        if (oldImpactEntityId) syncImpactDelete(artilleryHexId, oldImpactEntityId);
-        if (oldTargetEntityId) syncTargetDelete(artilleryHexId, oldTargetEntityId);
+        if (prevImpactEntityId) syncImpactDelete(artilleryHexId, prevImpactEntityId);
+        if (prevTargetEntityId) syncTargetDelete(artilleryHexId, prevTargetEntityId);
         syncTargetSet(artilleryHexId, targetEntityId, [point.x, point.y]);
+      }
+      if (!suppressUndoPush) {
+        useUndoStore.getState().pushAction({
+          type: 'target-set',
+          hexId: artilleryHexId,
+          position: [point.x, point.y],
+          entityId: targetEntityId,
+          prevTarget,
+          prevTargetEntityId,
+          prevImpact,
+          prevImpactEntityId,
+        });
       }
       return;
     }
@@ -497,7 +560,8 @@ function handleMapClick(e: maplibregl.MapMouseEvent, map: maplibregl.Map): void 
         setPlacementMode('idle');
         return;
       }
-      const oldImpactEntityId = state.impactEntityId;
+      const prevImpact2: [number, number] | null = state.impact ? [state.impact.x, state.impact.y] : null;
+      const prevImpactEntityId2 = state.impactEntityId;
       const impactEntityId = crypto.randomUUID();
       state.impact = point;
       const correction = calculateCorrection(state.target, state.impact);
@@ -506,8 +570,18 @@ function handleMapClick(e: maplibregl.MapMouseEvent, map: maplibregl.Map): void 
       setPlacementMode('idle');
       refreshAll(map);
       if (artilleryHexId) {
-        if (oldImpactEntityId) syncImpactDelete(artilleryHexId, oldImpactEntityId);
+        if (prevImpactEntityId2) syncImpactDelete(artilleryHexId, prevImpactEntityId2);
         syncImpactSet(artilleryHexId, impactEntityId, [point.x, point.y]);
+      }
+      if (!suppressUndoPush) {
+        useUndoStore.getState().pushAction({
+          type: 'impact-set',
+          hexId: artilleryHexId,
+          position: [point.x, point.y],
+          entityId: impactEntityId,
+          prevImpact: prevImpact2,
+          prevImpactEntityId: prevImpactEntityId2,
+        });
       }
       return;
     }
@@ -637,10 +711,18 @@ function refreshWindOnly(map: maplibregl.Map): void {
   // Recompute solutions + update store + pinned data
   const solutions = computeSolutions();
   useArtilleryStore.getState().setSolutions(solutions, state.target !== null, state.impact !== null);
-  const pinnedData = solutions
-    .filter((s) => s.isPinned && state.target !== null)
-    .map((s) => ({ label: s.label, distanceM: s.distanceM, azimuthDeg: s.azimuthDeg, inRange: s.inRange }));
-  window.athena.updatePinnedArtillery(pinnedData);
+  const { pinnedHexId } = useArtilleryStore.getState();
+  if (!pinnedHexId || pinnedHexId === artilleryHexId) {
+    const pinnedData = solutions
+      .filter((s) => s.isPinned)
+      .map((s) => ({
+        label: s.label,
+        distanceM: state.target !== null ? s.distanceM : null,
+        azimuthDeg: state.target !== null ? s.azimuthDeg : null,
+        inRange: s.inRange,
+      }));
+    window.athena.updatePinnedArtillery(pinnedData);
+  }
 
   // Update wind drift marker (shows where shells land without wind compensation)
   updateWindDriftMarker(map);
@@ -856,13 +938,27 @@ function refreshAll(map: maplibregl.Map): void {
   const solutions = computeSolutions();
   useArtilleryStore.getState().setSolutions(solutions, state.target !== null, state.impact !== null);
 
-  // Send pinned solutions to main process for pip window
-  const pinnedData = solutions
-    .filter((s) => s.isPinned && state.target !== null)
-    .map((s) => ({ label: s.label, distanceM: s.distanceM, azimuthDeg: s.azimuthDeg, inRange: s.inRange }));
-  window.athena.updatePinnedArtillery(pinnedData);
+  // Send pinned solutions to main process for pip window (only if this hex owns the pins)
+  const { pinnedHexId: pHex } = useArtilleryStore.getState();
+  if (!pHex || pHex === artilleryHexId) {
+    const pinnedData = solutions
+      .filter((s) => s.isPinned)
+      .map((s) => ({
+        label: s.label,
+        distanceM: state.target !== null ? s.distanceM : null,
+        azimuthDeg: state.target !== null ? s.azimuthDeg : null,
+        inRange: s.inRange,
+      }));
+    window.athena.updatePinnedArtillery(pinnedData);
+  }
 
   // Sync is now handled granularly at each mutation point
+
+  // Push updated display values to spotter QC window if active
+  const qcStore = useQuickControlsStore.getState();
+  if (qcStore.mode === 'spotting' && qcStore.spotterCtx?.hexId === artilleryHexId) {
+    window.athena.sendQcSpotterUpdate(getSpotterDisplayValues(qcStore.spotterCtx));
+  }
 }
 
 function computeSolutions(): ArtillerySolution[] {
@@ -947,6 +1043,21 @@ function startDrag(map: maplibregl.Map, type: 'gun' | 'target' | 'impact', gunIn
   dragOccurred = false;
   map.dragPan.disable();
   useMapStore.getState().setMapCursor('grabbing');
+
+  // Capture starting position for undo
+  if (type === 'gun' && gunIndex >= 0 && gunIndex < state.positions.length) {
+    const p = state.positions[gunIndex].point;
+    dragStartSnapshot = { position: [p.x, p.y] };
+  } else if (type === 'target' && state.target) {
+    dragStartSnapshot = {
+      position: [state.target.x, state.target.y],
+      impactPosition: state.impact ? [state.impact.x, state.impact.y] : null,
+    };
+  } else if (type === 'impact' && state.impact) {
+    dragStartSnapshot = { position: [state.impact.x, state.impact.y] };
+  } else {
+    dragStartSnapshot = null;
+  }
 }
 
 export function saveArtilleryState(): SavedArtilleryState {
@@ -1066,6 +1177,53 @@ export function setupArtilleryEvents(map: maplibregl.Map): void {
           }
         }
       }
+      // Push undo action for the completed drag
+      if (!suppressUndoPush && dragStartSnapshot && artilleryHexId) {
+        switch (finishedDrag.type) {
+          case 'gun': {
+            const pos = state.positions[finishedDrag.gunIndex];
+            if (pos?.entityId) {
+              useUndoStore.getState().pushAction({
+                type: 'gun-moved',
+                hexId: artilleryHexId,
+                entityId: pos.entityId,
+                from: dragStartSnapshot.position,
+                to: [pos.point.x, pos.point.y],
+              });
+            }
+            break;
+          }
+          case 'target': {
+            if (state.target && state.targetEntityId) {
+              useUndoStore.getState().pushAction({
+                type: 'target-moved',
+                hexId: artilleryHexId,
+                entityId: state.targetEntityId,
+                from: dragStartSnapshot.position,
+                to: [state.target.x, state.target.y],
+                impactEntityId: state.impactEntityId,
+                impactFrom: dragStartSnapshot.impactPosition ?? null,
+                impactTo: state.impact ? [state.impact.x, state.impact.y] : null,
+              });
+            }
+            break;
+          }
+          case 'impact': {
+            if (state.impact && state.impactEntityId) {
+              useUndoStore.getState().pushAction({
+                type: 'impact-moved',
+                hexId: artilleryHexId,
+                entityId: state.impactEntityId,
+                from: dragStartSnapshot.position,
+                to: [state.impact.x, state.impact.y],
+              });
+            }
+            break;
+          }
+        }
+        dragStartSnapshot = null;
+      }
+
       setTimeout(() => { dragOccurred = false; }, 50);
     }
   });
@@ -1089,7 +1247,9 @@ export function addRemoteGun(
     entityId,
   });
   state.nextLabelNum = Math.max(state.nextLabelNum, parseInt(label.replace(/\D/g, ''), 10) + 1 || state.nextLabelNum);
-  if (isMain) state.mainGunIndex = state.positions.length - 1;
+  if (isMain) {
+    state.mainGunIndex = state.positions.length - 1;
+    }
   scheduleRefresh(map);
 }
 
@@ -1118,11 +1278,16 @@ export function updateRemoteGun(
     if (idx !== -1) state.mainGunIndex = idx;
   }
   scheduleRefresh(map);
+  // If this affected the main gun (position moved, or isMain changed), update spotter
+  const idx = state.positions.indexOf(pos);
+  if (idx === state.mainGunIndex || ('isMain' in changes && changes.isMain)) {
+    }
 }
 
 export function removeRemoteGun(map: maplibregl.Map, entityId: string): void {
   const idx = state.positions.findIndex((p) => p.entityId === entityId);
   if (idx === -1) return;
+  const wasMain = idx === state.mainGunIndex;
   state.positions.splice(idx, 1);
 
   if (state.positions.length === 0) {
@@ -1212,4 +1377,92 @@ export function scheduleWindRefresh(map: maplibregl.Map): void {
     windRefreshScheduled = false;
     if (refreshMap) refreshWindOnly(refreshMap);
   });
+}
+
+// ── Raw undo mutation helpers (no sync, no undo push) ──
+
+export function undoRemoveGunByEntityId(entityId: string, map: maplibregl.Map): void {
+  const idx = state.positions.findIndex((p) => p.entityId === entityId);
+  if (idx === -1) return;
+  if (idx === state.mainGunIndex && state.positions.length > 1) {
+    state.mainGunIndex = 0;
+  }
+  state.positions.splice(idx, 1);
+  if (state.positions.length === 0) {
+    state.mainGunIndex = 0;
+  } else if (state.mainGunIndex >= state.positions.length) {
+    state.mainGunIndex = 0;
+  } else if (idx < state.mainGunIndex) {
+    state.mainGunIndex--;
+  }
+  refreshAll(map);
+}
+
+export function undoAddGun(
+  entityId: string,
+  position: [number, number],
+  label: string,
+  platformIndex: number | undefined,
+  wasMain: boolean,
+  map: maplibregl.Map,
+): void {
+  state.positions.push({
+    id: state.nextId++,
+    point: toMapPoint(position[0], position[1]),
+    label,
+    platformIndex,
+    entityId,
+  });
+  state.nextLabelNum = Math.max(state.nextLabelNum, parseInt(label.replace(/\D/g, ''), 10) + 1 || state.nextLabelNum);
+  if (wasMain) {
+    state.mainGunIndex = state.positions.length - 1;
+  }
+  refreshAll(map);
+}
+
+export function undoSetTarget(point: [number, number] | null, entityId: string | null, map: maplibregl.Map): void {
+  if (point) {
+    state.target = toMapPoint(point[0], point[1]);
+    state.targetEntityId = entityId;
+  } else {
+    state.target = null;
+    state.targetEntityId = null;
+  }
+  recalcCorrected();
+  refreshAll(map);
+}
+
+export function undoSetImpact(point: [number, number] | null, entityId: string | null, map: maplibregl.Map): void {
+  if (point) {
+    state.impact = toMapPoint(point[0], point[1]);
+    state.impactEntityId = entityId;
+  } else {
+    state.impact = null;
+    state.corrected = null;
+    state.impactEntityId = null;
+  }
+  recalcCorrected();
+  refreshAll(map);
+}
+
+export function undoMoveGun(entityId: string, position: [number, number], map: maplibregl.Map): void {
+  const pos = state.positions.find((p) => p.entityId === entityId);
+  if (!pos) return;
+  pos.point = toMapPoint(position[0], position[1]);
+  refreshAll(map);
+}
+
+export function undoMoveTarget(position: [number, number], impactPosition: [number, number] | null, map: maplibregl.Map): void {
+  state.target = toMapPoint(position[0], position[1]);
+  if (impactPosition) {
+    state.impact = toMapPoint(impactPosition[0], impactPosition[1]);
+  }
+  recalcCorrected();
+  refreshAll(map);
+}
+
+export function undoMoveImpact(position: [number, number], map: maplibregl.Map): void {
+  state.impact = toMapPoint(position[0], position[1]);
+  recalcCorrected();
+  refreshAll(map);
 }

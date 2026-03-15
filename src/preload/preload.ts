@@ -55,6 +55,27 @@ contextBridge.exposeInMainWorld('athena', {
   onPipCommand: (callback: (command: string) => void) => {
     ipcRenderer.on('pip-command', (_event, command) => callback(command));
   },
+  onQuickControlsToggle: (callback: () => void) => {
+    ipcRenderer.on('quick-controls-toggle', () => callback());
+  },
+  onQcRequestArtilleryData: (callback: () => void) => {
+    ipcRenderer.on('qc-request-artillery-data', () => callback());
+  },
+  sendQcArtilleryDataReply: (data: unknown) => {
+    ipcRenderer.send('qc-artillery-data-reply', data);
+  },
+  onQcSelectSpotter: (callback: (payload: any) => void) => {
+    ipcRenderer.on('qc-select-spotter', (_event, payload) => callback(payload));
+  },
+  onQcSpotterAdjust: (callback: (payload: any) => void) => {
+    ipcRenderer.on('qc-spotter-adjust', (_event, payload) => callback(payload));
+  },
+  sendQcSpotterUpdate: (data: unknown) => {
+    ipcRenderer.send('qc-spotter-update', data);
+  },
+  onQcCloseMode: (callback: () => void) => {
+    ipcRenderer.on('qc-close-mode', () => callback());
+  },
   quit: () => {
     ipcRenderer.send('quit');
   },

@@ -14,6 +14,7 @@ import { CommandBanner } from '../artillery/CommandBanner';
 import { NotificationStack } from '../notifications/NotificationStack';
 import { DebugPanel } from '../panels/DebugPanel';
 
+
 export function AppShell() {
   const detailMode = useMapStore((s) => s.detailMode);
   const layersSidebarOpen = useMapStore((s) => s.layersSidebarOpen);
@@ -78,7 +79,7 @@ export function AppShell() {
       {settingsOpen && <SettingsPage />}
       <CommandBanner />
       <NotificationStack />
-      <DebugPanel />
+<DebugPanel />
     </>
   );
 }

@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-export type ActiveTool = 'pen' | 'eraser' | 'area' | 'ruler';
+export type ActiveTool = 'pen' | 'eraser' | 'area' | 'ruler' | 'enemy-marker';
 export type BrushPattern = 'diagonal' | 'crosshatch' | 'border';
 
 interface DrawStoreState {

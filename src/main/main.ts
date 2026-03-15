@@ -5,11 +5,12 @@ import { registerTileProtocol } from './protocol';
 import { registerIpcHandlers } from './ipc';
 import { startPoller, stopPoller } from './warPoller';
 import { loadSettings } from './settings';
-import { registerOverlayHotkey, registerTttHotkey, registerQuickNotifHotkey } from './hotkeys';
+import { registerOverlayHotkey, registerTttHotkey, registerQuickNotifHotkey, registerQuickControlsHotkey } from './hotkeys';
 import { unmuteOtherApps } from './audioSilencer';
 import { destroyPip } from './pipWindow';
 import { showBannerWindow, destroyBannerWindow, showNotificationWindow, destroyNotificationWindow } from './bannerWindow';
 import { destroyQuickNotifWindow } from './quickNotifWindow';
+import { destroyQuickControlsWindow } from './quickControlsWindow';
 
 // Handle Squirrel install/update/uninstall events
 const squirrelArg = process.argv[1];
@@ -91,6 +92,7 @@ function createWindow(): void {
   registerOverlayHotkey(settings.keybinds.toggleOverlay, mainWindow);
   registerTttHotkey(settings.keybinds.toggleToTalk, mainWindow);
   registerQuickNotifHotkey(settings.keybinds.quickNotification, mainWindow);
+  registerQuickControlsHotkey(settings.keybinds.quickControls, mainWindow);
 
   mainWindow.on('closed', () => {
     mainWindow = null;
@@ -98,6 +100,7 @@ function createWindow(): void {
     destroyBannerWindow();
     destroyNotificationWindow();
     destroyQuickNotifWindow();
+    destroyQuickControlsWindow();
   });
 }
 

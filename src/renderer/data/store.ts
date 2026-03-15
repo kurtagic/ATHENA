@@ -30,8 +30,10 @@ export interface SavedArtilleryState {
 
 export const hexDrawingData: Record<string, SavedStroke[]> = {};
 export const hexArtilleryData: Record<string, SavedArtilleryState> = {};
+export const hexEnemyMarkerData: Record<string, import('../map/enemyMarkers').SavedEnemyMarkerState> = {};
 
 export function clearHexCaches(): void {
   for (const key of Object.keys(hexDrawingData)) delete hexDrawingData[key];
   for (const key of Object.keys(hexArtilleryData)) delete hexArtilleryData[key];
+  for (const key of Object.keys(hexEnemyMarkerData)) delete hexEnemyMarkerData[key];
 }

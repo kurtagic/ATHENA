@@ -147,11 +147,13 @@ function createPipWindow(): BrowserWindow {
 
 function buildFullHTML(data: PinnedSolution[]): string {
   return data.map((d) => {
-    const oorClass = d.inRange ? '' : ' oor';
+    const oorClass = d.distanceM !== null && !d.inRange ? ' oor' : '';
+    const distText = d.distanceM !== null ? `${d.distanceM.toFixed(1)}m` : '--';
+    const azText = d.azimuthDeg !== null ? `${d.azimuthDeg.toFixed(1)}&deg;` : '--';
     return `<div class="row${oorClass}">` +
       `<span class="label">${escapeHtml(d.label)}</span>` +
-      `<span class="dist">${d.distanceM.toFixed(1)}m</span>` +
-      `<span class="az">${d.azimuthDeg.toFixed(1)}&deg;</span>` +
+      `<span class="dist">${distText}</span>` +
+      `<span class="az">${azText}</span>` +
       `</div>`;
   }).join('');
 }
@@ -168,15 +170,16 @@ function renderDataScript(data: PinnedSolution[]): { script: string; needsResize
   }
 
   const updates = data.map((d, i) => {
-    const distText = `${d.distanceM.toFixed(1)}m`;
-    const azText = `${d.azimuthDeg.toFixed(1)}°`;
+    const distText = d.distanceM !== null ? `${d.distanceM.toFixed(1)}m` : '--';
+    const azText = d.azimuthDeg !== null ? `${d.azimuthDeg.toFixed(1)}°` : '--';
+    const oorClass = d.distanceM !== null && !d.inRange;
     return `(() => {
       const row = rows[${i}];
       if (!row) return;
       row.querySelector('.label').textContent = ${JSON.stringify(d.label)};
       row.querySelector('.dist').textContent = ${JSON.stringify(distText)};
       row.querySelector('.az').textContent = ${JSON.stringify(azText)};
-      ${d.inRange ? "row.classList.remove('oor');" : "row.classList.add('oor');"}
+      ${oorClass ? "row.classList.add('oor');" : "row.classList.remove('oor');"}
     })();`;
   }).join('\n');
 
@@ -192,7 +195,7 @@ function escapeHtml(s: string): string {
 }
 
 function fingerprint(data: PinnedSolution[]): string {
-  return data.map((d) => `${d.label}:${d.distanceM.toFixed(1)}:${d.azimuthDeg.toFixed(1)}`).join('|');
+  return data.map((d) => `${d.label}:${d.distanceM !== null ? d.distanceM.toFixed(1) : '--'}:${d.azimuthDeg !== null ? d.azimuthDeg.toFixed(1) : '--'}`).join('|');
 }
 
 function hasValuesChanged(data: PinnedSolution[]): boolean {
