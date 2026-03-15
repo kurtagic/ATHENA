@@ -4,7 +4,7 @@ import { useDrawStore, type BrushPattern } from '../../stores/drawStore';
 import { useMapStore } from '../../stores/mapStore';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useEnemyMarkerStore } from '../../stores/enemyMarkerStore';
-import { uuidToColor } from '../../data/colorFromUuid';
+import { colorByIndex } from '../../data/colorFromUuid';
 import { ARTILLERY_PLATFORMS, platformDisplayName } from '../../data/artilleryPlatforms';
 import { setDrawColor, setDrawWeight, setDrawOpacity, setDrawBrushPattern, toggleEraser } from '../../map/drawing';
 import { Toggle } from '../ui/toggle';
@@ -29,7 +29,12 @@ export function BottomBar() {
   const strokeOpacity = useDrawStore((s) => s.strokeOpacity);
   const map = useMapStore((s) => s.mapInstance);
   const memberId = useSessionStore((s) => s.memberId);
-  const userColor = memberId ? uuidToColor(memberId) : null;
+  const members = useSessionStore((s) => s.members);
+  const userColor = (() => {
+    if (!memberId) return null;
+    const me = members.find(m => m.id === memberId);
+    return me ? colorByIndex(me.colorIndex) : null;
+  })();
   const customColorRef = useRef('#ff8800');
   const [customColor, setCustomColorState] = useState('#ff8800');
 

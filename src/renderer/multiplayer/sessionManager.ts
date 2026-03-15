@@ -219,6 +219,7 @@ export class SessionManager {
           displayName: store.displayName,
           connectedAt: Date.now(),
           voiceEnabled: false,
+          colorIndex: 0,
         }]);
         debugLog('session', `Lobby created: ${m.name}`);
         break;

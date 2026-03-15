@@ -59,14 +59,10 @@ export function useGlobalKeyboard(mapRef: React.MutableRefObject<maplibregl.Map 
     window.athena.onQcSelectSpotter((payload: any) => {
       useQuickControlsStore.getState().selectSpotterTarget(
         payload.hexId, payload.hexName, payload.target,
-        payload.targetEntityId, payload.impact, payload.impactEntityId,
-        payload.mainGunPosition,
+        payload.targetEntityId, payload.mainGunPosition,
       );
       // Send initial display values to the qc window
-      const ctx = useQuickControlsStore.getState().spotterCtx;
-      if (ctx) {
-        window.athena.sendQcSpotterUpdate(getSpotterDisplayValues(ctx));
-      }
+      window.athena.sendQcSpotterUpdate(getSpotterDisplayValues());
     });
   }, []);
 
@@ -78,10 +74,7 @@ export function useGlobalKeyboard(mapRef: React.MutableRefObject<maplibregl.Map 
       if (payload.azDelta) store.adjustAzimuth(payload.azDelta);
       if (payload.distDelta) store.adjustDistance(payload.distDelta);
       // Send computed display values back to the qc window
-      const ctx = useQuickControlsStore.getState().spotterCtx;
-      if (ctx) {
-        window.athena.sendQcSpotterUpdate(getSpotterDisplayValues(ctx));
-      }
+      window.athena.sendQcSpotterUpdate(getSpotterDisplayValues());
     });
   }, []);
 
@@ -109,10 +102,7 @@ export function useGlobalKeyboard(mapRef: React.MutableRefObject<maplibregl.Map 
           if (e.key === 'ArrowUp') store.adjustDistance(8);
           if (e.key === 'ArrowDown') store.adjustDistance(-8);
           // Update the qc window too
-          const ctx = useQuickControlsStore.getState().spotterCtx;
-          if (ctx) {
-            window.athena.sendQcSpotterUpdate(getSpotterDisplayValues(ctx));
-          }
+          window.athena.sendQcSpotterUpdate(getSpotterDisplayValues());
           return;
         }
       }

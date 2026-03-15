@@ -2,7 +2,7 @@
  * 16 unique user colors, chosen to be visually distinct from each other
  * AND from the 5 toolbar swatches (#ef4444, #22c55e, #3b82f6, #eab308, #ffffff).
  */
-const USER_COLORS = [
+export const USER_COLORS = [
   '#e06cf0', // orchid pink
   '#ff7b3a', // tangerine
   '#1dd4c0', // teal
@@ -20,6 +20,11 @@ const USER_COLORS = [
   '#f97316', // burnt orange
   '#67e8f9', // cyan
 ] as const;
+
+/** Returns a color by server-assigned index (0–15). */
+export function colorByIndex(index: number): string {
+  return USER_COLORS[((index % USER_COLORS.length) + USER_COLORS.length) % USER_COLORS.length];
+}
 
 /** Deterministically maps a UUID to one of 16 fixed user colors. */
 export function uuidToColor(uuid: string): string {

@@ -96,35 +96,17 @@ function buildQuickControlsHTML(): string {
   .hex-group { margin-bottom: 8px; }
 
   /* HUD styles */
-  .hud-row {
-    display: flex; align-items: center; gap: 12px; margin-bottom: 8px;
+  .gun-list { margin: 8px 0; }
+  .gun-row {
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 8px; border-radius: 6px;
+    font-family: 'Consolas', monospace; font-size: 14px;
+    color: rgba(255,255,255,0.75);
   }
-  .hud-icon { color: #ffd54f; font-size: 16px; }
-  .hud-label { font-size: 12px; font-weight: 600; color: rgba(255,255,255,0.75); }
-  .hud-vals {
-    display: flex; gap: 16px; justify-content: center;
-    margin: 12px 0;
-  }
-  .hud-val-block { text-align: center; }
-  .hud-val-num {
-    font-size: 20px; font-family: 'Consolas', monospace;
-    font-weight: 700; color: #ffd54f;
-  }
-  .hud-val-unit {
-    font-size: 10px; color: rgba(255,255,255,0.3);
-    text-transform: uppercase; letter-spacing: 0.08em;
-  }
-  .delta-row {
-    display: flex; gap: 16px; justify-content: center;
-    margin-bottom: 4px;
-  }
-  .delta-val {
-    font-size: 12px; font-family: 'Consolas', monospace;
-    color: rgba(255,255,255,0.45);
-  }
-  .delta-pos { color: rgba(255,160,60,0.8); }
-  .delta-neg { color: rgba(100,180,255,0.8); }
-  .delta-zero { color: rgba(255,255,255,0.25); }
+  .gun-star { color: rgba(255,255,255,0.25); font-size: 14px; }
+  .gun-star.main { color: #ffd54f; }
+  .gun-label { font-weight: 600; min-width: 30px; }
+  .gun-val { color: #ffd54f; font-weight: 700; font-size: 16px; }
 </style></head><body>
   <div class="container" id="root"></div>
   <script>
@@ -150,7 +132,7 @@ function buildQuickControlsHTML(): string {
           '<h2>Quick Controls</h2>' +
           '<button class="btn" id="btn-spotter">' +
             '<span class="btn-icon">\\u2316</span>' +
-            '<div><div>Spotter</div><div class="btn-sub">Adjust impact with arrow keys</div></div>' +
+            '<div><div>Spotter</div><div class="btn-sub">Adjust target with arrow keys</div></div>' +
           '</button>' +
           '<div class="hint">Press Escape to close</div>';
         document.getElementById('btn-spotter').onclick = () => {
@@ -177,8 +159,6 @@ function buildQuickControlsHTML(): string {
             items += '<button class="item-btn" data-hex="' + hexId + '" data-hex-name="' + data.hexName + '"' +
               " data-target='" + JSON.stringify(data.target) + "'" +
               ' data-target-eid="' + data.targetEntityId + '"' +
-              " data-impact='" + JSON.stringify(data.impact) + "'" +
-              ' data-impact-eid="' + (data.impactEntityId || '') + '"' +
               " data-main-gun='" + JSON.stringify(mainGun) + "'>" + data.hexName + '</button>';
           }
         }
@@ -196,8 +176,6 @@ function buildQuickControlsHTML(): string {
               hexId: btn.dataset.hex, hexName: btn.dataset.hexName,
               target: JSON.parse(btn.dataset.target),
               targetEntityId: btn.dataset.targetEid,
-              impact: JSON.parse(btn.dataset.impact),
-              impactEntityId: btn.dataset.impactEid || null,
               mainGunPosition: JSON.parse(btn.dataset.mainGun || 'null'),
             });
             currentMode = 'spotting';
@@ -215,14 +193,7 @@ function buildQuickControlsHTML(): string {
             '<button class="back-btn" id="back">\\u2190</button>' +
             '<h2 style="margin:0">Spotting: ' + spotterHexName + '</h2>' +
           '</div>' +
-          '<div class="hud-vals">' +
-            '<div class="hud-val-block"><div class="hud-val-num" id="abs-dist">--</div><div class="hud-val-unit">Distance</div></div>' +
-            '<div class="hud-val-block"><div class="hud-val-num" id="abs-az">--</div><div class="hud-val-unit">Azimuth</div></div>' +
-          '</div>' +
-          '<div class="delta-row">' +
-            '<span class="delta-val delta-zero" id="delta-dist">0m</span>' +
-            '<span class="delta-val delta-zero" id="delta-az">0\\u00B0</span>' +
-          '</div>' +
+          '<div id="gun-list" class="gun-list"></div>' +
           '<div class="hint">\\u2190\\u2192 Azimuth \\u00B7 \\u2191\\u2193 Distance \\u00B7 Esc to stop</div>';
         document.getElementById('back').onclick = () => { currentMode = 'menu'; render(); };
         resize();
@@ -233,22 +204,19 @@ function buildQuickControlsHTML(): string {
 
     // Listen for display values from renderer
     ipcRenderer.on('qc-spotter-update', (e, data) => {
-      const absDistEl = document.getElementById('abs-dist');
-      const absAzEl = document.getElementById('abs-az');
-      const dDistEl = document.getElementById('delta-dist');
-      const dAzEl = document.getElementById('delta-az');
-      if (absDistEl) absDistEl.textContent = Math.round(data.absDist) + 'm';
-      if (absAzEl) absAzEl.textContent = Math.round(data.absAz) + '\\u00B0';
-      if (dDistEl) {
-        const d = Math.round(data.deltaDist);
-        dDistEl.textContent = d + 'm';
-        dDistEl.className = 'delta-val ' + (d > 0 ? 'delta-pos' : 'delta-zero');
+      const list = document.getElementById('gun-list');
+      if (!list) return;
+      var main = (data.guns || []).find(function(g) { return g.isMain; });
+      if (!main) {
+        list.innerHTML = '<div class="empty">No main gun</div>';
+        return;
       }
-      if (dAzEl) {
-        const d = Math.round(data.deltaAz);
-        dAzEl.textContent = d + '\\u00B0';
-        dAzEl.className = 'delta-val ' + (d > 0 ? 'delta-pos' : 'delta-zero');
-      }
+      list.innerHTML = '<div class="gun-row">' +
+        '<span class="gun-star main">\\u2605</span>' +
+        '<span class="gun-label">' + main.label + '</span>' +
+        '<span class="gun-val">' + Math.round(main.distanceM) + 'm</span>' +
+        '<span class="gun-val">' + Math.round(main.azimuthDeg) + '\\u00B0</span>' +
+      '</div>';
     });
 
     render();

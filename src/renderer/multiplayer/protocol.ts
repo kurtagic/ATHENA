@@ -70,6 +70,7 @@ export interface LobbyMember {
   displayName: string;
   connectedAt: number;
   voiceEnabled: boolean;
+  colorIndex: number;
 }
 
 export interface PendingJoin {

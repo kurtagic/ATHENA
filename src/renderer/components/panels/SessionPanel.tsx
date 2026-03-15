@@ -8,7 +8,7 @@ import { voice } from '../../multiplayer/voiceManager';
 import { acceleratorToDisplay } from '../../lib/keybindUtils';
 
 import { ensureConnected, getSavedDisplayName } from '../../multiplayer/connectionHelper';
-import { uuidToColor } from '../../data/colorFromUuid';
+import { colorByIndex } from '../../data/colorFromUuid';
 
 export function SessionPanel() {
   const status = useSessionStore((s) => s.status);
@@ -188,7 +188,7 @@ function LobbyView({
 }: {
   lobbyId: string;
   lobbyName: string | null;
-  members: { id: string; displayName: string; voiceEnabled: boolean }[];
+  members: { id: string; displayName: string; voiceEnabled: boolean; colorIndex: number }[];
   isOwner: boolean;
   ownerId: string | null;
   memberId: string | null;
@@ -276,7 +276,7 @@ function LobbyView({
               {isMemberOwner && <Crown size={11} className="text-amber-400 shrink-0 fill-amber-400" />}
               <span
                 className={`text-[13px] flex-1 truncate ${isSelf ? 'font-medium' : ''}`}
-                style={{ color: uuidToColor(m.id) }}
+                style={{ color: colorByIndex(m.colorIndex) }}
               >
                 {m.displayName}
                 {isSelf && ' (you)'}

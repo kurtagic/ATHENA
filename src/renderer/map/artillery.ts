@@ -169,12 +169,14 @@ export function getArtilleryState() {
   };
 }
 
-/** Return the current main gun and target positions for the spotter HUD. */
-export function getLiveSpotterPositions(): { gun: [number, number] | null; target: [number, number] | null } {
+/** Return the current main gun, target and impact positions for the spotter HUD. */
+export function getLiveSpotterPositions(): { gun: [number, number] | null; target: [number, number] | null; impact: [number, number] | null; impactEntityId: string | null } {
   const mainPos = state.positions[state.mainGunIndex];
   return {
     gun: mainPos ? [mainPos.point.x, mainPos.point.y] : null,
     target: state.target ? [state.target.x, state.target.y] : null,
+    impact: state.impact ? [state.impact.x, state.impact.y] : null,
+    impactEntityId: state.impactEntityId,
   };
 }
 
@@ -957,7 +959,7 @@ function refreshAll(map: maplibregl.Map): void {
   // Push updated display values to spotter QC window if active
   const qcStore = useQuickControlsStore.getState();
   if (qcStore.mode === 'spotting' && qcStore.spotterCtx?.hexId === artilleryHexId) {
-    window.athena.sendQcSpotterUpdate(getSpotterDisplayValues(qcStore.spotterCtx));
+    window.athena.sendQcSpotterUpdate(getSpotterDisplayValues());
   }
 }
 

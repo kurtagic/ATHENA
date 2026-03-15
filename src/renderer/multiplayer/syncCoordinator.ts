@@ -4,7 +4,7 @@ import { setupArtilleryObserver, teardownArtilleryObserver, loadHexArtillery } f
 import { setupEnemyMarkerObserver, teardownEnemyMarkerObserver, loadHexEnemyMarkers } from './enemyMarkerSync';
 import { voice } from './voiceManager';
 import { setSyncMode, setCurrentHexId, clearAllStrokes, restoreDrawState, setDrawColor } from '../map/drawing';
-import { uuidToColor } from '../data/colorFromUuid';
+import { colorByIndex } from '../data/colorFromUuid';
 import { useDrawStore } from '../stores/drawStore';
 import { setArtilleryHexId, restoreArtilleryState } from '../map/artillery';
 import { setEnemyMarkerHexId, restoreEnemyMarkerState } from '../map/enemyMarkers';
@@ -36,13 +36,16 @@ export function initMultiplayerSync(): void {
     }
   });
 
-  // Set user-unique drawing color when memberId is assigned
+  // Set user-unique drawing color when members list updates (colorIndex from server)
   useSessionStore.subscribe((state, prev) => {
-    if (state.memberId && state.memberId !== prev.memberId) {
-      const color = uuidToColor(state.memberId);
-      useDrawStore.getState().setActiveColor(color);
-      setDrawColor(color);
-      debugLog('session', `Drawing color set to ${color} from memberId`);
+    if (state.memberId && state.members !== prev.members) {
+      const me = state.members.find(m => m.id === state.memberId);
+      if (me) {
+        const color = colorByIndex(me.colorIndex);
+        useDrawStore.getState().setActiveColor(color);
+        setDrawColor(color);
+        debugLog('session', `Drawing color set to ${color} from colorIndex ${me.colorIndex}`);
+      }
     }
   });
 
@@ -104,13 +107,16 @@ export function initMultiplayerSync(): void {
     }
   });
 
-  // If already connected when init runs, apply memberId color immediately
-  const currentMemberId = useSessionStore.getState().memberId;
-  if (currentMemberId) {
-    const color = uuidToColor(currentMemberId);
-    useDrawStore.getState().setActiveColor(color);
-    setDrawColor(color);
-    debugLog('session', `Drawing color set to ${color} from existing memberId`);
+  // If already connected when init runs, apply colorIndex color immediately
+  const currentState = useSessionStore.getState();
+  if (currentState.memberId) {
+    const me = currentState.members.find(m => m.id === currentState.memberId);
+    if (me) {
+      const color = colorByIndex(me.colorIndex);
+      useDrawStore.getState().setActiveColor(color);
+      setDrawColor(color);
+      debugLog('session', `Drawing color set to ${color} from existing colorIndex ${me.colorIndex}`);
+    }
   }
 
   // If already in a lobby when init runs (e.g. menu → app view transition),
