@@ -45,6 +45,7 @@ interface QuickControlsState {
   ) => void;
   adjustAzimuth: (delta: number) => void;
   adjustDistance: (delta: number) => void;
+  syncSpotterTarget: (newTarget: [number, number]) => void;
 }
 
 let syncTimer: ReturnType<typeof setTimeout> | null = null;
@@ -215,5 +216,25 @@ export const useQuickControlsStore = create<QuickControlsState>((set, get) => ({
     }
 
     debouncedSync(ctx.hexId, ctx.targetEntityId, newTarget, live.impactEntityId, newImpact);
+  },
+
+  syncSpotterTarget: (newTarget) => {
+    const ctx = get().spotterCtx;
+    if (!ctx || !ctx.mainGunPosition) return;
+
+    const dx = newTarget[0] - ctx.mainGunPosition[0];
+    const dy = newTarget[1] - ctx.mainGunPosition[1];
+    const distCRS = Math.sqrt(dx * dx + dy * dy);
+    const gunToTargetDist = distCRS * METERS_PER_CRS_UNIT;
+    const gunToTargetAz = ((Math.atan2(dx, dy) * 180) / Math.PI + 360) % 360;
+
+    set({
+      spotterCtx: {
+        ...ctx,
+        gunToTargetAz,
+        gunToTargetDist,
+        targetPosition: newTarget,
+      },
+    });
   },
 }));

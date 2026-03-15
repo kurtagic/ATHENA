@@ -1168,6 +1168,11 @@ export function setupArtilleryEvents(map: maplibregl.Map): void {
               if (state.impact && state.impactEntityId) {
                 syncImpactUpdate(artilleryHexId, state.impactEntityId, { position: [state.impact.x, state.impact.y] });
               }
+              // Sync spotter context so arrow keys use the dragged position
+              const qc = useQuickControlsStore.getState();
+              if (qc.spotterCtx?.targetEntityId === state.targetEntityId) {
+                qc.syncSpotterTarget([state.target.x, state.target.y]);
+              }
             }
             break;
           }
@@ -1339,6 +1344,11 @@ export function updateRemoteTarget(map: maplibregl.Map, entityId: string, change
   if ('position' in changes) {
     const [x, y] = changes.position as [number, number];
     state.target = toMapPoint(x, y);
+    // Sync spotter context so arrow keys use the new position
+    const qc = useQuickControlsStore.getState();
+    if (qc.spotterCtx?.targetEntityId === entityId) {
+      qc.syncSpotterTarget([x, y]);
+    }
   }
   recalcCorrected();
   scheduleRefresh(map);
