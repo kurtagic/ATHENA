@@ -10,6 +10,9 @@ export interface StrokeSnapshot {
   weight: number;
   opacity: number;
   brushPattern?: BrushPattern;
+  isArrow?: boolean;
+  stampType?: string;
+  stampText?: string;
 }
 
 // ── Gun snapshots ──

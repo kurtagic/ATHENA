@@ -1,5 +1,6 @@
 import { session } from './sessionManager';
 import { useVoiceStore } from '../stores/voiceStore';
+import { useSettingsStore } from '../stores/settingsStore';
 import { debugLog } from '../stores/debugStore';
 import type { ServerBroadcast } from './protocol';
 
@@ -34,12 +35,17 @@ export class VoiceManager {
 
   async joinVoice(): Promise<void> {
     try {
+      const inputDeviceId = useSettingsStore.getState().settings?.audio.inputDeviceId || '';
+      const audioConstraints: MediaTrackConstraints = {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+      };
+      if (inputDeviceId) {
+        audioConstraints.deviceId = { exact: inputDeviceId };
+      }
       this.localStream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-        },
+        audio: audioConstraints,
       });
       debugLog('voice', `Got microphone stream (${this.localStream.getAudioTracks().length} tracks)`);
 
@@ -186,6 +192,13 @@ export class VoiceManager {
     const audioEl = document.createElement('audio');
     audioEl.autoplay = true;
 
+    const outputDeviceId = useSettingsStore.getState().settings?.audio.outputDeviceId || '';
+    if (outputDeviceId && typeof audioEl.setSinkId === 'function') {
+      audioEl.setSinkId(outputDeviceId).catch((err: unknown) =>
+        debugLog('voice', `Failed to set output device: ${err}`)
+      );
+    }
+
     document.body.appendChild(audioEl);
 
     const peerData: PeerConnection = { pc, audioEl, analyser: null, audioCtx: null };
@@ -226,6 +239,59 @@ export class VoiceManager {
 
     this.peers.set(peerId, peerData);
     return pc;
+  }
+
+  async setOutputDevice(deviceId: string): Promise<void> {
+    for (const [peerId, peer] of this.peers) {
+      if (typeof peer.audioEl.setSinkId === 'function') {
+        try {
+          await peer.audioEl.setSinkId(deviceId);
+        } catch (err) {
+          debugLog('voice', `Failed to switch output for ${peerId}: ${err}`);
+        }
+      }
+    }
+    debugLog('voice', `Output device switched to ${deviceId || 'default'}`);
+  }
+
+  async setInputDevice(deviceId: string): Promise<void> {
+    if (!this.localStream) return;
+
+    const audioConstraints: MediaTrackConstraints = {
+      echoCancellation: true,
+      noiseSuppression: true,
+      autoGainControl: true,
+    };
+    if (deviceId) {
+      audioConstraints.deviceId = { exact: deviceId };
+    }
+
+    try {
+      const newStream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints });
+      const newTrack = newStream.getAudioTracks()[0];
+
+      // Preserve current mute state (TTT)
+      const wasMuted = !this.localStream.getAudioTracks()[0]?.enabled;
+      newTrack.enabled = !wasMuted;
+
+      // Replace track on all peer connections
+      for (const [, peer] of this.peers) {
+        const sender = peer.pc.getSenders().find(s => s.track?.kind === 'audio');
+        if (sender) {
+          await sender.replaceTrack(newTrack);
+        }
+      }
+
+      // Stop old tracks and swap stream
+      for (const track of this.localStream.getAudioTracks()) {
+        track.stop();
+      }
+      this.localStream = newStream;
+
+      debugLog('voice', `Input device switched to ${deviceId || 'default'}`);
+    } catch (err) {
+      debugLog('voice', `Failed to switch input device: ${err}`);
+    }
   }
 
   private startSpeakingDetection(): void {

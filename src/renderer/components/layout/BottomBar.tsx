@@ -1,5 +1,5 @@
 import React, { useCallback, useRef, useMemo, useState } from 'react';
-import { Pencil, Eraser, Ruler, Slash, Hash, Square } from 'lucide-react';
+import { Pencil, Eraser, Ruler, Slash, Hash, Square, MoveRight, Stamp, Type } from 'lucide-react';
 import { useDrawStore, type BrushPattern } from '../../stores/drawStore';
 import { useMapStore } from '../../stores/mapStore';
 import { useSessionStore } from '../../stores/sessionStore';
@@ -7,11 +7,26 @@ import { useEnemyMarkerStore } from '../../stores/enemyMarkerStore';
 import { colorByIndex } from '../../data/colorFromUuid';
 import { ARTILLERY_PLATFORMS, platformDisplayName } from '../../data/artilleryPlatforms';
 import { setDrawColor, setDrawWeight, setDrawOpacity, setDrawBrushPattern, toggleEraser } from '../../map/drawing';
+import { ALL_STAMP_TYPES, STAMP_LABELS, getStampImage, type StampType } from '../../map/stampIcons';
 import { Toggle } from '../ui/toggle';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip';
 import { Separator } from '../ui/separator';
 import { Slider } from '../ui/slider';
 import { Popover, PopoverTrigger, PopoverContent } from '../ui/popover';
+
+function StampPreview({ type }: { type: StampType }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  React.useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.clearRect(0, 0, 28, 28);
+    const img = getStampImage(type, '#ffffff', 28);
+    ctx.drawImage(img, 0, 0, 28, 28);
+  }, [type]);
+  return <canvas ref={canvasRef} width={28} height={28} />;
+}
 
 const SWATCHES = [
   { color: '#ef4444', title: 'Red' },
@@ -39,6 +54,8 @@ export function BottomBar() {
   const [customColor, setCustomColorState] = useState('#ff8800');
 
   const [enemyPopoverOpen, setEnemyPopoverOpen] = useState(false);
+  const [stampPopoverOpen, setStampPopoverOpen] = useState(false);
+  const selectedStamp = useDrawStore((s) => s.selectedStamp);
 
   const enemyGroups = useMemo(() => {
     const typeOrder = ['120mm', '150mm', '3C-High Explosive Rocket', '4C-Fire Rocket', 'Mortar', '300mm'];
@@ -125,6 +142,23 @@ export function BottomBar() {
     }
   }, [activeTool, map]);
 
+  const handleArrowClick = useCallback(() => {
+    if (activeTool === 'eraser' && map) {
+      toggleEraser(map);
+    }
+    if (activeTool !== 'arrow') {
+      useDrawStore.getState().setActiveTool('arrow');
+      setDrawBrushPattern(undefined);
+      const state = useDrawStore.getState();
+      if (!state.activeColor) {
+        useDrawStore.getState().setActiveColor('#ef4444');
+        setDrawColor('#ef4444');
+      }
+    } else {
+      useDrawStore.getState().setActiveTool('pen');
+    }
+  }, [activeTool, map]);
+
   const handleEraserClick = useCallback(() => {
     if (map) {
       if (activeTool !== 'eraser') {
@@ -145,6 +179,42 @@ export function BottomBar() {
       useDrawStore.getState().setActiveTool('pen');
     } else {
       useDrawStore.getState().setActiveTool('ruler');
+    }
+  }, [activeTool, map]);
+
+  const handleStampToggle = useCallback(() => {
+    if (activeTool === 'stamp') {
+      useDrawStore.getState().setActiveTool('pen');
+      useDrawStore.getState().setSelectedStamp(null);
+      useMapStore.getState().setMapCursor('');
+    }
+  }, [activeTool]);
+
+  const handleStampSelect = useCallback((type: string) => {
+    if (activeTool === 'eraser' && map) {
+      toggleEraser(map);
+    }
+    useDrawStore.getState().setSelectedStamp(type);
+    useDrawStore.getState().setActiveTool('stamp');
+    useMapStore.getState().setMapCursor('crosshair');
+    setStampPopoverOpen(false);
+  }, [activeTool, map]);
+
+  const handleTextClick = useCallback(() => {
+    if (activeTool === 'eraser' && map) {
+      toggleEraser(map);
+    }
+    if (activeTool !== 'text') {
+      useDrawStore.getState().setActiveTool('text');
+      useMapStore.getState().setMapCursor('text');
+      const state = useDrawStore.getState();
+      if (!state.activeColor) {
+        useDrawStore.getState().setActiveColor('#ef4444');
+        setDrawColor('#ef4444');
+      }
+    } else {
+      useDrawStore.getState().setActiveTool('pen');
+      useMapStore.getState().setMapCursor('');
     }
   }, [activeTool, map]);
 
@@ -181,11 +251,12 @@ export function BottomBar() {
     setDrawOpacity(pct / 100);
   }, []);
 
+  const colorTools = ['pen', 'area', 'arrow', 'stamp', 'text'];
   const isSwatchSelected = (color: string) =>
-    activeColor === color && (activeTool === 'pen' || activeTool === 'area');
+    activeColor === color && colorTools.includes(activeTool);
 
   const isCustomSelected =
-    (activeTool === 'pen' || activeTool === 'area') &&
+    colorTools.includes(activeTool) &&
     activeColor !== '' &&
     !SWATCHES.some((s) => s.color === activeColor) &&
     activeColor !== userColor;
@@ -284,6 +355,25 @@ export function BottomBar() {
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Toggle
+                    pressed={activeTool === 'arrow'}
+                    onPressedChange={handleArrowClick}
+                    className={`h-[34px] w-[34px] bg-transparent hover:bg-white/[0.08] text-white/50 border-b-2 transition-all ${
+                      activeTool === 'arrow'
+                        ? 'border-b-white/80 bg-white/[0.12] text-white'
+                        : 'border-b-transparent'
+                    }`}
+                  >
+                    <MoveRight size={16} />
+                  </Toggle>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="bg-[#1a1a1e] border-[var(--color-border-glass)] text-white text-xs">
+                  Arrow (Right-click)
+                </TooltipContent>
+              </Tooltip>
+
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Toggle
                     pressed={activeTool === 'eraser'}
                     onPressedChange={handleEraserClick}
                     className={`h-[34px] w-[34px] bg-transparent hover:bg-white/[0.08] text-white/50 border-b-2 transition-all ${
@@ -316,6 +406,70 @@ export function BottomBar() {
                 </TooltipTrigger>
                 <TooltipContent side="top" className="bg-[#1a1a1e] border-[var(--color-border-glass)] text-white text-xs">
                   Ruler (Right-click)
+                </TooltipContent>
+              </Tooltip>
+
+              <Popover open={stampPopoverOpen} onOpenChange={setStampPopoverOpen}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <PopoverTrigger asChild>
+                      <Toggle
+                        pressed={activeTool === 'stamp'}
+                        onPressedChange={() => {
+                          if (activeTool === 'stamp') {
+                            handleStampToggle();
+                          } else {
+                            setStampPopoverOpen(true);
+                          }
+                        }}
+                        className={`h-[34px] w-[34px] bg-transparent hover:bg-white/[0.08] text-white/50 border-b-2 transition-all ${
+                          activeTool === 'stamp'
+                            ? 'border-b-white/80 bg-white/[0.12] text-white'
+                            : 'border-b-transparent'
+                        }`}
+                      >
+                        <Stamp size={16} />
+                      </Toggle>
+                    </PopoverTrigger>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="bg-[#1a1a1e] border-[var(--color-border-glass)] text-white text-xs">
+                    Stamp (Right-click)
+                  </TooltipContent>
+                </Tooltip>
+                <PopoverContent side="top" className="w-[180px] p-2 bg-[#1a1a1e] border-[var(--color-border-tactical)]">
+                  <div className="grid grid-cols-4 gap-1">
+                    {ALL_STAMP_TYPES.map((type) => (
+                      <button
+                        key={type}
+                        className={`w-9 h-9 rounded flex items-center justify-center hover:bg-white/10 transition-colors cursor-pointer ${
+                          selectedStamp === type ? 'bg-white/20 ring-1 ring-white/40' : ''
+                        }`}
+                        onClick={() => handleStampSelect(type)}
+                        title={STAMP_LABELS[type]}
+                      >
+                        <StampPreview type={type} />
+                      </button>
+                    ))}
+                  </div>
+                </PopoverContent>
+              </Popover>
+
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Toggle
+                    pressed={activeTool === 'text'}
+                    onPressedChange={handleTextClick}
+                    className={`h-[34px] w-[34px] bg-transparent hover:bg-white/[0.08] text-white/50 border-b-2 transition-all ${
+                      activeTool === 'text'
+                        ? 'border-b-white/80 bg-white/[0.12] text-white'
+                        : 'border-b-transparent'
+                    }`}
+                  >
+                    <Type size={16} />
+                  </Toggle>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="bg-[#1a1a1e] border-[var(--color-border-glass)] text-white text-xs">
+                  Text Label (Right-click)
                 </TooltipContent>
               </Tooltip>
             </div>

@@ -128,8 +128,14 @@ export function useGlobalKeyboard(mapRef: React.MutableRefObject<maplibregl.Map 
           return;
         }
 
-        // Exit enemy marker placement mode
-        if (useDrawStore.getState().activeTool === 'enemy-marker') {
+        // Exit stamp/text/enemy-marker placement mode
+        const currentTool = useDrawStore.getState().activeTool;
+        if (currentTool === 'stamp' || currentTool === 'text') {
+          useDrawStore.getState().setActiveTool('pen');
+          useMapStore.getState().setMapCursor('');
+          return;
+        }
+        if (currentTool === 'enemy-marker') {
           useEnemyMarkerStore.getState().setPlacingMarker(false);
           useDrawStore.getState().setActiveTool('pen');
           useMapStore.getState().setMapCursor('');

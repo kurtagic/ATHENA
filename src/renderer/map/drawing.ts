@@ -8,6 +8,7 @@ import { useDrawStore, type BrushPattern } from '../stores/drawStore';
 import { useUndoStore } from '../stores/undoStore';
 import { useEnemyMarkerStore } from '../stores/enemyMarkerStore';
 import { eraseEnemyMarkersAtPoint } from './enemyMarkers';
+import { getStampImage, type StampType } from './stampIcons';
 
 export interface StrokeData {
   id?: string;
@@ -16,6 +17,9 @@ export interface StrokeData {
   weight: number;
   opacity: number;
   brushPattern?: BrushPattern;
+  isArrow?: boolean;
+  stampType?: string;
+  stampText?: string;
 }
 
 interface DrawState {
@@ -39,6 +43,7 @@ interface DrawState {
   rulerEnd: MapPoint | null;
   rulerPreviewPoint: MapPoint | null;
   placingRuler: boolean;
+  isArrow: boolean;
 }
 
 const drawState: DrawState = {
@@ -62,6 +67,7 @@ const drawState: DrawState = {
   rulerEnd: null,
   rulerPreviewPoint: null,
   placingRuler: false,
+  isArrow: false,
 };
 
 // ── Sync infrastructure ──
@@ -182,6 +188,57 @@ function drawAreaShape(
   ctx.restore();
 }
 
+const STAMP_SIZE = 56;
+
+function drawStampOnCanvas(
+  ctx: CanvasRenderingContext2D,
+  map: maplibregl.Map,
+  stroke: StrokeData,
+): void {
+  if (stroke.points.length === 0) return;
+  const lngLat = mapPointToLngLat(stroke.points[0]);
+  const px = map.project(lngLat);
+
+  ctx.save();
+  ctx.globalAlpha = stroke.opacity;
+
+  if (stroke.stampType === 'text' && stroke.stampText) {
+    // Draw text with pill background (similar to ruler label)
+    ctx.font = 'bold 13px monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const textWidth = ctx.measureText(stroke.stampText).width;
+    const pillW = textWidth + 16;
+    const pillH = 24;
+    const r = 6;
+    const px0 = px.x - pillW / 2;
+    const py0 = px.y - pillH / 2;
+
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.75)';
+    ctx.beginPath();
+    ctx.moveTo(px0 + r, py0);
+    ctx.lineTo(px0 + pillW - r, py0);
+    ctx.quadraticCurveTo(px0 + pillW, py0, px0 + pillW, py0 + r);
+    ctx.lineTo(px0 + pillW, py0 + pillH - r);
+    ctx.quadraticCurveTo(px0 + pillW, py0 + pillH, px0 + pillW - r, py0 + pillH);
+    ctx.lineTo(px0 + r, py0 + pillH);
+    ctx.quadraticCurveTo(px0, py0 + pillH, px0, py0 + pillH - r);
+    ctx.lineTo(px0, py0 + r);
+    ctx.quadraticCurveTo(px0, py0, px0 + r, py0);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.fillStyle = stroke.color;
+    ctx.fillText(stroke.stampText, px.x, px.y);
+  } else if (stroke.stampType) {
+    // Draw icon stamp
+    const img = getStampImage(stroke.stampType as StampType, stroke.color, STAMP_SIZE);
+    ctx.drawImage(img, px.x - STAMP_SIZE / 2, px.y - STAMP_SIZE / 2, STAMP_SIZE, STAMP_SIZE);
+  }
+
+  ctx.restore();
+}
+
 function resizeCanvas(): void {
   if (!drawState.canvas || !drawState.mapRef) return;
   const container = drawState.mapRef.getContainer();
@@ -198,7 +255,7 @@ function redrawAllStrokes(): void {
   ctx.clearRect(0, 0, drawState.canvas.width, drawState.canvas.height);
   const map = drawState.mapRef;
 
-  const drawPenStroke = (points: MapPoint[], color: string, weight: number, opacity: number) => {
+  const drawPenStroke = (points: MapPoint[], color: string, weight: number, opacity: number, isArrow?: boolean) => {
     if (points.length < 2) return;
     ctx.save();
     ctx.globalAlpha = opacity;
@@ -215,15 +272,46 @@ function redrawAllStrokes(): void {
       else ctx.lineTo(px.x, px.y);
     }
     ctx.stroke();
+
+    if (isArrow && points.length >= 2) {
+      const tipLngLat = mapPointToLngLat(points[points.length - 1]);
+      const tipPx = map.project(tipLngLat);
+      // Look further back for a stable direction (skip near-duplicate points)
+      let prevPx = map.project(mapPointToLngLat(points[points.length - 2]));
+      for (let j = points.length - 3; j >= 0; j--) {
+        const candidatePx = map.project(mapPointToLngLat(points[j]));
+        const dist = Math.hypot(tipPx.x - candidatePx.x, tipPx.y - candidatePx.y);
+        if (dist >= 10) { prevPx = candidatePx; break; }
+      }
+      const angle = Math.atan2(tipPx.y - prevPx.y, tipPx.x - prevPx.x);
+      const headSize = Math.max(weight * 8, 28);
+
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.moveTo(tipPx.x, tipPx.y);
+      ctx.lineTo(
+        tipPx.x - headSize * Math.cos(angle - Math.PI / 6),
+        tipPx.y - headSize * Math.sin(angle - Math.PI / 6),
+      );
+      ctx.lineTo(
+        tipPx.x - headSize * Math.cos(angle + Math.PI / 6),
+        tipPx.y - headSize * Math.sin(angle + Math.PI / 6),
+      );
+      ctx.closePath();
+      ctx.fill();
+    }
+
     ctx.restore();
   };
 
   // Draw completed strokes
   for (const stroke of drawState.strokes) {
-    if (stroke.brushPattern) {
+    if (stroke.stampType) {
+      drawStampOnCanvas(ctx, map, stroke);
+    } else if (stroke.brushPattern) {
       drawAreaShape(ctx, map, stroke.points, stroke.color, stroke.weight, stroke.opacity, stroke.brushPattern);
     } else {
-      drawPenStroke(stroke.points, stroke.color, stroke.weight, stroke.opacity);
+      drawPenStroke(stroke.points, stroke.color, stroke.weight, stroke.opacity, stroke.isArrow);
     }
   }
 
@@ -232,7 +320,7 @@ function redrawAllStrokes(): void {
     if (drawState.brushPattern) {
       drawAreaShape(ctx, map, drawState.currentPoints, drawState.color, drawState.weight, drawState.opacity, drawState.brushPattern);
     } else {
-      drawPenStroke(drawState.currentPoints, drawState.color, drawState.weight, drawState.opacity);
+      drawPenStroke(drawState.currentPoints, drawState.color, drawState.weight, drawState.opacity, drawState.isArrow);
     }
   }
 
@@ -399,6 +487,7 @@ export function initDrawLayer(map: maplibregl.Map): void {
 }
 
 export function cleanupDrawing(map: maplibregl.Map): void {
+  removeTextInput();
   if (drawState.erasing) toggleEraser(map);
   if (drawState.active) deactivateDrawing(map);
 
@@ -429,6 +518,7 @@ export function activateDrawing(_map: maplibregl.Map): void {
 export function deactivateDrawing(_map: maplibregl.Map): void {
   cancelPolygon();
   cancelRuler();
+  removeTextInput();
   finalizeStroke();
   drawState.active = false;
 }
@@ -443,6 +533,7 @@ function finalizeStroke(): void {
       weight: drawState.weight,
       opacity: drawState.opacity,
       brushPattern: drawState.brushPattern,
+      isArrow: drawState.isArrow || undefined,
     };
 
     drawState.strokes.push(stroke);
@@ -452,11 +543,12 @@ function finalizeStroke(): void {
     useUndoStore.getState().pushAction({
       type: 'stroke-added',
       hexId: currentHexId,
-      stroke: { id, points: stroke.points.map(p => [p.x, p.y] as [number, number]), color: stroke.color, weight: stroke.weight, opacity: stroke.opacity, brushPattern: stroke.brushPattern },
+      stroke: { id, points: stroke.points.map(p => [p.x, p.y] as [number, number]), color: stroke.color, weight: stroke.weight, opacity: stroke.opacity, brushPattern: stroke.brushPattern, isArrow: stroke.isArrow, stampType: stroke.stampType, stampText: stroke.stampText },
     });
   }
   drawState.currentPoints = [];
   drawState.drawing = false;
+  drawState.isArrow = false;
   redrawAllStrokes();
 }
 
@@ -552,6 +644,9 @@ export function saveDrawState(): SavedStroke[] {
     weight: stroke.weight,
     opacity: stroke.opacity,
     brushPattern: stroke.brushPattern,
+    isArrow: stroke.isArrow,
+    stampType: stroke.stampType,
+    stampText: stroke.stampText,
   }));
 }
 
@@ -564,6 +659,9 @@ export function restoreDrawState(saved: SavedStroke[], _map: maplibregl.Map): vo
       weight: stroke.weight,
       opacity: stroke.opacity ?? 1.0,
       brushPattern: stroke.brushPattern as BrushPattern | undefined,
+      isArrow: stroke.isArrow,
+      stampType: stroke.stampType,
+      stampText: stroke.stampText,
     });
   }
   redrawAllStrokes();
@@ -614,6 +712,9 @@ function eraseStrokesAtPoint(map: maplibregl.Map, lngLat: maplibregl.LngLat): vo
         weight: stroke.weight,
         opacity: stroke.opacity,
         brushPattern: stroke.brushPattern,
+        isArrow: stroke.isArrow,
+        stampType: stroke.stampType,
+        stampText: stroke.stampText,
       };
       drawState.erasedDuringDrag.push(saved);
       drawState.strokes.splice(i, 1);
@@ -639,6 +740,9 @@ function finalizeErase(map: maplibregl.Map): void {
         weight: s.weight,
         opacity: s.opacity ?? 1.0,
         brushPattern: s.brushPattern as BrushPattern | undefined,
+        isArrow: s.isArrow,
+        stampType: s.stampType,
+        stampText: s.stampText,
       })),
     });
 
@@ -654,6 +758,93 @@ function finalizeErase(map: maplibregl.Map): void {
   drawState.erasedDuringDrag = [];
   map.dragPan.enable();
 }
+
+// ── Stamp placement ──
+
+function finalizeStamp(point: MapPoint, stampType: string, stampText?: string): void {
+  const id = crypto.randomUUID();
+  const store = useDrawStore.getState();
+  const stroke: StrokeData = {
+    id,
+    points: [point],
+    color: drawState.color,
+    weight: store.strokeWidth,
+    opacity: store.strokeOpacity,
+    stampType,
+    stampText,
+  };
+
+  drawState.strokes.push(stroke);
+  if (onStrokeFinalized) onStrokeFinalized(stroke, currentHexId);
+
+  useUndoStore.getState().pushAction({
+    type: 'stroke-added',
+    hexId: currentHexId,
+    stroke: { id, points: [[point.x, point.y]], color: stroke.color, weight: stroke.weight, opacity: stroke.opacity, stampType, stampText },
+  });
+
+  redrawAllStrokes();
+}
+
+// ── Text input DOM ──
+
+let activeTextInput: HTMLInputElement | null = null;
+
+function removeTextInput(): void {
+  if (activeTextInput) {
+    activeTextInput.remove();
+    activeTextInput = null;
+  }
+}
+
+function showTextInput(map: maplibregl.Map, clientX: number, clientY: number, lngLat: { lng: number; lat: number }): void {
+  removeTextInput();
+
+  const container = map.getContainer();
+  const rect = container.getBoundingClientRect();
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.placeholder = 'Type label...';
+  input.style.cssText = `
+    position: absolute;
+    left: ${clientX - rect.left - 60}px;
+    top: ${clientY - rect.top - 16}px;
+    width: 120px;
+    height: 28px;
+    z-index: 20;
+    background: rgba(0,0,0,0.85);
+    color: #fff;
+    border: 1px solid rgba(255,255,255,0.3);
+    border-radius: 6px;
+    padding: 2px 8px;
+    font: bold 13px monospace;
+    outline: none;
+  `;
+  container.appendChild(input);
+  activeTextInput = input;
+
+  setTimeout(() => input.focus(), 0);
+
+  const point = lngLatToMapPoint(lngLat.lng, lngLat.lat);
+
+  const finalize = () => {
+    const text = input.value.trim();
+    if (text) {
+      finalizeStamp(point, 'text', text);
+    }
+    removeTextInput();
+  };
+
+  input.addEventListener('keydown', (e) => {
+    e.stopPropagation();
+    if (e.key === 'Enter') { e.preventDefault(); finalize(); }
+    if (e.key === 'Escape') { e.preventDefault(); removeTextInput(); }
+  });
+
+  input.addEventListener('blur', finalize);
+}
+
+export { removeTextInput };
 
 export function setupDrawingEvents(map: maplibregl.Map): void {
   drawState.mapRef = map;
@@ -676,6 +867,21 @@ export function setupDrawingEvents(map: maplibregl.Map): void {
 
     // Read active tool/brushPattern from store at draw start
     const store = useDrawStore.getState();
+
+    if (store.activeTool === 'stamp') {
+      const stampType = store.selectedStamp;
+      if (stampType) {
+        const point = lngLatToMapPoint(lngLat.lng, lngLat.lat);
+        finalizeStamp(point, stampType);
+      }
+      return;
+    }
+
+    if (store.activeTool === 'text') {
+      showTextInput(map, e.clientX, e.clientY, lngLat);
+      return;
+    }
+
     if (store.activeTool === 'ruler') {
       const point = lngLatToMapPoint(lngLat.lng, lngLat.lat);
       if (!drawState.placingRuler) {
@@ -721,6 +927,7 @@ export function setupDrawingEvents(map: maplibregl.Map): void {
     }
 
     drawState.brushPattern = undefined;
+    drawState.isArrow = store.activeTool === 'arrow';
     drawState.drawing = true;
     const point = lngLatToMapPoint(lngLat.lng, lngLat.lat);
     drawState.currentPoints = [point];
@@ -787,11 +994,12 @@ export function setupDrawingEvents(map: maplibregl.Map): void {
     }
   });
 
-  // Cancel polygon/ruler/enemy-marker if tool changes mid-placement
+  // Cancel polygon/ruler/enemy-marker/text if tool changes mid-placement
   useDrawStore.subscribe((state, prev) => {
     if (state.activeTool !== prev.activeTool) {
       if (drawState.placingPolygon) cancelPolygon();
       if (prev.activeTool === 'ruler') cancelRuler();
+      if (prev.activeTool === 'text') removeTextInput();
       if (prev.activeTool === 'enemy-marker') {
         useEnemyMarkerStore.getState().setPlacingMarker(false);
         useMapStore.getState().setMapCursor('');

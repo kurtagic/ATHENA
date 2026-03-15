@@ -1,5 +1,7 @@
 import { create } from 'zustand';
 import { DEFAULT_PLATFORM_INDEX } from '../data/artilleryPlatforms';
+import { useDrawStore } from './drawStore';
+import { useEnemyMarkerStore } from './enemyMarkerStore';
 
 export type PlacementMode = 'idle' | 'placing-arty' | 'placing-target' | 'placing-impact';
 
@@ -62,7 +64,14 @@ export const useArtilleryStore = create<ArtilleryStoreState>((set) => ({
   showWarden: true,
   showColonial: false,
   showShips: false,
-  setPlacementMode: (mode) => set({ placementMode: mode }),
+  setPlacementMode: (mode) => {
+    // When entering an active placement mode, reset drawing tools & enemy markers
+    if (mode !== 'idle') {
+      useDrawStore.getState().setActiveTool('pen');
+      useEnemyMarkerStore.getState().setPlacingMarker(false);
+    }
+    set({ placementMode: mode });
+  },
   setPlatformIndex: (index) => set({ platformIndex: index }),
   setSolutions: (solutions, hasTarget, hasImpact) => set({ solutions, hasTarget, hasImpact }),
   setStatusText: (text) => set({ statusText: text }),

@@ -52,6 +52,8 @@ export interface KeybindSettings {
 
 export interface AudioSettings {
   autoSilenceOnVoice: boolean;
+  inputDeviceId: string;   // '' = system default
+  outputDeviceId: string;  // '' = system default
 }
 
 export interface GeneralSettings {

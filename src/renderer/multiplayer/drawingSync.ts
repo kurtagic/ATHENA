@@ -25,6 +25,9 @@ function fromYjsStroke(id: string, data: any): StrokeData {
     weight: data.weight,
     opacity: data.opacity,
     brushPattern: data.brushPattern,
+    isArrow: data.isArrow,
+    stampType: data.stampType,
+    stampText: data.stampText,
   };
 }
 
@@ -37,6 +40,9 @@ function toSavedStroke(id: string, data: any): SavedStroke {
     weight: data.weight,
     opacity: data.opacity,
     brushPattern: data.brushPattern,
+    isArrow: data.isArrow,
+    stampType: data.stampType,
+    stampText: data.stampText,
   };
 }
 
@@ -52,6 +58,9 @@ export function initDrawingSync(): void {
       weight: stroke.weight,
       opacity: stroke.opacity,
       brushPattern: stroke.brushPattern,
+      isArrow: stroke.isArrow,
+      stampType: stroke.stampType,
+      stampText: stroke.stampText,
     });
     debugLog('yjs', `Stroke created in ${hexId}: ${id}`);
   });

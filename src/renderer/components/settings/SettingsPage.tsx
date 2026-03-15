@@ -46,7 +46,7 @@ export function SettingsPage() {
 
       {/* Panel */}
       <div
-        className="relative flex w-[640px] h-[420px] rounded-lg border border-white/10 overflow-hidden"
+        className="relative flex w-[720px] h-[520px] rounded-lg border border-white/10 overflow-hidden"
         style={{
           background: 'linear-gradient(180deg, rgba(18,18,22,0.96) 0%, rgba(12,12,14,0.98) 100%)',
           backdropFilter: 'blur(24px)',

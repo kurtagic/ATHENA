@@ -12,6 +12,8 @@ const DEFAULT_SETTINGS: Settings = {
   },
   audio: {
     autoSilenceOnVoice: false,
+    inputDeviceId: '',
+    outputDeviceId: '',
   },
   general: {
     windowedMode: false,

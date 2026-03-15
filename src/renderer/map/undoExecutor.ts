@@ -64,6 +64,8 @@ function undoAction(action: UndoableAction): void {
           weight: s.weight,
           opacity: s.opacity,
           brushPattern: s.brushPattern,
+          stampType: s.stampType,
+          stampText: s.stampText,
         });
         const hexMap = getHexMap('strokes', action.hexId);
         if (hexMap) {
@@ -73,6 +75,8 @@ function undoAction(action: UndoableAction): void {
             weight: s.weight,
             opacity: s.opacity,
             brushPattern: s.brushPattern,
+            stampType: s.stampType,
+            stampText: s.stampText,
           });
           debugLog('yjs', `Undo strokes-erased (restored) in ${action.hexId}: ${s.id}`);
         }
@@ -193,6 +197,8 @@ function redoAction(action: UndoableAction): void {
         weight: action.stroke.weight,
         opacity: action.stroke.opacity,
         brushPattern: action.stroke.brushPattern,
+        stampType: action.stroke.stampType,
+        stampText: action.stroke.stampText,
       });
       const hexMap2 = getHexMap('strokes', action.hexId);
       if (hexMap2) {
@@ -202,6 +208,8 @@ function redoAction(action: UndoableAction): void {
           weight: action.stroke.weight,
           opacity: action.stroke.opacity,
           brushPattern: action.stroke.brushPattern,
+          stampType: action.stroke.stampType,
+          stampText: action.stroke.stampText,
         });
         debugLog('yjs', `Redo stroke-added (restored) in ${action.hexId}: ${action.stroke.id}`);
       }

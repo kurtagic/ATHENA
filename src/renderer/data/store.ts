@@ -12,6 +12,9 @@ export interface SavedStroke {
   weight: number;
   opacity: number;
   brushPattern?: string;
+  isArrow?: boolean;
+  stampType?: string;
+  stampText?: string;
 }
 
 export interface SavedArtilleryState {

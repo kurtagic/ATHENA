@@ -131,7 +131,6 @@ export function activateEnemyMarkers(map: maplibregl.Map): void {
 
   clickHandler = (e: maplibregl.MapMouseEvent) => {
     if (dragOccurred) return;
-    if (e.originalEvent.button !== 0) return;
     const store = useEnemyMarkerStore.getState();
     if (!store.placingMarker) return;
     if (useDrawStore.getState().activeTool !== 'enemy-marker') return;
@@ -140,12 +139,12 @@ export function activateEnemyMarkers(map: maplibregl.Map): void {
     placeEnemyMarker(point, store.selectedPlatformIndex, map);
   };
 
-  map.on('click', clickHandler);
+  map.on('contextmenu', clickHandler);
 }
 
 export function deactivateEnemyMarkers(map: maplibregl.Map): void {
   if (clickHandler) {
-    map.off('click', clickHandler);
+    map.off('contextmenu', clickHandler);
     clickHandler = null;
   }
 }
