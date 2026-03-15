@@ -4,7 +4,17 @@ import { debugLog } from '../stores/debugStore';
 import type { ServerBroadcast } from './protocol';
 
 const RTC_CONFIG: RTCConfiguration = {
-  iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
+  iceServers: [
+    { urls: 'stun:stun.l.google.com:19302' },
+    {
+      urls: [
+        'turn:api.athena.kurti.si:3478',
+        'turn:api.athena.kurti.si:3478?transport=tcp',
+      ],
+      username: 'athena',
+      credential: 'athena-turn-2024',
+    },
+  ],
 };
 
 const SPEAKING_THRESHOLD = 15; // RMS level 0-255
