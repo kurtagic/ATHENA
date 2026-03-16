@@ -6,7 +6,8 @@ import { createMap } from '../../map/mapInit';
 import { createHexGrid, showHexLabels, hideHexLabels, showHexGrid, hideHexGrid } from '../../map/hexGrid';
 import { initLayerControl, onZoomChange } from '../../map/layerControl';
 import { initDetailView, enterDetailMode, getDetailMode, getSelectedHexes, renderDetailMarkers, renderDetailLabels, refreshVoronoiFills, showDetailMarkers, hideDetailMarkers } from '../../map/detailView';
-import { setupDrawingEvents, showDrawCanvas, hideDrawCanvas } from '../../map/drawing';
+import { setupDrawingEvents, showDrawCanvas, hideDrawCanvas, showStampMarkers, hideStampMarkers } from '../../map/drawing';
+import { showEnemyMarkers, hideEnemyMarkers } from '../../map/enemyMarkers';
 import { setupArtilleryEvents, showArtillery, hideArtillery, showArtilleryRings, hideArtilleryRings } from '../../map/artillery';
 import { useGlobalKeyboard } from '../../hooks/useGlobalKeyboard';
 import { useVoiceSilencer } from '../../hooks/useVoiceSilencer';
@@ -144,8 +145,15 @@ export function MapLibreMap() {
         if (state.layers.structures.visible) showDetailMarkers();
         else hideDetailMarkers();
 
-        if (state.layers.drawings.visible) showDrawCanvas();
-        else hideDrawCanvas();
+        if (state.layers.drawings.visible) {
+          showDrawCanvas();
+          showStampMarkers();
+          showEnemyMarkers(map);
+        } else {
+          hideDrawCanvas();
+          hideStampMarkers();
+          hideEnemyMarkers(map);
+        }
 
         if (state.layers.artillery.visible) {
           showArtillery(map);

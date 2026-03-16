@@ -42,6 +42,24 @@ export function setEnemyMarkerHexId(hexId: string): void {
   currentHexId = hexId;
 }
 
+export function showEnemyMarkers(map: maplibregl.Map): void {
+  for (const m of markers) {
+    m.domMarker.getElement().style.display = '';
+    m.labelMarker.getElement().style.display = '';
+  }
+  if (map.getLayer('enemy-rings-fill')) map.setLayoutProperty('enemy-rings-fill', 'visibility', 'visible');
+  if (map.getLayer('enemy-rings-line')) map.setLayoutProperty('enemy-rings-line', 'visibility', 'visible');
+}
+
+export function hideEnemyMarkers(map: maplibregl.Map): void {
+  for (const m of markers) {
+    m.domMarker.getElement().style.display = 'none';
+    m.labelMarker.getElement().style.display = 'none';
+  }
+  if (map.getLayer('enemy-rings-fill')) map.setLayoutProperty('enemy-rings-fill', 'visibility', 'none');
+  if (map.getLayer('enemy-rings-line')) map.setLayoutProperty('enemy-rings-line', 'visibility', 'none');
+}
+
 // ── SVG Icon ──
 
 const ARTY_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/></svg>`;
@@ -175,6 +193,12 @@ export function placeEnemyMarker(
 
   const marker: EnemyMarker = { entityId: id, point, platformIndex, label, domMarker, labelMarker };
   markers.push(marker);
+
+  // Hide if drawings layer is toggled off
+  if (!useLayerStore.getState().layers.drawings?.visible) {
+    el.style.display = 'none';
+    labelEl.style.display = 'none';
+  }
 
   // Drag handling
   el.addEventListener('mousedown', (e: MouseEvent) => {

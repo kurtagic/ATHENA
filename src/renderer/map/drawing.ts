@@ -7,6 +7,7 @@ import { useMapStore } from '../stores/mapStore';
 import { useDrawStore, type BrushPattern } from '../stores/drawStore';
 import { useUndoStore } from '../stores/undoStore';
 import { useEnemyMarkerStore } from '../stores/enemyMarkerStore';
+import { useLayerStore } from '../stores/layerStore';
 import { eraseEnemyMarkersAtPoint } from './enemyMarkers';
 import { createStampElement, type StampType } from './stampIcons';
 
@@ -98,6 +99,14 @@ export function showDrawCanvas(): void {
 
 export function hideDrawCanvas(): void {
   if (drawState.canvas) drawState.canvas.style.display = 'none';
+}
+
+export function showStampMarkers(): void {
+  for (const m of stampMarkers) m.marker.getElement().style.display = '';
+}
+
+export function hideStampMarkers(): void {
+  for (const m of stampMarkers) m.marker.getElement().style.display = 'none';
 }
 
 // ── Hatch pattern cache ──
@@ -234,6 +243,11 @@ function addStampDomMarker(stroke: StrokeData, map: maplibregl.Map): void {
     .addTo(map);
 
   stampMarkers.push({ strokeId: stroke.id!, marker });
+
+  // Hide if drawings layer is toggled off
+  if (!useLayerStore.getState().layers.drawings?.visible) {
+    el.style.display = 'none';
+  }
 
   // Left-click drag (same pattern as enemyMarkers.ts startDrag)
   el.addEventListener('mousedown', (e: MouseEvent) => {
