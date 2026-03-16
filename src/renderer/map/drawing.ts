@@ -1,4 +1,4 @@
-import type maplibregl from 'maplibre-gl';
+import maplibregl from 'maplibre-gl';
 import type { MapPoint } from '../data/coords';
 import { toMapPoint, mapPointToLngLat, lngLatToMapPoint } from '../data/coords';
 import { crsDistanceMeters, crsAzimuth } from '../data/artilleryCalc';
@@ -8,7 +8,7 @@ import { useDrawStore, type BrushPattern } from '../stores/drawStore';
 import { useUndoStore } from '../stores/undoStore';
 import { useEnemyMarkerStore } from '../stores/enemyMarkerStore';
 import { eraseEnemyMarkersAtPoint } from './enemyMarkers';
-import { getStampImage, type StampType } from './stampIcons';
+import { createStampElement, type StampType } from './stampIcons';
 
 export interface StrokeData {
   id?: string;
@@ -44,6 +44,8 @@ interface DrawState {
   rulerPreviewPoint: MapPoint | null;
   placingRuler: boolean;
   isArrow: boolean;
+  draggingStamp: StrokeData | null;
+  dragStampStartPos: MapPoint | null;
 }
 
 const drawState: DrawState = {
@@ -68,6 +70,8 @@ const drawState: DrawState = {
   rulerPreviewPoint: null,
   placingRuler: false,
   isArrow: false,
+  draggingStamp: null,
+  dragStampStartPos: null,
 };
 
 // ── Sync infrastructure ──
@@ -76,10 +80,13 @@ let onStrokeFinalized: ((stroke: StrokeData, hexId: string) => void) | null = nu
 let onStrokesErased: ((strokeIds: string[], hexId: string) => void) | null = null;
 let currentHexId: string = '';
 
+let onStrokeUpdated: ((stroke: StrokeData, hexId: string) => void) | null = null;
+
 export function setSyncMode(enabled: boolean) { syncMode = enabled; }
 export function setCurrentHexId(hexId: string) { currentHexId = hexId; }
 export function setStrokeFinalizedCallback(cb: typeof onStrokeFinalized) { onStrokeFinalized = cb; }
 export function setStrokesErasedCallback(cb: typeof onStrokesErased) { onStrokesErased = cb; }
+export function setStrokeUpdatedCallback(cb: typeof onStrokeUpdated) { onStrokeUpdated = cb; }
 
 export function getDrawState(): DrawState {
   return drawState;
@@ -190,54 +197,96 @@ function drawAreaShape(
 
 const STAMP_SIZE = 56;
 
-function drawStampOnCanvas(
-  ctx: CanvasRenderingContext2D,
-  map: maplibregl.Map,
-  stroke: StrokeData,
-): void {
-  if (stroke.points.length === 0) return;
-  const lngLat = mapPointToLngLat(stroke.points[0]);
-  const px = map.project(lngLat);
+// ── Stamp DOM markers ──
 
-  ctx.save();
-  ctx.globalAlpha = stroke.opacity;
+interface StampDomMarker {
+  strokeId: string;
+  marker: maplibregl.Marker;
+}
+const stampMarkers: StampDomMarker[] = [];
 
+function createTextStampElement(text: string, color: string): HTMLElement {
+  const el = document.createElement('div');
+  el.style.cssText = `
+    background:rgba(0,0,0,0.75);
+    color:${color};
+    font:bold 13px monospace;
+    padding:4px 8px;
+    border-radius:6px;
+    white-space:nowrap;
+    cursor:grab;
+    pointer-events:auto;
+  `;
+  el.textContent = text;
+  return el;
+}
+
+function addStampDomMarker(stroke: StrokeData, map: maplibregl.Map): void {
+  let el: HTMLElement;
   if (stroke.stampType === 'text' && stroke.stampText) {
-    // Draw text with pill background (similar to ruler label)
-    ctx.font = 'bold 13px monospace';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    const textWidth = ctx.measureText(stroke.stampText).width;
-    const pillW = textWidth + 16;
-    const pillH = 24;
-    const r = 6;
-    const px0 = px.x - pillW / 2;
-    const py0 = px.y - pillH / 2;
-
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.75)';
-    ctx.beginPath();
-    ctx.moveTo(px0 + r, py0);
-    ctx.lineTo(px0 + pillW - r, py0);
-    ctx.quadraticCurveTo(px0 + pillW, py0, px0 + pillW, py0 + r);
-    ctx.lineTo(px0 + pillW, py0 + pillH - r);
-    ctx.quadraticCurveTo(px0 + pillW, py0 + pillH, px0 + pillW - r, py0 + pillH);
-    ctx.lineTo(px0 + r, py0 + pillH);
-    ctx.quadraticCurveTo(px0, py0 + pillH, px0, py0 + pillH - r);
-    ctx.lineTo(px0, py0 + r);
-    ctx.quadraticCurveTo(px0, py0, px0 + r, py0);
-    ctx.closePath();
-    ctx.fill();
-
-    ctx.fillStyle = stroke.color;
-    ctx.fillText(stroke.stampText, px.x, px.y);
-  } else if (stroke.stampType) {
-    // Draw icon stamp
-    const img = getStampImage(stroke.stampType as StampType, stroke.color, STAMP_SIZE);
-    ctx.drawImage(img, px.x - STAMP_SIZE / 2, px.y - STAMP_SIZE / 2, STAMP_SIZE, STAMP_SIZE);
+    el = createTextStampElement(stroke.stampText, stroke.color);
+  } else {
+    el = createStampElement(stroke.stampType as StampType, stroke.color, STAMP_SIZE);
   }
 
-  ctx.restore();
+  const marker = new maplibregl.Marker({ element: el, anchor: 'center' })
+    .setLngLat(mapPointToLngLat(stroke.points[0]))
+    .addTo(map);
+
+  stampMarkers.push({ strokeId: stroke.id!, marker });
+
+  // Left-click drag (same pattern as enemyMarkers.ts startDrag)
+  el.addEventListener('mousedown', (e: MouseEvent) => {
+    if (e.button !== 0) return;
+    e.stopPropagation();
+    e.preventDefault();
+    startStampDrag(stroke, marker, map);
+  });
 }
+
+function startStampDrag(stroke: StrokeData, marker: maplibregl.Marker, map: maplibregl.Map): void {
+  drawState.draggingStamp = stroke;
+  drawState.dragStampStartPos = { ...stroke.points[0] };
+  map.dragPan.disable();
+  useMapStore.getState().setMapCursor('grabbing');
+
+  const onMove = (ev: maplibregl.MapMouseEvent) => {
+    if (!drawState.draggingStamp) return;
+    const pt = lngLatToMapPoint(ev.lngLat.lng, ev.lngLat.lat);
+    drawState.draggingStamp.points[0] = pt;
+    marker.setLngLat(mapPointToLngLat(pt));
+  };
+
+  const onUp = () => {
+    map.off('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+    map.dragPan.enable();
+    useMapStore.getState().setMapCursor('');
+    finalizeDrag();
+  };
+
+  map.on('mousemove', onMove);
+  document.addEventListener('mouseup', onUp);
+}
+
+function removeStampDomMarker(strokeId: string): void {
+  const idx = stampMarkers.findIndex(m => m.strokeId === strokeId);
+  if (idx !== -1) {
+    stampMarkers[idx].marker.remove();
+    stampMarkers.splice(idx, 1);
+  }
+}
+
+function clearStampDomMarkers(): void {
+  for (const m of stampMarkers) m.marker.remove();
+  stampMarkers.length = 0;
+}
+
+export function updateStampDomMarkerPosition(strokeId: string, point: MapPoint): void {
+  const dm = stampMarkers.find(m => m.strokeId === strokeId);
+  if (dm) dm.marker.setLngLat(mapPointToLngLat(point));
+}
+
 
 function resizeCanvas(): void {
   if (!drawState.canvas || !drawState.mapRef) return;
@@ -286,7 +335,6 @@ function redrawAllStrokes(): void {
       const angle = Math.atan2(tipPx.y - prevPx.y, tipPx.x - prevPx.x);
       const headSize = Math.max(weight * 8, 28);
 
-      ctx.fillStyle = color;
       ctx.beginPath();
       ctx.moveTo(tipPx.x, tipPx.y);
       ctx.lineTo(
@@ -294,20 +342,29 @@ function redrawAllStrokes(): void {
         tipPx.y - headSize * Math.sin(angle - Math.PI / 6),
       );
       ctx.lineTo(
+        tipPx.x - headSize * 0.55 * Math.cos(angle),
+        tipPx.y - headSize * 0.55 * Math.sin(angle),
+      );
+      ctx.lineTo(
         tipPx.x - headSize * Math.cos(angle + Math.PI / 6),
         tipPx.y - headSize * Math.sin(angle + Math.PI / 6),
       );
       ctx.closePath();
+      ctx.strokeStyle = '#000000';
+      ctx.lineWidth = 2;
+      ctx.lineJoin = 'round';
+      ctx.stroke();
+      ctx.fillStyle = color;
       ctx.fill();
     }
 
     ctx.restore();
   };
 
-  // Draw completed strokes
+  // Draw completed strokes (stamps are DOM-based, skip them)
   for (const stroke of drawState.strokes) {
     if (stroke.stampType) {
-      drawStampOnCanvas(ctx, map, stroke);
+      continue;
     } else if (stroke.brushPattern) {
       drawAreaShape(ctx, map, stroke.points, stroke.color, stroke.weight, stroke.opacity, stroke.brushPattern);
     } else {
@@ -494,6 +551,8 @@ export function cleanupDrawing(map: maplibregl.Map): void {
   map.off('move', redrawAllStrokes);
   map.off('resize', resizeCanvas);
 
+  clearStampDomMarkers();
+
   if (drawState.canvas) {
     drawState.canvas.remove();
     drawState.canvas = null;
@@ -509,6 +568,8 @@ export function cleanupDrawing(map: maplibregl.Map): void {
   drawState.rulerEnd = null;
   drawState.rulerPreviewPoint = null;
   drawState.placingRuler = false;
+  drawState.draggingStamp = null;
+  drawState.dragStampStartPos = null;
 }
 
 export function activateDrawing(_map: maplibregl.Map): void {
@@ -601,10 +662,14 @@ export function cancelRuler(): void {
 
 export function addRemoteStroke(stroke: StrokeData): void {
   drawState.strokes.push(stroke);
+  if (stroke.stampType && drawState.mapRef) {
+    addStampDomMarker(stroke, drawState.mapRef);
+  }
   redrawAllStrokes();
 }
 
 export function removeStrokeById(id: string): void {
+  removeStampDomMarker(id);
   const idx = drawState.strokes.findIndex(s => s.id === id);
   if (idx !== -1) {
     drawState.strokes.splice(idx, 1);
@@ -613,8 +678,18 @@ export function removeStrokeById(id: string): void {
 }
 
 export function clearAllStrokes(): void {
+  clearStampDomMarkers();
   drawState.strokes.length = 0;
   redrawAllStrokes();
+}
+
+export function moveStampById(id: string, position: [number, number]): void {
+  const stroke = drawState.strokes.find(s => s.id === id);
+  if (stroke) {
+    stroke.points[0] = toMapPoint(position[0], position[1]);
+    updateStampDomMarkerPosition(id, stroke.points[0]);
+    redrawAllStrokes();
+  }
 }
 
 export function setDrawColor(color: string): void {
@@ -652,7 +727,7 @@ export function saveDrawState(): SavedStroke[] {
 
 export function restoreDrawState(saved: SavedStroke[], _map: maplibregl.Map): void {
   for (const stroke of saved) {
-    drawState.strokes.push({
+    const s: StrokeData = {
       id: stroke.id,
       points: stroke.points.map(([x, y]) => toMapPoint(x, y)),
       color: stroke.color,
@@ -662,7 +737,11 @@ export function restoreDrawState(saved: SavedStroke[], _map: maplibregl.Map): vo
       isArrow: stroke.isArrow,
       stampType: stroke.stampType,
       stampText: stroke.stampText,
-    });
+    };
+    drawState.strokes.push(s);
+    if (s.stampType && drawState.mapRef) {
+      addStampDomMarker(s, drawState.mapRef);
+    }
   }
   redrawAllStrokes();
 }
@@ -717,6 +796,7 @@ function eraseStrokesAtPoint(map: maplibregl.Map, lngLat: maplibregl.LngLat): vo
         stampText: stroke.stampText,
       };
       drawState.erasedDuringDrag.push(saved);
+      if (stroke.stampType && stroke.id) removeStampDomMarker(stroke.id);
       drawState.strokes.splice(i, 1);
     }
   }
@@ -775,6 +855,7 @@ function finalizeStamp(point: MapPoint, stampType: string, stampText?: string): 
   };
 
   drawState.strokes.push(stroke);
+  if (drawState.mapRef) addStampDomMarker(stroke, drawState.mapRef);
   if (onStrokeFinalized) onStrokeFinalized(stroke, currentHexId);
 
   useUndoStore.getState().pushAction({
@@ -828,6 +909,7 @@ function showTextInput(map: maplibregl.Map, clientX: number, clientY: number, ln
   const point = lngLatToMapPoint(lngLat.lng, lngLat.lat);
 
   const finalize = () => {
+    input.removeEventListener('blur', finalize);
     const text = input.value.trim();
     if (text) {
       finalizeStamp(point, 'text', text);
@@ -845,6 +927,30 @@ function showTextInput(map: maplibregl.Map, clientX: number, clientY: number, ln
 }
 
 export { removeTextInput };
+
+function finalizeDrag(): void {
+  const stamp = drawState.draggingStamp;
+  const startPos = drawState.dragStampStartPos;
+  if (!stamp || !startPos) return;
+
+  const newPos = stamp.points[0];
+  const moved = newPos.x !== startPos.x || newPos.y !== startPos.y;
+
+  if (moved) {
+    if (onStrokeUpdated) onStrokeUpdated(stamp, currentHexId);
+
+    useUndoStore.getState().pushAction({
+      type: 'stamp-moved',
+      hexId: currentHexId,
+      strokeId: stamp.id!,
+      from: [startPos.x, startPos.y],
+      to: [newPos.x, newPos.y],
+    });
+  }
+
+  drawState.draggingStamp = null;
+  drawState.dragStampStartPos = null;
+}
 
 export function setupDrawingEvents(map: maplibregl.Map): void {
   drawState.mapRef = map;
@@ -923,6 +1029,10 @@ export function setupDrawingEvents(map: maplibregl.Map): void {
         drawState.currentPoints.push(point);
       }
       redrawAllStrokes();
+      return;
+    }
+
+    if (store.activeTool === 'enemy-marker') {
       return;
     }
 

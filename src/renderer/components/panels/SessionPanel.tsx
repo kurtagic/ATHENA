@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Users, Crown, X, Check, Copy, LogOut, Loader2, Volume2, Phone, PhoneOff } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Users, Crown, X, Check, Copy, LogOut, Loader2, Volume2, Phone, PhoneOff, Send } from 'lucide-react';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useVoiceStore } from '../../stores/voiceStore';
 import { useSettingsStore } from '../../stores/settingsStore';
@@ -195,8 +195,26 @@ function LobbyView({
   pendingApprovals: { requestId: string; displayName: string }[];
 }) {
   const [copied, setCopied] = useState(false);
+  const [notifText, setNotifText] = useState('');
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const voicePeers = useVoiceStore((s) => s.peers);
   const tttActive = useVoiceStore((s) => s.tttActive);
+
+  const canSend = notifText.trim().length > 0;
+
+  const handleSendNotification = () => {
+    if (!canSend) return;
+    session.sendCustomNotification(notifText.trim());
+    setNotifText('');
+    textareaRef.current?.focus();
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSendNotification();
+    }
+  };
 
   const copyCode = () => {
     navigator.clipboard.writeText(lobbyId);
@@ -270,6 +288,7 @@ function LobbyView({
           const isSelf = m.id === memberId;
           const isMemberOwner = m.id === ownerId;
           const voicePeer = voicePeers.find(p => p.id === m.id);
+          const isInVoice = isSelf ? voiceJoined : !!voicePeer;
           const isSpeaking = isSelf ? tttActive : voicePeer?.speaking;
           return (
             <div key={m.id} className="flex items-center gap-1.5 px-2 py-1 rounded hover:bg-white/[0.04]">
@@ -281,8 +300,11 @@ function LobbyView({
                 {m.displayName}
                 {isSelf && ' (you)'}
               </span>
-              {isSpeaking && (
-                <Volume2 size={11} className="text-emerald-400 shrink-0 animate-pulse" />
+              {isInVoice && (
+                <Volume2
+                  size={11}
+                  className={`shrink-0 ${isSpeaking ? 'text-emerald-400 animate-pulse' : 'text-white/60'}`}
+                />
               )}
               {isOwner && !isSelf && (
                 <>
@@ -331,6 +353,38 @@ function LobbyView({
             Close Lobby
           </button>
         )}
+      </div>
+
+      {/* Notifications */}
+      <div className="h-px bg-white/[0.08] my-1" />
+      <div className="flex flex-col gap-1.5">
+        <span className="text-[10px] uppercase tracking-[0.12em] text-white/30 font-semibold px-1">
+          Notifications
+        </span>
+        <div className="relative">
+          <textarea
+            ref={textareaRef}
+            rows={4}
+            maxLength={256}
+            value={notifText}
+            onChange={(e) => setNotifText(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="Broadcast message..."
+            className="w-full resize-none rounded-[var(--radius-sm)] border border-[var(--color-border-tactical)] bg-[var(--color-surface-inset)] text-[12px] text-white/80 placeholder:text-white/25 px-2.5 py-2 outline-none transition-colors duration-150 focus:border-[var(--color-border-focus)]"
+          />
+          <span className="absolute bottom-1.5 right-2 text-[9px] text-white/20">
+            {notifText.length}/256
+          </span>
+        </div>
+        <button
+          onClick={handleSendNotification}
+          disabled={!canSend}
+          className="flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-[var(--radius-sm)] border border-[var(--color-gold)]/30 text-[var(--color-gold)] text-[11px] font-bold uppercase tracking-[0.1em] cursor-pointer transition-all duration-150 hover:bg-[var(--color-gold-dim)] hover:border-[var(--color-gold)] disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:border-[var(--color-gold)]/30"
+          style={{ background: 'rgba(255, 213, 79, 0.06)' }}
+        >
+          <Send size={11} />
+          Send
+        </button>
       </div>
     </>
   );

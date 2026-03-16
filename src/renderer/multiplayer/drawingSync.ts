@@ -3,9 +3,12 @@ import type { StrokeData } from '../map/drawing';
 import {
   setStrokeFinalizedCallback,
   setStrokesErasedCallback,
+  setStrokeUpdatedCallback,
   addRemoteStroke,
   removeStrokeById,
   clearAllStrokes,
+  getDrawState,
+  updateStampDomMarkerPosition,
 } from '../map/drawing';
 import { toMapPoint } from '../data/coords';
 import type { SavedStroke } from '../data/store';
@@ -65,6 +68,23 @@ export function initDrawingSync(): void {
     debugLog('yjs', `Stroke created in ${hexId}: ${id}`);
   });
 
+  setStrokeUpdatedCallback((stroke, hexId) => {
+    const hexMap = getHexMap('strokes', hexId);
+    if (!hexMap) return;
+    const id = stroke.id || crypto.randomUUID();
+    hexMap.set(id, {
+      points: stroke.points.map((p) => [p.x, p.y] as [number, number]),
+      color: stroke.color,
+      weight: stroke.weight,
+      opacity: stroke.opacity,
+      brushPattern: stroke.brushPattern,
+      isArrow: stroke.isArrow,
+      stampType: stroke.stampType,
+      stampText: stroke.stampText,
+    });
+    debugLog('yjs', `Stroke updated in ${hexId}: ${id}`);
+  });
+
   setStrokesErasedCallback((strokeIds, hexId) => {
     const hexMap = getHexMap('strokes', hexId);
     if (!hexMap) return;
@@ -103,6 +123,20 @@ export function setupDrawingObserver(): void {
           if (!data) return;
 
           if (hexId === currentHexId) {
+            // Skip remote updates for a stamp we're actively dragging
+            const ds = getDrawState();
+            if (ds.draggingStamp && ds.draggingStamp.id === strokeId) return;
+
+            if (change.action === 'update') {
+              // For stamps, update position in-place + move DOM marker (no flicker)
+              const existing = ds.strokes.find(s => s.id === strokeId);
+              if (existing?.stampType) {
+                existing.points = (data.points as [number, number][]).map(([x, y]) => toMapPoint(x, y));
+                updateStampDomMarkerPosition(strokeId, existing.points[0]);
+                return;
+              }
+              removeStrokeById(strokeId);
+            }
             addRemoteStroke(fromYjsStroke(strokeId, data));
           } else {
             if (!hexDrawingData[hexId]) hexDrawingData[hexId] = [];

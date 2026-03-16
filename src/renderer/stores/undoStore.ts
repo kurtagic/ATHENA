@@ -125,6 +125,14 @@ interface EnemyMarkerMovedAction {
   to: [number, number];
 }
 
+interface StampMovedAction {
+  type: 'stamp-moved';
+  hexId: string;
+  strokeId: string;
+  from: [number, number];
+  to: [number, number];
+}
+
 export type UndoableAction =
   | StrokeAddedAction
   | StrokesErasedAction
@@ -137,7 +145,8 @@ export type UndoableAction =
   | ImpactMovedAction
   | EnemyMarkerAddedAction
   | EnemyMarkerRemovedAction
-  | EnemyMarkerMovedAction;
+  | EnemyMarkerMovedAction
+  | StampMovedAction;
 
 const MAX_STACK_SIZE = 50;
 

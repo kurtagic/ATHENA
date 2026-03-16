@@ -1,7 +1,9 @@
 import React, { useCallback, useRef, useMemo, useState } from 'react';
-import { Pencil, Eraser, Ruler, Slash, Hash, Square, MoveRight, Stamp, Type } from 'lucide-react';
+import { Pencil, Eraser, Ruler, Slash, Hash, Square, MoveRight, Sticker, Type, Undo2, Redo2 } from 'lucide-react';
 import { useDrawStore, type BrushPattern } from '../../stores/drawStore';
 import { useMapStore } from '../../stores/mapStore';
+import { useUndoStore } from '../../stores/undoStore';
+import { executeUndo, executeRedo } from '../../map/undoExecutor';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useEnemyMarkerStore } from '../../stores/enemyMarkerStore';
 import { colorByIndex } from '../../data/colorFromUuid';
@@ -56,6 +58,20 @@ export function BottomBar() {
   const [enemyPopoverOpen, setEnemyPopoverOpen] = useState(false);
   const [stampPopoverOpen, setStampPopoverOpen] = useState(false);
   const selectedStamp = useDrawStore((s) => s.selectedStamp);
+
+  const detailHexId = useMapStore((s) => s.detailMode?.apiName);
+  const undoStacks = useUndoStore((s) => s.undoStacks);
+  const redoStacks = useUndoStore((s) => s.redoStacks);
+  const canUndo = detailHexId ? (undoStacks[detailHexId]?.length ?? 0) > 0 : false;
+  const canRedo = detailHexId ? (redoStacks[detailHexId]?.length ?? 0) > 0 : false;
+
+  const handleUndo = useCallback(() => {
+    if (detailHexId) executeUndo(detailHexId);
+  }, [detailHexId]);
+
+  const handleRedo = useCallback(() => {
+    if (detailHexId) executeRedo(detailHexId);
+  }, [detailHexId]);
 
   const enemyGroups = useMemo(() => {
     const typeOrder = ['120mm', '150mm', '3C-High Explosive Rocket', '4C-Fire Rocket', 'Mortar', '300mm'];
@@ -273,60 +289,46 @@ export function BottomBar() {
           id="draw-toolbar"
           className="flex items-center gap-1.5 bg-white/[0.04] border border-white/[0.08] rounded-[16px] px-3 py-1.5"
         >
-          {/* Enemy Artillery */}
           <TooltipProvider delayDuration={300}>
+            {/* Undo / Redo */}
             <div className="flex items-center gap-1.5">
-              <Popover open={enemyPopoverOpen} onOpenChange={setEnemyPopoverOpen}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <PopoverTrigger asChild>
-                      <Toggle
-                        pressed={activeTool === 'enemy-marker'}
-                        onPressedChange={() => {
-                          if (activeTool === 'enemy-marker') {
-                            handleEnemyToggle();
-                          } else {
-                            setEnemyPopoverOpen(true);
-                          }
-                        }}
-                        className={`h-[34px] w-[34px] bg-transparent hover:bg-white/[0.08] text-white/50 border-b-2 transition-all ${
-                          activeTool === 'enemy-marker'
-                            ? 'border-b-red-500/80 bg-red-500/[0.12] text-red-400'
-                            : 'border-b-transparent'
-                        }`}
-                      >
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16">
-                          <circle cx="12" cy="12" r="10"/>
-                          <line x1="12" y1="2" x2="12" y2="6"/>
-                          <line x1="12" y1="18" x2="12" y2="22"/>
-                          <line x1="2" y1="12" x2="6" y2="12"/>
-                          <line x1="18" y1="12" x2="22" y2="12"/>
-                        </svg>
-                      </Toggle>
-                    </PopoverTrigger>
-                  </TooltipTrigger>
-                  <TooltipContent side="top" className="bg-[#1a1a1e] border-[var(--color-border-glass)] text-white text-xs">
-                    Enemy Artillery
-                  </TooltipContent>
-                </Tooltip>
-                <PopoverContent side="top" className="w-[240px] p-2 max-h-[400px] overflow-y-auto bg-[#1a1a1e] border-[var(--color-border-tactical)]">
-                  {enemyGroups.map(([type, platforms], gi) => (
-                    <React.Fragment key={type}>
-                      {gi > 0 && <div className="h-px bg-white/10 my-1.5" />}
-                      <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--color-gold)]/70 px-2 py-1">{type}</div>
-                      {platforms.map(({ platform, index }) => (
-                        <button
-                          key={index}
-                          className="w-full text-left px-2 py-1.5 text-[12px] rounded hover:bg-white/10 transition-colors cursor-pointer"
-                          onClick={() => handleEnemyPlatformSelect(index)}
-                        >
-                          <span className={factionColor(platform.faction)}>{platformDisplayName(platform, type === 'Ships')}</span>
-                        </button>
-                      ))}
-                    </React.Fragment>
-                  ))}
-                </PopoverContent>
-              </Popover>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    onClick={handleUndo}
+                    disabled={!canUndo}
+                    className={`h-[34px] w-[34px] flex items-center justify-center rounded-md transition-all ${
+                      canUndo
+                        ? 'text-white/50 hover:bg-white/[0.08] hover:text-white/80 cursor-pointer'
+                        : 'text-white/20 cursor-not-allowed'
+                    }`}
+                  >
+                    <Undo2 size={16} />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="bg-[#1a1a1e] border-[var(--color-border-glass)] text-white text-xs">
+                  Undo (Ctrl+Z)
+                </TooltipContent>
+              </Tooltip>
+
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    onClick={handleRedo}
+                    disabled={!canRedo}
+                    className={`h-[34px] w-[34px] flex items-center justify-center rounded-md transition-all ${
+                      canRedo
+                        ? 'text-white/50 hover:bg-white/[0.08] hover:text-white/80 cursor-pointer'
+                        : 'text-white/20 cursor-not-allowed'
+                    }`}
+                  >
+                    <Redo2 size={16} />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="bg-[#1a1a1e] border-[var(--color-border-glass)] text-white text-xs">
+                  Redo (Ctrl+Y)
+                </TooltipContent>
+              </Tooltip>
             </div>
 
             <Separator orientation="vertical" className="h-5 bg-white/[0.08] mx-1" />
@@ -408,6 +410,63 @@ export function BottomBar() {
                   Ruler (Right-click)
                 </TooltipContent>
               </Tooltip>
+            </div>
+
+            <Separator orientation="vertical" className="h-5 bg-white/[0.08] mx-1" />
+
+            {/* Enemy Artillery, Icons & Text group */}
+            <div className="flex items-center gap-1.5">
+              <Popover open={enemyPopoverOpen} onOpenChange={setEnemyPopoverOpen}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <PopoverTrigger asChild>
+                      <Toggle
+                        pressed={activeTool === 'enemy-marker'}
+                        onPressedChange={() => {
+                          if (activeTool === 'enemy-marker') {
+                            handleEnemyToggle();
+                          } else {
+                            setEnemyPopoverOpen(true);
+                          }
+                        }}
+                        className={`h-[34px] w-[34px] bg-transparent hover:bg-white/[0.08] text-white/50 border-b-2 transition-all ${
+                          activeTool === 'enemy-marker'
+                            ? 'border-b-red-500/80 bg-red-500/[0.12] text-red-400'
+                            : 'border-b-transparent'
+                        }`}
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16">
+                          <circle cx="12" cy="12" r="10"/>
+                          <line x1="12" y1="2" x2="12" y2="6"/>
+                          <line x1="12" y1="18" x2="12" y2="22"/>
+                          <line x1="2" y1="12" x2="6" y2="12"/>
+                          <line x1="18" y1="12" x2="22" y2="12"/>
+                        </svg>
+                      </Toggle>
+                    </PopoverTrigger>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="bg-[#1a1a1e] border-[var(--color-border-glass)] text-white text-xs">
+                    Enemy Artillery
+                  </TooltipContent>
+                </Tooltip>
+                <PopoverContent side="top" className="w-[240px] p-2 max-h-[400px] overflow-y-auto bg-[#1a1a1e] border-[var(--color-border-tactical)]">
+                  {enemyGroups.map(([type, platforms], gi) => (
+                    <React.Fragment key={type}>
+                      {gi > 0 && <div className="h-px bg-white/10 my-1.5" />}
+                      <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--color-gold)]/70 px-2 py-1">{type}</div>
+                      {platforms.map(({ platform, index }) => (
+                        <button
+                          key={index}
+                          className="w-full text-left px-2 py-1.5 text-[12px] rounded hover:bg-white/10 transition-colors cursor-pointer"
+                          onClick={() => handleEnemyPlatformSelect(index)}
+                        >
+                          <span className={factionColor(platform.faction)}>{platformDisplayName(platform, type === 'Ships')}</span>
+                        </button>
+                      ))}
+                    </React.Fragment>
+                  ))}
+                </PopoverContent>
+              </Popover>
 
               <Popover open={stampPopoverOpen} onOpenChange={setStampPopoverOpen}>
                 <Tooltip>
@@ -428,12 +487,12 @@ export function BottomBar() {
                             : 'border-b-transparent'
                         }`}
                       >
-                        <Stamp size={16} />
+                        <Sticker size={16} />
                       </Toggle>
                     </PopoverTrigger>
                   </TooltipTrigger>
                   <TooltipContent side="top" className="bg-[#1a1a1e] border-[var(--color-border-glass)] text-white text-xs">
-                    Stamp (Right-click)
+                    Icons (Right-click)
                   </TooltipContent>
                 </Tooltip>
                 <PopoverContent side="top" className="w-[180px] p-2 bg-[#1a1a1e] border-[var(--color-border-tactical)]">
@@ -572,12 +631,8 @@ export function BottomBar() {
               <Tooltip>
                 <TooltipTrigger asChild>
                   <label
-                    className={`relative w-6 h-6 rounded-md border cursor-pointer transition-all duration-120 hover:scale-110 ${
-                      isCustomSelected
-                        ? 'border-white/60 ring-1 ring-white/60 ring-offset-2 ring-offset-[rgba(18,18,20,0.92)]'
-                        : 'border-white/20'
-                    }`}
-                    style={{ background: customColor }}
+                    className={`draw-swatch relative${isCustomSelected ? ' selected' : ''}`}
+                    style={{ background: isCustomSelected ? customColor : 'linear-gradient(135deg, #f9a8d4, #c4b5fd, #93c5fd, #6ee7b7)' }}
                     onClick={() => handleSwatchClick(customColorRef.current)}
                   >
                     <input

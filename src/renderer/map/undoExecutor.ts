@@ -1,6 +1,6 @@
 import { useUndoStore, type UndoableAction } from '../stores/undoStore';
 import { useMapStore } from '../stores/mapStore';
-import { removeStrokeById, addRemoteStroke } from './drawing';
+import { removeStrokeById, addRemoteStroke, moveStampById } from './drawing';
 import { toMapPoint } from '../data/coords';
 import {
   undoRemoveGunByEntityId,
@@ -181,6 +181,19 @@ function undoAction(action: UndoableAction): void {
       if (action.hexId) syncEnemyMarkerUpdate(action.hexId, action.entityId, { position: action.from });
       break;
     }
+
+    case 'stamp-moved': {
+      moveStampById(action.strokeId, action.from);
+      const hexMap = getHexMap('strokes', action.hexId);
+      if (hexMap) {
+        const data = hexMap.get(action.strokeId);
+        if (data) {
+          hexMap.set(action.strokeId, { ...data, points: [action.from] });
+          debugLog('yjs', `Undo stamp-moved in ${action.hexId}: ${action.strokeId}`);
+        }
+      }
+      break;
+    }
   }
 }
 
@@ -309,6 +322,19 @@ function redoAction(action: UndoableAction): void {
     case 'enemy-marker-moved': {
       undoMoveEnemyMarker(action.entityId, action.to, map);
       if (action.hexId) syncEnemyMarkerUpdate(action.hexId, action.entityId, { position: action.to });
+      break;
+    }
+
+    case 'stamp-moved': {
+      moveStampById(action.strokeId, action.to);
+      const hexMap = getHexMap('strokes', action.hexId);
+      if (hexMap) {
+        const data = hexMap.get(action.strokeId);
+        if (data) {
+          hexMap.set(action.strokeId, { ...data, points: [action.to] });
+          debugLog('yjs', `Redo stamp-moved in ${action.hexId}: ${action.strokeId}`);
+        }
+      }
       break;
     }
   }

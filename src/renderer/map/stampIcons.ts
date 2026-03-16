@@ -201,6 +201,19 @@ export function getStampImage(type: StampType, color: string, size: number): Can
 
 export const ALL_STAMP_TYPES: StampType[] = ['target', 'shield', 'skull', 'flag', 'eye', 'star', 'warning', 'x-mark'];
 
+export function createStampElement(type: StampType, color: string, size: number): HTMLCanvasElement {
+  const el = document.createElement('canvas') as HTMLCanvasElement;
+  el.width = size;
+  el.height = size;
+  el.style.cssText = `cursor:grab;pointer-events:auto;`;
+  const ctx = el.getContext('2d');
+  if (ctx) {
+    const img = getStampImage(type, color, size);
+    ctx.drawImage(img, 0, 0);
+  }
+  return el;
+}
+
 export const STAMP_LABELS: Record<StampType, string> = {
   target: 'Target',
   shield: 'Shield',

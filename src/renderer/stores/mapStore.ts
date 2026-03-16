@@ -29,7 +29,7 @@ export const useMapStore = create<MapState>((set) => ({
   zoomLevel: 0,
   mapCursor: '',
   artSidebarOpen: true,
-  layersSidebarOpen: true,
+  layersSidebarOpen: false,
   setMapInstance: (map) => set({ mapInstance: map }),
   setDetailMode: (mode) => set({ detailMode: mode }),
   setZoomLevel: (z) => set({ zoomLevel: z }),
@@ -41,6 +41,6 @@ export const useMapStore = create<MapState>((set) => ({
     zoomLevel: 0,
     mapCursor: '',
     artSidebarOpen: true,
-    layersSidebarOpen: true,
+    layersSidebarOpen: false,
   }),
 }));

@@ -29,7 +29,7 @@ function buildQuickNotifHTML(): string {
   input::placeholder { color: rgba(255, 213, 79, 0.3); }
   input:focus { border-color: rgba(255, 213, 79, 0.5); }
 </style></head><body>
-  <input id="msg" type="text" placeholder="Notification..." maxlength="200" autofocus />
+  <input id="msg" type="text" placeholder="Notification..." maxlength="256" autofocus />
   <script>
     function getValue() {
       return document.getElementById('msg').value;
