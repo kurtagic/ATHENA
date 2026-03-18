@@ -49,7 +49,7 @@ export function AppShell() {
 
         {/* Floating left-side stack: multiplayer panel + layers toggle (when sidebar closed) */}
         <div
-          className={`fixed top-12 w-[220px] z-50 flex flex-col gap-2 transition-[left] duration-200 ease-in-out ${
+          className={`fixed top-12 w-[280px] z-50 flex flex-col gap-2 transition-[left] duration-200 ease-in-out ${
             detailMode && layersSidebarOpen ? 'left-[252px]' : 'left-3'
           }`}
         >

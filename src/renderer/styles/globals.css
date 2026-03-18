@@ -488,6 +488,24 @@ html, body {
 .arty-faction-colonial { color: #93c47d; }
 .arty-faction-both { color: var(--color-muted-foreground); }
 
+/* ── Textarea scrollbar ──────────────────────────────────── */
+textarea::-webkit-scrollbar {
+  width: 4px;
+}
+
+textarea::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+textarea::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 2px;
+}
+
+textarea::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.22);
+}
+
 /* ── Artillery sidebar scrollbar ─────────────────────────── */
 #arty-sidebar::-webkit-scrollbar {
   width: 6px;

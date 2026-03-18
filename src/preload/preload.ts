@@ -76,6 +76,15 @@ contextBridge.exposeInMainWorld('athena', {
   onQcCloseMode: (callback: () => void) => {
     ipcRenderer.on('qc-close-mode', () => callback());
   },
+  toggleNotesPip: (show: boolean, text?: string) => {
+    ipcRenderer.send('toggle-notes-pip', show, text);
+  },
+  updatePinnedNotes: (text: string) => {
+    ipcRenderer.send('update-pinned-notes', text);
+  },
+  onNotesPipTextChange: (callback: (text: string) => void) => {
+    ipcRenderer.on('notes-pip-text-change', (_event, text) => callback(text));
+  },
   quit: () => {
     ipcRenderer.send('quit');
   },

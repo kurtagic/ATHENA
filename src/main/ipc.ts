@@ -6,6 +6,7 @@ import { getSettings, updateSettings } from './settings';
 import { registerOverlayHotkey, registerTttHotkey, registerQuickNotifHotkey, registerQuickControlsHotkey } from './hotkeys';
 import { muteOtherApps, unmuteOtherApps } from './audioSilencer';
 import { updatePipData, showPip, destroyPip, updatePipLobbyStatus } from './pipWindow';
+import { showNotesPip, destroyNotesPip, updateNotesPipData } from './notesPipWindow';
 import { showBannerWindow } from './bannerWindow';
 import type { SettingsPartial, PinnedSolution } from '../shared/types';
 
@@ -117,6 +118,20 @@ export function registerIpcHandlers(win: BrowserWindow): void {
     if (win && !win.isDestroyed()) {
       win.webContents.send('pip-command', command);
       if (win.getOpacity() === 0) showBannerWindow(command);
+    }
+  });
+
+  ipcMain.on('toggle-notes-pip', (_event, show: boolean, text?: string) => {
+    if (show) showNotesPip(text); else destroyNotesPip();
+  });
+
+  ipcMain.on('update-pinned-notes', (_event, text: string) => {
+    updateNotesPipData(text);
+  });
+
+  ipcMain.on('notes-pip-text-change', (_event, text: string) => {
+    if (win && !win.isDestroyed()) {
+      win.webContents.send('notes-pip-text-change', text);
     }
   });
 

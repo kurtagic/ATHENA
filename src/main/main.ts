@@ -8,6 +8,7 @@ import { loadSettings } from './settings';
 import { registerOverlayHotkey, registerTttHotkey, registerQuickNotifHotkey, registerQuickControlsHotkey } from './hotkeys';
 import { unmuteOtherApps } from './audioSilencer';
 import { destroyPip } from './pipWindow';
+import { destroyNotesPip } from './notesPipWindow';
 import { showBannerWindow, destroyBannerWindow, showNotificationWindow, destroyNotificationWindow } from './bannerWindow';
 import { destroyQuickNotifWindow } from './quickNotifWindow';
 import { destroyQuickControlsWindow } from './quickControlsWindow';
@@ -97,6 +98,7 @@ function createWindow(): void {
   mainWindow.on('closed', () => {
     mainWindow = null;
     destroyPip();
+    destroyNotesPip();
     destroyBannerWindow();
     destroyNotificationWindow();
     destroyQuickNotifWindow();
@@ -135,6 +137,7 @@ app.on('will-quit', () => {
   stopPoller();
   unmuteOtherApps();
   destroyPip();
+  destroyNotesPip();
   destroyBannerWindow();
   destroyNotificationWindow();
   destroyQuickNotifWindow();

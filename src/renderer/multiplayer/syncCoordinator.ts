@@ -2,6 +2,8 @@ import { session } from './sessionManager';
 import { initDrawingSync, setupDrawingObserver, teardownDrawingObserver, loadHexStrokes } from './drawingSync';
 import { setupArtilleryObserver, teardownArtilleryObserver, loadHexArtillery } from './artillerySync';
 import { setupEnemyMarkerObserver, teardownEnemyMarkerObserver, loadHexEnemyMarkers } from './enemyMarkerSync';
+import { setupNotesObserver, teardownNotesObserver, loadHexNotes, hexNotesCache, syncNotesUpdate } from './notesSync';
+import { useNotesStore } from '../stores/notesStore';
 import { voice } from './voiceManager';
 import { setSyncMode, setCurrentHexId, clearAllStrokes, restoreDrawState, setDrawColor } from '../map/drawing';
 import { colorByIndex } from '../data/colorFromUuid';
@@ -57,6 +59,7 @@ export function initMultiplayerSync(): void {
       for (const key of Object.keys(hexDrawingData)) delete hexDrawingData[key];
       for (const key of Object.keys(hexArtilleryData)) delete hexArtilleryData[key];
       for (const key of Object.keys(hexEnemyMarkerData)) delete hexEnemyMarkerData[key];
+      for (const key of Object.keys(hexNotesCache)) delete hexNotesCache[key];
       clearAllStrokes();
       const map = useMapStore.getState().mapInstance;
       if (map) {
@@ -68,6 +71,7 @@ export function initMultiplayerSync(): void {
       setupDrawingObserver();
       setupArtilleryObserver();
       setupEnemyMarkerObserver();
+      setupNotesObserver();
 
       // When Yjs finishes initial sync, restore strokes and artillery for current hex
       (provider as any).on('synced', () => {
@@ -97,12 +101,21 @@ export function initMultiplayerSync(): void {
           restoreEnemyMarkerState({ markers: enemyMarkers }, map);
           debugLog('yjs', `Synced: restored ${enemyMarkers.length} enemy markers for ${hexId}`);
         }
+
+        const notesText = loadHexNotes(hexId);
+        useNotesStore.getState().setText(notesText);
+        debugLog('yjs', `Synced: restored notes for ${hexId}`);
       });
     } else if (!state.lobbyId && prev.lobbyId) {
       // Lobby left — tear down Yjs
       teardownDrawingObserver();
       teardownArtilleryObserver();
       teardownEnemyMarkerObserver();
+      teardownNotesObserver();
+      // Reset notes state and close PIP
+      useNotesStore.getState().reset();
+      window.athena.toggleNotesPip(false);
+      for (const key of Object.keys(hexNotesCache)) delete hexNotesCache[key];
       disconnectYjs();
     }
   });
@@ -128,6 +141,7 @@ export function initMultiplayerSync(): void {
     setupDrawingObserver();
     setupArtilleryObserver();
     setupEnemyMarkerObserver();
+    setupNotesObserver();
   }
 
   // Initialize with current hex (in case detail view is already active)
@@ -175,8 +189,27 @@ export function initMultiplayerSync(): void {
           }
           debugLog('yjs', `Loaded ${enemyMarkers.length} enemy markers for ${hexId} from Y.Doc`);
         }
+
+        // Load notes from Yjs
+        const notesText = loadHexNotes(hexId);
+        useNotesStore.getState().setText(notesText);
+        if (useNotesStore.getState().pinned) {
+          window.athena.updatePinnedNotes(notesText);
+        }
+        debugLog('yjs', `Loaded notes for ${hexId} from Y.Doc`);
+      } else {
+        // Exiting hex — reset notes text
+        useNotesStore.getState().setText('');
       }
     }
+  });
+
+  // Handle edits from the notes PIP window
+  window.athena.onNotesPipTextChange((text: string) => {
+    const hexId = useMapStore.getState().detailMode?.apiName;
+    if (!hexId) return;
+    useNotesStore.getState().setText(text);
+    syncNotesUpdate(hexId, text);
   });
 
   // Route inbound server messages

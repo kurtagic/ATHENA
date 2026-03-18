@@ -1,10 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Users, Crown, X, Check, Copy, LogOut, Loader2, Volume2, Phone, PhoneOff, Send } from 'lucide-react';
+import { Users, Crown, X, Check, Copy, LogOut, Loader2, Volume2, Phone, PhoneOff, Send, Pin } from 'lucide-react';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useVoiceStore } from '../../stores/voiceStore';
 import { useSettingsStore } from '../../stores/settingsStore';
+import { useMapStore } from '../../stores/mapStore';
+import { useNotesStore } from '../../stores/notesStore';
 import { session } from '../../multiplayer/sessionManager';
 import { voice } from '../../multiplayer/voiceManager';
+import { syncNotesUpdate } from '../../multiplayer/notesSync';
 import { acceleratorToDisplay } from '../../lib/keybindUtils';
 
 import { ensureConnected, getSavedDisplayName } from '../../multiplayer/connectionHelper';
@@ -355,6 +358,9 @@ function LobbyView({
         )}
       </div>
 
+      {/* Notes */}
+      <NotesSection />
+
       {/* Notifications */}
       <div className="h-px bg-white/[0.08] my-1" />
       <div className="flex flex-col gap-1.5">
@@ -385,6 +391,68 @@ function LobbyView({
           <Send size={11} />
           Send
         </button>
+      </div>
+    </>
+  );
+}
+
+function NotesSection() {
+  const detailMode = useMapStore((s) => s.detailMode);
+  const text = useNotesStore((s) => s.text);
+  const pinned = useNotesStore((s) => s.pinned);
+
+  if (!detailMode) return null;
+
+  const hexId = detailMode.apiName;
+
+  const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const newText = e.target.value;
+    useNotesStore.getState().setText(newText);
+    syncNotesUpdate(hexId, newText);
+    if (pinned) {
+      window.athena.updatePinnedNotes(newText);
+    }
+  };
+
+  const togglePin = () => {
+    const next = !pinned;
+    useNotesStore.getState().setPinned(next);
+    window.athena.toggleNotesPip(next, text);
+  };
+
+  return (
+    <>
+      <div className="h-px bg-white/[0.08] my-1" />
+      <div className="flex flex-col gap-1.5">
+        <div className="flex items-center justify-between px-1">
+          <span className="text-[10px] uppercase tracking-[0.12em] text-white/30 font-semibold">
+            Notes
+          </span>
+          <button
+            onClick={togglePin}
+            className={`p-0.5 transition-all duration-150 ${
+              pinned
+                ? 'text-[#66bb6a] drop-shadow-[0_0_8px_rgba(102,187,106,0.5)]'
+                : 'text-white/30 hover:text-white/60'
+            }`}
+            title={pinned ? 'Unpin notes' : 'Pin to HUD'}
+          >
+            <Pin size={12} fill={pinned ? 'currentColor' : 'none'} />
+          </button>
+        </div>
+        <div className="relative">
+          <textarea
+            rows={5}
+            maxLength={2000}
+            value={text}
+            onChange={handleChange}
+            placeholder="Shared notes..."
+            className="w-full resize-none rounded-[var(--radius-sm)] border border-[var(--color-border-tactical)] bg-[var(--color-surface-inset)] text-[12px] text-white/80 placeholder:text-white/25 px-2.5 py-2 outline-none transition-colors duration-150 focus:border-[var(--color-border-focus)]"
+          />
+          <span className="absolute bottom-1.5 right-2 text-[9px] text-white/20">
+            {text.length}/2000
+          </span>
+        </div>
       </div>
     </>
   );

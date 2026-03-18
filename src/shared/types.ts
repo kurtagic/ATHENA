@@ -103,6 +103,9 @@ export interface AthenaAPI {
   onQcSpotterAdjust: (callback: (payload: any) => void) => void;
   sendQcSpotterUpdate: (data: unknown) => void;
   onQcCloseMode: (callback: () => void) => void;
+  toggleNotesPip: (show: boolean, text?: string) => void;
+  updatePinnedNotes: (text: string) => void;
+  onNotesPipTextChange: (callback: (text: string) => void) => void;
   quit: () => void;
 }
 
