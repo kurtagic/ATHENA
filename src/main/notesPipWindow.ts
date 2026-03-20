@@ -42,6 +42,7 @@ const NOTES_PIP_HTML = `<!DOCTYPE html>
     opacity: 0.8;
     cursor: grab;
     -webkit-app-region: drag;
+    user-select: none;
   }
   .title:active { cursor: grabbing; }
   #notes-content {
@@ -78,6 +79,11 @@ const NOTES_PIP_HTML = `<!DOCTYPE html>
   }
   #notes-content::-webkit-scrollbar-thumb:hover {
     background: rgba(255, 255, 255, 0.22);
+  }
+  .panel.focused {
+    border-color: #ffd54f;
+    box-shadow: 0 0 12px rgba(255, 213, 79, 0.35), 0 0 4px rgba(255, 213, 79, 0.2);
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
   }
 </style>
 </head>
@@ -121,6 +127,18 @@ function createNotesPipWindow(): BrowserWindow {
 
   notesPipWin.on('closed', () => {
     notesPipWin = null;
+  });
+
+  notesPipWin.on('focus', () => {
+    notesPipWin?.webContents.executeJavaScript(
+      `document.querySelector('.panel').classList.add('focused')`,
+    ).catch(() => {});
+  });
+
+  notesPipWin.on('blur', () => {
+    notesPipWin?.webContents.executeJavaScript(
+      `document.querySelector('.panel').classList.remove('focused')`,
+    ).catch(() => {});
   });
 
   return notesPipWin;

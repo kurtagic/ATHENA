@@ -89,9 +89,7 @@ export function registerQuickControlsHotkey(accelerator: string, mainWindow: Bro
     mainWindow.webContents.send('check-lobby-status');
     ipcMain.once('lobby-status-result', (_event: Electron.IpcMainEvent, inLobby: boolean) => {
       if (!inLobby) return;
-      showQuickControlsWindow(mainWindow, currentQuickControlsAccelerator, () => {
-        registerQuickControlsHotkey(accelerator, mainWindow);
-      });
+      showQuickControlsWindow(mainWindow);
     });
   });
 

@@ -1,7 +1,6 @@
 import { BrowserWindow, globalShortcut, ipcMain, screen } from 'electron';
 
 let qcWin: BrowserWindow | null = null;
-let reRegisterCallback: (() => void) | null = null;
 let spotterArrowsRegistered = false;
 
 function registerSpotterArrows(mainWindow: BrowserWindow) {
@@ -33,7 +32,7 @@ function unregisterSpotterArrows() {
 function buildQuickControlsHTML(): string {
   return `<!DOCTYPE html>
 <html><head><style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
+  * { margin: 0; padding: 0; box-sizing: border-box; user-select: none; }
   html, body { background: transparent; overflow: hidden; }
   body {
     display: flex; align-items: flex-start; justify-content: center;
@@ -134,7 +133,7 @@ function buildQuickControlsHTML(): string {
             '<span class="btn-icon">\\u2316</span>' +
             '<div><div>Spotter</div><div class="btn-sub">Adjust target with arrow keys</div></div>' +
           '</button>' +
-          '<div class="hint">Press Escape to close</div>';
+          '<div class="hint">Press F2 to close</div>';
         document.getElementById('btn-spotter').onclick = () => {
           ipcRenderer.send('qc-request-artillery-data');
           ipcRenderer.once('qc-artillery-data', (e, data) => {
@@ -194,7 +193,7 @@ function buildQuickControlsHTML(): string {
             '<h2 style="margin:0">Spotting: ' + spotterHexName + '</h2>' +
           '</div>' +
           '<div id="gun-list" class="gun-list"></div>' +
-          '<div class="hint">\\u2190\\u2192 Azimuth \\u00B7 \\u2191\\u2193 Distance \\u00B7 Esc to stop</div>';
+          '<div class="hint">\\u2190\\u2192 Azimuth \\u00B7 \\u2191\\u2193 Distance \\u00B7 F2 to close</div>';
         document.getElementById('back').onclick = () => { currentMode = 'menu'; render(); };
         resize();
         return;
@@ -226,15 +225,11 @@ function buildQuickControlsHTML(): string {
 
 export function showQuickControlsWindow(
   mainWindow: BrowserWindow,
-  accelerator: string | null,
-  onReRegister: () => void,
 ): void {
   if (qcWin && !qcWin.isDestroyed()) {
     qcWin.destroy();
     return;
   }
-
-  reRegisterCallback = onReRegister;
 
   const { width: screenW, height: screenH } = screen.getPrimaryDisplay().bounds;
   const winW = 380;
@@ -250,7 +245,7 @@ export function showQuickControlsWindow(
     alwaysOnTop: true,
     skipTaskbar: true,
     resizable: false,
-    focusable: true,
+    focusable: false,
     show: false,
     webPreferences: {
       contextIsolation: false,
@@ -260,17 +255,12 @@ export function showQuickControlsWindow(
 
   qcWin.setAlwaysOnTop(true, 'screen-saver');
 
-  if (accelerator) {
-    globalShortcut.unregister(accelerator);
-  }
-
   const html = buildQuickControlsHTML();
   qcWin.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
 
   qcWin.webContents.once('did-finish-load', () => {
     if (qcWin && !qcWin.isDestroyed()) {
-      qcWin.show();
-      qcWin.focus();
+      qcWin.showInactive();
     }
   });
 
@@ -328,28 +318,6 @@ export function showQuickControlsWindow(
   };
   ipcMain.on('qc-resize', onResize);
 
-  // Arrow keys in spotting mode — forward to renderer
-  qcWin.webContents.on('before-input-event', (event, input) => {
-    if (input.type !== 'keyDown') return;
-
-    if (input.key === 'Escape') {
-      event.preventDefault();
-      // In HUD modes, go back to menu instead of closing
-      if (currentHudMode === 'spotting') {
-        if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('qc-close-mode');
-        }
-        if (qcWin && !qcWin.isDestroyed()) {
-          qcWin.webContents.executeJavaScript('currentMode = "menu"; render();');
-        }
-        return;
-      }
-      if (qcWin && !qcWin.isDestroyed()) qcWin.destroy();
-      return;
-    }
-
-  });
-
   const cleanup = () => {
     ipcMain.removeListener('qc-request-artillery-data', onRequestData);
     ipcMain.removeListener('qc-artillery-data-reply', onDataReply);
@@ -362,10 +330,6 @@ export function showQuickControlsWindow(
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('qc-close-mode');
     }
-    if (reRegisterCallback) {
-      reRegisterCallback();
-      reRegisterCallback = null;
-    }
   };
 
   qcWin.on('closed', () => {
@@ -373,11 +337,7 @@ export function showQuickControlsWindow(
     cleanup();
   });
 
-  // Only close on blur when in menu/select modes, not in HUD modes
-  qcWin.on('blur', () => {
-    if (currentHudMode === 'spotting') return;
-    if (qcWin && !qcWin.isDestroyed()) qcWin.destroy();
-  });
+  // Window is non-focusable so no blur handler needed
 }
 
 export function destroyQuickControlsWindow(): void {
