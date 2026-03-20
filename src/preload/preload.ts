@@ -100,6 +100,21 @@ contextBridge.exposeInMainWorld('athena', {
   onQcCrewSetStatus: (callback: (status: string) => void) => {
     ipcRenderer.on('qc-crew-set-status', (_event, status) => callback(status));
   },
+  onQcTogglePip: (callback: () => void) => {
+    ipcRenderer.on('qc-toggle-pip', () => callback());
+  },
+  onQcToggleNotesPip: (callback: () => void) => {
+    ipcRenderer.on('qc-toggle-notes-pip', () => callback());
+  },
+  onQcToggleCrewPip: (callback: () => void) => {
+    ipcRenderer.on('qc-toggle-crew-pip', () => callback());
+  },
+  onQcRequestPinStates: (callback: () => void) => {
+    ipcRenderer.on('qc-request-pin-states', () => callback());
+  },
+  sendQcPinStatesReply: (data: { artillery: boolean; notes: boolean; crew: boolean }) => {
+    ipcRenderer.send('qc-pin-states-reply', data);
+  },
   quit: () => {
     ipcRenderer.send('quit');
   },

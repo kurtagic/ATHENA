@@ -10,6 +10,8 @@ import { useSessionStore } from '../stores/sessionStore';
 import { useQuickControlsStore, getAllArtilleryFromYjs, getSpotterDisplayValues } from '../stores/quickControlsStore';
 import { useNotificationStore } from '../stores/notificationStore';
 import { useCrewStore, getMyCrew } from '../stores/crewStore';
+import { useArtilleryStore } from '../stores/artilleryStore';
+import { useNotesStore } from '../stores/notesStore';
 import { getStatusesForType } from '../data/crewStatuses';
 import { voice } from '../multiplayer/voiceManager';
 import { session } from '../multiplayer/sessionManager';
@@ -111,6 +113,72 @@ export function useGlobalKeyboard(mapRef: React.MutableRefObject<maplibregl.Map 
     window.athena.onQcCrewSetStatus((status: string) => {
       session.setCrewStatus(status as CrewStatus);
     });
+  }, []);
+
+  // Quick Controls: toggle artillery PIP from the separate window
+  useEffect(() => {
+    window.athena.onQcTogglePip(() => {
+      const next = !useArtilleryStore.getState().pipVisible;
+      useArtilleryStore.getState().setPipVisible(next);
+      window.athena.togglePip(next);
+    });
+  }, []);
+
+  // Quick Controls: toggle notes PIP from the separate window
+  useEffect(() => {
+    window.athena.onQcToggleNotesPip(() => {
+      const next = !useNotesStore.getState().pinned;
+      useNotesStore.getState().setPinned(next);
+      window.athena.toggleNotesPip(next, next ? useNotesStore.getState().text : undefined);
+    });
+  }, []);
+
+  // Quick Controls: toggle crew PIP from the separate window
+  useEffect(() => {
+    window.athena.onQcToggleCrewPip(() => {
+      const next = !useCrewStore.getState().pinned;
+      useCrewStore.getState().setPinned(next);
+      const memberId = useSessionStore.getState().memberId;
+      const myCrew = getMyCrew(memberId);
+      window.athena.toggleCrewPip(next, next && myCrew ? useCrewStore.getState().crews : undefined);
+    });
+  }, []);
+
+  // Quick Controls: reply with current pin states
+  useEffect(() => {
+    window.athena.onQcRequestPinStates(() => {
+      window.athena.sendQcPinStatesReply({
+        artillery: useArtilleryStore.getState().pipVisible,
+        notes: useNotesStore.getState().pinned,
+        crew: useCrewStore.getState().pinned,
+      });
+    });
+  }, []);
+
+  // Quick Controls: broadcast pin state changes to QC window (from overlay UI)
+  useEffect(() => {
+    let prev = {
+      artillery: useArtilleryStore.getState().pipVisible,
+      notes: useNotesStore.getState().pinned,
+      crew: useCrewStore.getState().pinned,
+    };
+    const sendIfChanged = () => {
+      const next = {
+        artillery: useArtilleryStore.getState().pipVisible,
+        notes: useNotesStore.getState().pinned,
+        crew: useCrewStore.getState().pinned,
+      };
+      if (next.artillery !== prev.artillery || next.notes !== prev.notes || next.crew !== prev.crew) {
+        prev = next;
+        window.athena.sendQcPinStatesReply(next);
+      }
+    };
+    const unsubs = [
+      useArtilleryStore.subscribe(sendIfChanged),
+      useNotesStore.subscribe(sendIfChanged),
+      useCrewStore.subscribe(sendIfChanged),
+    ];
+    return () => unsubs.forEach((u) => u());
   }, []);
 
   // Local keyboard shortcuts (Escape, arrow keys, etc.)

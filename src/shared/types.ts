@@ -111,6 +111,11 @@ export interface AthenaAPI {
   onQcRequestCrewData: (callback: () => void) => void;
   sendQcCrewDataReply: (data: unknown) => void;
   onQcCrewSetStatus: (callback: (status: string) => void) => void;
+  onQcTogglePip: (callback: () => void) => void;
+  onQcToggleNotesPip: (callback: () => void) => void;
+  onQcToggleCrewPip: (callback: () => void) => void;
+  onQcRequestPinStates: (callback: () => void) => void;
+  sendQcPinStatesReply: (data: { artillery: boolean; notes: boolean; crew: boolean }) => void;
   quit: () => void;
 }
 

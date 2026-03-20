@@ -82,6 +82,25 @@ function buildQuickControlsHTML(): string {
   .empty { text-align: center; color: rgba(255,255,255,0.25); font-size: 12px; padding: 16px 0; }
   .hint { text-align: center; font-size: 10px; color: rgba(255,255,255,0.18); margin-top: 8px; }
   .hex-group { margin-bottom: 8px; }
+  .section-header {
+    font-size: 9px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.1em; color: rgba(255,255,255,0.25);
+    margin-bottom: 6px; padding: 0 2px;
+  }
+  .pin-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 4px; margin-bottom: 8px; }
+  .pin-btn {
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 20px; padding: 6px 10px; font-size: 11px; font-weight: 600;
+    border: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.04);
+    color: rgba(255,255,255,0.6); cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+    -webkit-app-region: no-drag;
+  }
+  .pin-btn:hover { background: rgba(255,255,255,0.08); border-color: rgba(255,213,79,0.25); }
+  .pin-btn.active {
+    background: rgba(46,125,50,0.7); border-color: rgba(46,125,50,0.9);
+    color: #fff;
+  }
 
   /* HUD styles */
   .gun-list { margin: 8px 0; }
@@ -105,6 +124,43 @@ function buildQuickControlsHTML(): string {
 
     // Spotter state
     let spotterHexName = '';
+
+    // Pin states
+    let pinStates = { artillery: false, notes: false, crew: false };
+
+    function buildPinnedWindowsSection() {
+      return '<div class="section-header" style="margin-top:8px">Pinned Windows</div>' +
+        '<div class="pin-grid">' +
+        '<button class="pin-btn' + (pinStates.artillery ? ' active' : '') + '" data-pin="artillery">Artillery</button>' +
+        '<button class="pin-btn' + (pinStates.notes ? ' active' : '') + '" data-pin="notes">Notes</button>' +
+        '<button class="pin-btn' + (pinStates.crew ? ' active' : '') + '" data-pin="crew">Crew</button>' +
+        '</div>';
+    }
+
+    function bindPinButtons() {
+      document.querySelectorAll('[data-pin]').forEach(function(btn) {
+        btn.onclick = function() {
+          const pin = btn.dataset.pin;
+          if (pin === 'artillery') ipcRenderer.send('qc-toggle-pip');
+          else if (pin === 'notes') ipcRenderer.send('qc-toggle-notes-pip');
+          else if (pin === 'crew') ipcRenderer.send('qc-toggle-crew-pip');
+        };
+      });
+    }
+
+    function updatePinButtons() {
+      document.querySelectorAll('[data-pin]').forEach(function(btn) {
+        const pin = btn.dataset.pin;
+        if (pinStates[pin]) btn.classList.add('active');
+        else btn.classList.remove('active');
+      });
+    }
+
+    // Listen for pin state updates from renderer
+    ipcRenderer.on('qc-pin-states', (e, data) => {
+      pinStates = data;
+      updatePinButtons();
+    });
 
     function resize() {
       setTimeout(() => {
@@ -160,11 +216,14 @@ function buildQuickControlsHTML(): string {
         ipcRenderer.send('qc-mode-change', 'menu');
         // Request crew data first
         ipcRenderer.send('qc-request-crew-data');
+        ipcRenderer.send('qc-request-pin-states');
         ipcRenderer.once('qc-crew-data', (e, data) => {
           crewData = data;
           root.innerHTML =
             '<h2>Quick Controls</h2>' +
+            (crewData ? '<div class="section-header">Crew Status</div>' : '') +
             buildCrewStatusSection() +
+            buildPinnedWindowsSection() +
             '<div class="hint">Press F2 to close</div>';
           // Bind crew status buttons
           function bindStatusButtons() {
@@ -182,6 +241,7 @@ function buildQuickControlsHTML(): string {
             });
           }
           bindStatusButtons();
+          bindPinButtons();
           resize();
           if (pendingSpotterTrigger) {
             pendingSpotterTrigger = false;
@@ -394,10 +454,56 @@ export function showQuickControlsWindow(
   };
   ipcMain.on('qc-crew-set-status', onCrewSetStatus);
 
+  // IPC: toggle PIPs from QC window
+  const onTogglePip = () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('qc-toggle-pip');
+    }
+  };
+  ipcMain.on('qc-toggle-pip', onTogglePip);
+
+  const onToggleNotesPip = () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('qc-toggle-notes-pip');
+    }
+  };
+  ipcMain.on('qc-toggle-notes-pip', onToggleNotesPip);
+
+  const onToggleCrewPip = () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('qc-toggle-crew-pip');
+    }
+  };
+  ipcMain.on('qc-toggle-crew-pip', onToggleCrewPip);
+
+  // IPC: request pin states from renderer
+  const onRequestPinStates = () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('qc-request-pin-states');
+    }
+  };
+  ipcMain.on('qc-request-pin-states', onRequestPinStates);
+
+  // IPC: renderer replies with pin states, forward to qc window
+  const onPinStatesReply = (_event: Electron.IpcMainEvent, data: any) => {
+    if (isAlive(qcWin)) {
+      qcWin.webContents.send('qc-pin-states', data);
+    }
+  };
+  ipcMain.on('qc-pin-states-reply', onPinStatesReply);
+
+  // IPC: renderer sends pin state updates (from overlay UI), forward to qc window
+  const onPinStatesUpdate = (_event: Electron.IpcMainEvent, data: any) => {
+    if (isAlive(qcWin)) {
+      qcWin.webContents.send('qc-pin-states', data);
+    }
+  };
+  ipcMain.on('qc-pin-states-update', onPinStatesUpdate);
+
   // IPC: resize window
   const onResize = (_event: Electron.IpcMainEvent, height: number) => {
     if (isAlive(qcWin)) {
-      qcWin.setSize(winW, Math.min(Math.max(height + 20, 100), 500));
+      qcWin.setSize(winW, Math.min(Math.max(height + 20, 100), 600));
     }
   };
   ipcMain.on('qc-resize', onResize);
@@ -412,6 +518,12 @@ export function showQuickControlsWindow(
     ipcMain.removeListener('qc-request-crew-data', onRequestCrewData);
     ipcMain.removeListener('qc-crew-data-reply', onCrewDataReply);
     ipcMain.removeListener('qc-crew-set-status', onCrewSetStatus);
+    ipcMain.removeListener('qc-toggle-pip', onTogglePip);
+    ipcMain.removeListener('qc-toggle-notes-pip', onToggleNotesPip);
+    ipcMain.removeListener('qc-toggle-crew-pip', onToggleCrewPip);
+    ipcMain.removeListener('qc-request-pin-states', onRequestPinStates);
+    ipcMain.removeListener('qc-pin-states-reply', onPinStatesReply);
+    ipcMain.removeListener('qc-pin-states-update', onPinStatesUpdate);
     unregisterSpotterArrows();
     // Tell renderer to clean up
     if (mainWindow && !mainWindow.isDestroyed()) {
