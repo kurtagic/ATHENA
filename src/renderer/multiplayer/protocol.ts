@@ -80,6 +80,24 @@ export interface PendingJoin {
   requestedAt: number;
 }
 
+// ── Crew types ──
+
+export type CrewType = 'infantry' | 'air' | 'tank' | 'artillery' | 'naval';
+export type CrewStatus =
+  | 'afk' | 'ready' | 'holding' | 'standby' | 'withdraw' | 'prepping' | 'engaging' | 'reposition'
+  | 'at' | 'pve'
+  | 'refuel-rearm' | 'downed' | 'repairing' | 'armour-repair' | 'out-of-ammo'
+  | 'turret-damaged' | 'large-hole';
+
+export interface Crew {
+  id: string;
+  name: string;
+  type: CrewType;
+  leaderId: string;
+  memberIds: string[];
+  status: CrewStatus;
+}
+
 // ── Client → Server messages ──
 
 export interface HelloMsg {
@@ -181,6 +199,32 @@ export interface VoiceIceMsg {
   candidate: string;
 }
 
+// ── Crew client messages ──
+
+export interface CrewCreateMsg {
+  type: 'crew-create';
+  name: string;
+  crewType: CrewType;
+}
+
+export interface CrewJoinMsg {
+  type: 'crew-join';
+  crewId: string;
+}
+
+export interface CrewLeaveMsg { type: 'crew-leave'; }
+export interface CrewDisbandMsg { type: 'crew-disband'; }
+
+export interface CrewKickMsg {
+  type: 'crew-kick';
+  memberId: string;
+}
+
+export interface CrewSetStatusMsg {
+  type: 'crew-set-status';
+  status: CrewStatus;
+}
+
 // ── Server → Client messages ──
 
 export interface WelcomeMsg {
@@ -253,6 +297,7 @@ export interface FullSnapshotMsg {
   seq: number;
   members: LobbyMember[];
   ownerId: string;
+  crews?: Crew[];
 }
 
 export interface VoicePeerJoinedMsg {
@@ -284,6 +329,23 @@ export interface VoiceIceRelayMsg {
   candidate: string;
 }
 
+// ── Crew server messages ──
+
+export interface CrewCreatedMsg {
+  type: 'crew-created';
+  crew: Crew;
+}
+
+export interface CrewUpdatedMsg {
+  type: 'crew-updated';
+  crew: Crew;
+}
+
+export interface CrewDisbandedMsg {
+  type: 'crew-disbanded';
+  crewId: string;
+}
+
 // ── Union types ──
 
 export type ClientMessage =
@@ -306,7 +368,13 @@ export type ClientMessage =
   | VoiceAnswerMsg
   | VoiceIceMsg
   | CommandBannerMsg
-  | CustomNotificationMsg;
+  | CustomNotificationMsg
+  | CrewCreateMsg
+  | CrewJoinMsg
+  | CrewLeaveMsg
+  | CrewDisbandMsg
+  | CrewKickMsg
+  | CrewSetStatusMsg;
 
 export type ServerMessage =
   | WelcomeMsg
@@ -327,4 +395,7 @@ export type ServerMessage =
   | VoiceOfferRelayMsg
   | VoiceAnswerRelayMsg
   | VoiceIceRelayMsg
+  | CrewCreatedMsg
+  | CrewUpdatedMsg
+  | CrewDisbandedMsg
   | ServerBroadcast;

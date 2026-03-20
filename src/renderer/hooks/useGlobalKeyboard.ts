@@ -9,9 +9,12 @@ import { useVoiceStore } from '../stores/voiceStore';
 import { useSessionStore } from '../stores/sessionStore';
 import { useQuickControlsStore, getAllArtilleryFromYjs, getSpotterDisplayValues } from '../stores/quickControlsStore';
 import { useNotificationStore } from '../stores/notificationStore';
+import { useCrewStore, getMyCrew } from '../stores/crewStore';
+import { getStatusesForType } from '../data/crewStatuses';
 import { voice } from '../multiplayer/voiceManager';
 import { session } from '../multiplayer/sessionManager';
 import { hexLookup } from '../data/hexMapping';
+import type { CrewStatus } from '../multiplayer/protocol';
 
 export function useGlobalKeyboard(mapRef: React.MutableRefObject<maplibregl.Map | null>): void {
   // Global TTT toggle via main process hotkey
@@ -82,6 +85,31 @@ export function useGlobalKeyboard(mapRef: React.MutableRefObject<maplibregl.Map 
   useEffect(() => {
     window.athena.onQcCloseMode(() => {
       useQuickControlsStore.getState().close();
+    });
+  }, []);
+
+  // Quick Controls: reply to crew data requests from the separate window
+  useEffect(() => {
+    window.athena.onQcRequestCrewData(() => {
+      const memberId = useSessionStore.getState().memberId;
+      const myCrew = getMyCrew(memberId);
+      if (!myCrew) {
+        window.athena.sendQcCrewDataReply(null);
+        return;
+      }
+      window.athena.sendQcCrewDataReply({
+        crewName: myCrew.name,
+        crewType: myCrew.type,
+        currentStatus: myCrew.status,
+        statuses: getStatusesForType(myCrew.type).map(s => ({ id: s.id, label: s.label })),
+      });
+    });
+  }, []);
+
+  // Quick Controls: handle crew status change from the separate window
+  useEffect(() => {
+    window.athena.onQcCrewSetStatus((status: string) => {
+      session.setCrewStatus(status as CrewStatus);
     });
   }, []);
 

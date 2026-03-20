@@ -1,14 +1,17 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Users, Crown, X, Check, Copy, LogOut, Loader2, Volume2, Phone, PhoneOff, Send, Pin } from 'lucide-react';
+import { Users, Crown, X, Check, Copy, LogOut, Loader2, Volume2, Phone, PhoneOff, Send, Pin, Plus } from 'lucide-react';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useVoiceStore } from '../../stores/voiceStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useMapStore } from '../../stores/mapStore';
 import { useNotesStore } from '../../stores/notesStore';
+import { useCrewStore, getMyCrew } from '../../stores/crewStore';
 import { session } from '../../multiplayer/sessionManager';
 import { voice } from '../../multiplayer/voiceManager';
 import { syncNotesUpdate } from '../../multiplayer/notesSync';
 import { acceleratorToDisplay } from '../../lib/keybindUtils';
+import { getStatusDef } from '../../data/crewStatuses';
+import type { Crew, CrewType } from '../../multiplayer/protocol';
 
 import { ensureConnected, getSavedDisplayName } from '../../multiplayer/connectionHelper';
 import { colorByIndex } from '../../data/colorFromUuid';
@@ -202,6 +205,7 @@ function LobbyView({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const voicePeers = useVoiceStore((s) => s.peers);
   const tttActive = useVoiceStore((s) => s.tttActive);
+  const crews = useCrewStore((s) => s.crews);
 
   const canSend = notifText.trim().length > 0;
 
@@ -293,6 +297,7 @@ function LobbyView({
           const voicePeer = voicePeers.find(p => p.id === m.id);
           const isInVoice = isSelf ? voiceJoined : !!voicePeer;
           const isSpeaking = isSelf ? tttActive : voicePeer?.speaking;
+          const memberCrew = crews.find(c => c.memberIds.includes(m.id));
           return (
             <div key={m.id} className="flex items-center gap-1.5 px-2 py-1 rounded hover:bg-white/[0.04]">
               {isMemberOwner && <Crown size={11} className="text-amber-400 shrink-0 fill-amber-400" />}
@@ -302,6 +307,7 @@ function LobbyView({
               >
                 {m.displayName}
                 {isSelf && ' (you)'}
+                {memberCrew && <span className="text-white"> ({memberCrew.name})</span>}
               </span>
               {isInVoice && (
                 <Volume2
@@ -331,6 +337,9 @@ function LobbyView({
           );
         })}
       </div>
+
+      {/* Crews */}
+      <CrewSection memberId={memberId} members={members} />
 
       {/* Voice */}
       <VoiceButton />
@@ -453,6 +462,179 @@ function NotesSection() {
             {text.length}/2000
           </span>
         </div>
+      </div>
+    </>
+  );
+}
+
+function CrewSection({ memberId, members }: { memberId: string | null; members: { id: string; displayName: string }[] }) {
+  const crews = useCrewStore((s) => s.crews);
+  const pinned = useCrewStore((s) => s.pinned);
+  const myCrew = memberId ? crews.find(c => c.memberIds.includes(memberId)) : undefined;
+  const [showCreate, setShowCreate] = useState(false);
+  const [crewName, setCrewName] = useState('');
+  const [crewType, setCrewType] = useState<CrewType>('infantry');
+
+  const TYPE_LABELS: Record<CrewType, string> = { infantry: 'Infantry', air: 'Air', tank: 'Tank', artillery: 'Arty', naval: 'Naval' };
+  const CREW_TYPE_OPTIONS: CrewType[] = ['infantry', 'air', 'tank', 'artillery', 'naval'];
+
+  const togglePin = () => {
+    const next = !pinned;
+    useCrewStore.getState().setPinned(next);
+    window.athena.toggleCrewPip(next, next ? crews : undefined);
+  };
+
+  const handleCreate = () => {
+    if (!crewName.trim()) return;
+    session.createCrew(crewName.trim(), crewType);
+    setCrewName('');
+    setShowCreate(false);
+  };
+
+  const getMemberName = (id: string) => members.find(m => m.id === id)?.displayName ?? id;
+
+  return (
+    <>
+      <div className="h-px bg-white/[0.08] my-1" />
+      <div className="flex flex-col gap-1">
+        <div className="flex items-center gap-1.5 px-1">
+          <span className="text-[11px] uppercase tracking-[0.12em] text-white/30 font-semibold flex-1">
+            {myCrew ? 'Your Crew' : 'Crews'}
+          </span>
+          <button
+            onClick={togglePin}
+            className={`p-0.5 transition-all duration-150 ${
+              pinned
+                ? 'text-[#66bb6a] drop-shadow-[0_0_8px_rgba(102,187,106,0.5)]'
+                : 'text-white/30 hover:text-white/60'
+            }`}
+            title={pinned ? 'Unpin crews' : 'Pin to HUD'}
+          >
+            <Pin size={13} fill={pinned ? 'currentColor' : 'none'} />
+          </button>
+          {!myCrew && (
+            <button
+              onClick={() => setShowCreate(!showCreate)}
+              className="p-0.5 text-white/30 hover:text-[var(--color-gold)] transition-colors"
+              title="Create crew"
+            >
+              <Plus size={14} />
+            </button>
+          )}
+        </div>
+
+        {/* Create form */}
+        {showCreate && !myCrew && (
+          <div className="flex flex-col gap-1.5 px-1 py-2 bg-white/[0.04] rounded">
+            <input
+              type="text"
+              value={crewName}
+              onChange={(e) => setCrewName(e.target.value.slice(0, 24))}
+              className="w-full bg-white/[0.06] border border-white/10 rounded px-2.5 py-1.5 text-[13px] text-white/80 outline-none focus:border-white/25"
+              placeholder="Crew name"
+              maxLength={24}
+            />
+            <div className="flex flex-wrap gap-1">
+              {CREW_TYPE_OPTIONS.map((t) => (
+                <button
+                  key={t}
+                  onClick={() => setCrewType(t)}
+                  className={`px-2.5 py-1 rounded text-[11px] font-medium border transition-colors ${
+                    crewType === t
+                      ? 'border-[var(--color-gold)]/40 text-[var(--color-gold)] bg-[var(--color-gold)]/10'
+                      : 'border-white/10 text-white/40 hover:text-white/60'
+                  }`}
+                >
+                  {TYPE_LABELS[t]}
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={handleCreate}
+              disabled={!crewName.trim()}
+              className="flex items-center justify-center gap-1.5 px-2.5 py-1.5 bg-blue-600/40 hover:bg-blue-600/60 disabled:opacity-30 disabled:cursor-not-allowed border border-blue-400/20 rounded text-[13px] text-white font-medium transition-colors"
+            >
+              Create
+            </button>
+          </div>
+        )}
+
+        {/* Own crew card */}
+        {myCrew && (
+          <div className="flex flex-col gap-1.5 px-2.5 py-2 bg-white/[0.04] rounded">
+            <div className="flex items-center gap-2">
+              <span className="text-[14px] font-semibold text-white/90 flex-1 truncate">{myCrew.name}</span>
+              <span className="text-[12px] text-white/30">{TYPE_LABELS[myCrew.type]}</span>
+              <span
+                className="px-2 py-0.5 rounded-full text-[11px] font-semibold text-white flex-shrink-0"
+                style={{ background: getStatusDef(myCrew.status).color }}
+              >{getStatusDef(myCrew.status).label}</span>
+            </div>
+            {myCrew.memberIds.map((id) => (
+              <div key={id} className="flex items-center gap-2 px-1">
+                <span className="text-[13px] text-white/60 flex-1 truncate">
+                  {getMemberName(id)}
+                  {id === memberId && ' (you)'}
+                  {id === myCrew.leaderId && ' ★'}
+                </span>
+                {myCrew.leaderId === memberId && id !== memberId && (
+                  <button
+                    onClick={() => session.crewKick(id)}
+                    className="p-0.5 text-white/20 hover:text-red-400 transition-colors"
+                    title="Kick from crew"
+                  >
+                    <X size={12} />
+                  </button>
+                )}
+              </div>
+            ))}
+            <div className="flex gap-1.5 mt-0.5">
+              <button
+                onClick={() => session.leaveCrew()}
+                className="flex-1 px-2.5 py-1.5 bg-white/[0.06] hover:bg-white/[0.12] border border-white/10 rounded text-[12px] text-white/50 font-medium transition-colors"
+              >
+                Leave
+              </button>
+              {myCrew.leaderId === memberId && (
+                <button
+                  onClick={() => session.disbandCrew()}
+                  className="flex-1 px-2.5 py-1.5 bg-red-600/20 hover:bg-red-600/40 border border-red-400/20 rounded text-[12px] text-white/50 font-medium transition-colors"
+                >
+                  Disband
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Joinable crew list (when not in a crew) */}
+        {!myCrew && crews.length > 0 && (
+          <div className="flex flex-col gap-1">
+            {crews.map((c) => (
+              <div key={c.id} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-white/[0.04]">
+                <span className="text-[13px] text-white/70 flex-1 truncate">{c.name}</span>
+                <span className="text-[11px] text-white/25">{c.memberIds.length}/5</span>
+                <span className="text-[11px] text-white/25">{TYPE_LABELS[c.type]}</span>
+                <span
+                  className="px-1.5 py-0.5 rounded-full text-[10px] font-semibold text-white flex-shrink-0"
+                  style={{ background: getStatusDef(c.status).color }}
+                >{getStatusDef(c.status).label}</span>
+                {c.memberIds.length < 5 && (
+                  <button
+                    onClick={() => session.joinCrew(c.id)}
+                    className="px-2 py-0.5 text-[11px] font-medium text-blue-400 bg-blue-600/20 border border-blue-400/20 rounded hover:bg-blue-600/40 transition-colors"
+                  >
+                    Join
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {!myCrew && crews.length === 0 && !showCreate && (
+          <span className="text-[12px] text-white/20 px-2 py-1">No crews yet</span>
+        )}
       </div>
     </>
   );

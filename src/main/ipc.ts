@@ -7,7 +7,9 @@ import { registerOverlayHotkey, registerTttHotkey, registerQuickNotifHotkey, reg
 import { muteOtherApps, unmuteOtherApps } from './audioSilencer';
 import { updatePipData, showPip, destroyPip, updatePipLobbyStatus } from './pipWindow';
 import { showNotesPip, destroyNotesPip, updateNotesPipData } from './notesPipWindow';
+import { showCrewPip, destroyCrewPip, updateCrewPipData } from './crewPipWindow';
 import { showBannerWindow } from './bannerWindow';
+import { showQuickControlsWindow } from './quickControlsWindow';
 import type { SettingsPartial, PinnedSolution } from '../shared/types';
 
 export function registerIpcHandlers(win: BrowserWindow): void {
@@ -113,6 +115,10 @@ export function registerIpcHandlers(win: BrowserWindow): void {
     updatePipLobbyStatus(connected);
   });
 
+  ipcMain.on('pip-open-spotter', () => {
+    showQuickControlsWindow(win, 'spotter');
+  });
+
   ipcMain.on('pip-command', (_event, command: string) => {
     if (command !== 'fire' && command !== 'stop') return;
     if (win && !win.isDestroyed()) {
@@ -133,6 +139,14 @@ export function registerIpcHandlers(win: BrowserWindow): void {
     if (win && !win.isDestroyed()) {
       win.webContents.send('notes-pip-text-change', text);
     }
+  });
+
+  ipcMain.on('toggle-crew-pip', (_event, show: boolean, crews?: unknown[]) => {
+    if (show) showCrewPip(crews as any[]); else destroyCrewPip();
+  });
+
+  ipcMain.on('update-crew-pip', (_event, crews: unknown[]) => {
+    updateCrewPipData(crews as any[]);
   });
 
 }

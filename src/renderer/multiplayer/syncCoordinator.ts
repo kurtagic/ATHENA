@@ -18,6 +18,7 @@ import { useBannerStore } from '../stores/bannerStore';
 import { useNotificationStore } from '../stores/notificationStore';
 import { connectYjs, disconnectYjs, getRootMap } from './yjsSync';
 import type { ServerMessage, FullSnapshotMsg } from './protocol';
+import { useCrewStore } from '../stores/crewStore';
 import { debugLog } from '../stores/debugStore';
 
 let initialized = false;
@@ -115,6 +116,9 @@ export function initMultiplayerSync(): void {
       // Reset notes state and close PIP
       useNotesStore.getState().reset();
       window.athena.toggleNotesPip(false);
+      // Reset crew state and close crew PIP
+      useCrewStore.getState().reset();
+      window.athena.toggleCrewPip(false);
       for (const key of Object.keys(hexNotesCache)) delete hexNotesCache[key];
       disconnectYjs();
     }
@@ -210,6 +214,13 @@ export function initMultiplayerSync(): void {
     if (!hexId) return;
     useNotesStore.getState().setText(text);
     syncNotesUpdate(hexId, text);
+  });
+
+  // Update crew PIP when crews change
+  useCrewStore.subscribe((state, prev) => {
+    if (state.crews !== prev.crews && state.pinned) {
+      window.athena.updateCrewPip(state.crews);
+    }
   });
 
   // Route inbound server messages

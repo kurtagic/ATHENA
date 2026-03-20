@@ -85,6 +85,21 @@ contextBridge.exposeInMainWorld('athena', {
   onNotesPipTextChange: (callback: (text: string) => void) => {
     ipcRenderer.on('notes-pip-text-change', (_event, text) => callback(text));
   },
+  toggleCrewPip: (show: boolean, crews?: unknown[]) => {
+    ipcRenderer.send('toggle-crew-pip', show, crews);
+  },
+  updateCrewPip: (crews: unknown[]) => {
+    ipcRenderer.send('update-crew-pip', crews);
+  },
+  onQcRequestCrewData: (callback: () => void) => {
+    ipcRenderer.on('qc-request-crew-data', () => callback());
+  },
+  sendQcCrewDataReply: (data: unknown) => {
+    ipcRenderer.send('qc-crew-data-reply', data);
+  },
+  onQcCrewSetStatus: (callback: (status: string) => void) => {
+    ipcRenderer.on('qc-crew-set-status', (_event, status) => callback(status));
+  },
   quit: () => {
     ipcRenderer.send('quit');
   },

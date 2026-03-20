@@ -106,6 +106,11 @@ export interface AthenaAPI {
   toggleNotesPip: (show: boolean, text?: string) => void;
   updatePinnedNotes: (text: string) => void;
   onNotesPipTextChange: (callback: (text: string) => void) => void;
+  toggleCrewPip: (show: boolean, crews?: unknown[]) => void;
+  updateCrewPip: (crews: unknown[]) => void;
+  onQcRequestCrewData: (callback: () => void) => void;
+  sendQcCrewDataReply: (data: unknown) => void;
+  onQcCrewSetStatus: (callback: (status: string) => void) => void;
   quit: () => void;
 }
 

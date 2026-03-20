@@ -59,18 +59,6 @@ function buildQuickControlsHTML(): string {
     text-transform: uppercase; color: #ffd54f;
     text-align: center; margin-bottom: 12px;
   }
-  .btn {
-    display: flex; align-items: center; gap: 10px;
-    width: 100%; padding: 10px 14px; border-radius: 8px;
-    border: 1px solid rgba(255,255,255,0.08);
-    background: rgba(255,255,255,0.02); color: #e0e0e0;
-    cursor: pointer; margin-bottom: 8px;
-    transition: background 0.15s, border-color 0.15s;
-    font-size: 13px; font-weight: 600; text-align: left;
-  }
-  .btn:hover { background: rgba(255,255,255,0.06); border-color: rgba(255,213,79,0.25); }
-  .btn-icon { color: #ffd54f; font-size: 18px; }
-  .btn-sub { font-size: 11px; color: rgba(255,255,255,0.35); font-weight: 400; }
   .back-btn {
     background: none; border: none; color: rgba(255,255,255,0.35);
     cursor: pointer; font-size: 14px; padding: 2px 4px; margin-right: 4px;
@@ -113,6 +101,7 @@ function buildQuickControlsHTML(): string {
     const { ipcRenderer } = require('electron');
     let currentMode = 'menu';
     let artilleryData = {};
+    let crewData = null;
 
     // Spotter state
     let spotterHexName = '';
@@ -123,27 +112,82 @@ function buildQuickControlsHTML(): string {
       }, 10);
     }
 
+    const statusColors = {
+      afk: '#4b5a61', ready: '#2e7d32', holding: '#2a5da8', standby: '#1a7a9e',
+      withdraw: '#b5721a', prepping: '#3d7a40', engaging: '#b03030', reposition: '#b5901a',
+      at: '#a52a2a', pve: '#553a8a', 'refuel-rearm': '#1a8a96', downed: '#a52525',
+      repairing: '#7a3490', 'armour-repair': '#5e483d', 'out-of-ammo': '#b5502a',
+      'turret-damaged': '#a5305a', 'large-hole': '#8b1a1a'
+    };
+
+    const genericIds = new Set(['afk','ready','holding','standby','withdraw','prepping','engaging','reposition']);
+
+    function buildStatusGrid(statuses, label) {
+      if (!statuses.length) return '';
+      let html = '<div style="font-size:9px;color:rgba(255,255,255,0.25);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:3px;padding:0 2px">' + label + '</div>' +
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:6px">';
+      statuses.forEach(function(s) {
+        const active = s.id === crewData.currentStatus;
+        const color = statusColors[s.id] || '#888';
+        const activeStyle = active ? 'border-color:#ffd54f;box-shadow:0 0 8px rgba(255,213,79,0.4),inset 0 0 4px rgba(255,213,79,0.15)' : 'border-color:transparent';
+        html += '<button class="item-btn" data-status="' + s.id + '" style="text-align:center;display:flex;align-items:center;justify-content:center;border-radius:20px;padding:5px 10px;font-size:11px;font-weight:600;color:#000;background:' + color + ';' + activeStyle + '">' +
+          s.label + '</button>';
+      });
+      html += '</div>';
+      return html;
+    }
+
+    function buildCrewStatusSection() {
+      if (!crewData) return '';
+      const typeLabels = { infantry: 'Infantry', air: 'Air', tank: 'Tank', artillery: 'Artillery', naval: 'Naval' };
+      const typeLabel = typeLabels[crewData.crewType] || crewData.crewType;
+      const statuses = crewData.statuses || [];
+      const generic = statuses.filter(function(s) { return genericIds.has(s.id); });
+      const specific = statuses.filter(function(s) { return !genericIds.has(s.id); });
+      let html = '<div class="crew-status-section" style="margin-bottom:10px">' +
+        '<div style="font-size:11px;color:rgba(255,255,255,0.5);margin-bottom:6px;text-align:center">' +
+        crewData.crewName + ' \\u00B7 ' + typeLabel + '</div>' +
+        buildStatusGrid(generic, 'General') +
+        buildStatusGrid(specific, typeLabel) +
+        '</div>';
+      return html;
+    }
+
     function render() {
       const root = document.getElementById('root');
 
       if (currentMode === 'menu') {
         ipcRenderer.send('qc-mode-change', 'menu');
-        root.innerHTML =
-          '<h2>Quick Controls</h2>' +
-          '<button class="btn" id="btn-spotter">' +
-            '<span class="btn-icon">\\u2316</span>' +
-            '<div><div>Spotter</div><div class="btn-sub">Adjust target with arrow keys</div></div>' +
-          '</button>' +
-          '<div class="hint">Press F2 to close</div>';
-        document.getElementById('btn-spotter').onclick = () => {
-          ipcRenderer.send('qc-request-artillery-data');
-          ipcRenderer.once('qc-artillery-data', (e, data) => {
-            artilleryData = data || {};
-            currentMode = 'spotter-select';
-            render();
-          });
-        };
-        resize();
+        // Request crew data first
+        ipcRenderer.send('qc-request-crew-data');
+        ipcRenderer.once('qc-crew-data', (e, data) => {
+          crewData = data;
+          root.innerHTML =
+            '<h2>Quick Controls</h2>' +
+            buildCrewStatusSection() +
+            '<div class="hint">Press F2 to close</div>';
+          // Bind crew status buttons
+          function bindStatusButtons() {
+            root.querySelectorAll('[data-status]').forEach(function(btn) {
+              btn.onclick = function() {
+                ipcRenderer.send('qc-crew-set-status', btn.dataset.status);
+                crewData.currentStatus = btn.dataset.status;
+                // Update just the crew section without re-fetching
+                var crewSection = root.querySelector('.crew-status-section');
+                if (crewSection) {
+                  crewSection.outerHTML = buildCrewStatusSection();
+                  bindStatusButtons();
+                }
+              };
+            });
+          }
+          bindStatusButtons();
+          resize();
+          if (pendingSpotterTrigger) {
+            pendingSpotterTrigger = false;
+            triggerSpotter();
+          }
+        });
         return;
       }
 
@@ -219,6 +263,26 @@ function buildQuickControlsHTML(): string {
       '</div>';
     });
 
+    function triggerSpotter() {
+      ipcRenderer.send('qc-request-artillery-data');
+      ipcRenderer.once('qc-artillery-data', (e, data) => {
+        artilleryData = data || {};
+        currentMode = 'spotter-select';
+        render();
+      });
+    }
+
+    // Auto-trigger spotter when requested from PIP
+    let pendingSpotterTrigger = false;
+    ipcRenderer.on('qc-start-spotter', () => {
+      if (currentMode === 'spotter-select' || currentMode === 'spotting') return;
+      if (currentMode === 'menu' && document.getElementById('root').innerHTML) {
+        triggerSpotter();
+      } else {
+        pendingSpotterTrigger = true;
+      }
+    });
+
     render();
   </script>
 </body></html>`;
@@ -226,8 +290,14 @@ function buildQuickControlsHTML(): string {
 
 export function showQuickControlsWindow(
   mainWindow: BrowserWindow,
+  initialMode?: 'spotter',
 ): void {
+  // If already open and spotter requested, just trigger spotter mode
   if (isAlive(qcWin)) {
+    if (initialMode === 'spotter') {
+      qcWin.webContents.send('qc-start-spotter');
+      return;
+    }
     qcWin.destroy();
     return;
   }
@@ -248,6 +318,9 @@ export function showQuickControlsWindow(
   qcWin.webContents.once('did-finish-load', () => {
     if (isAlive(qcWin)) {
       qcWin.showInactive();
+      if (initialMode === 'spotter') {
+        qcWin.webContents.send('qc-start-spotter');
+      }
     }
   });
 
@@ -297,6 +370,30 @@ export function showQuickControlsWindow(
   };
   ipcMain.on('qc-spotter-update', onSpotterUpdate);
 
+  // IPC: request crew data from renderer
+  const onRequestCrewData = () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('qc-request-crew-data');
+    }
+  };
+  ipcMain.on('qc-request-crew-data', onRequestCrewData);
+
+  // IPC: renderer replies with crew data, forward to qc window
+  const onCrewDataReply = (_event: Electron.IpcMainEvent, data: any) => {
+    if (isAlive(qcWin)) {
+      qcWin.webContents.send('qc-crew-data', data);
+    }
+  };
+  ipcMain.on('qc-crew-data-reply', onCrewDataReply);
+
+  // IPC: crew set status — forward to renderer
+  const onCrewSetStatus = (_event: Electron.IpcMainEvent, status: string) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('qc-crew-set-status', status);
+    }
+  };
+  ipcMain.on('qc-crew-set-status', onCrewSetStatus);
+
   // IPC: resize window
   const onResize = (_event: Electron.IpcMainEvent, height: number) => {
     if (isAlive(qcWin)) {
@@ -312,6 +409,9 @@ export function showQuickControlsWindow(
     ipcMain.removeListener('qc-mode-change', onModeChange);
     ipcMain.removeListener('qc-spotter-update', onSpotterUpdate);
     ipcMain.removeListener('qc-resize', onResize);
+    ipcMain.removeListener('qc-request-crew-data', onRequestCrewData);
+    ipcMain.removeListener('qc-crew-data-reply', onCrewDataReply);
+    ipcMain.removeListener('qc-crew-set-status', onCrewSetStatus);
     unregisterSpotterArrows();
     // Tell renderer to clean up
     if (mainWindow && !mainWindow.isDestroyed()) {

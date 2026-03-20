@@ -12,6 +12,7 @@ import { destroyNotesPip } from './notesPipWindow';
 import { showBannerWindow, destroyBannerWindow, showNotificationWindow, destroyNotificationWindow } from './bannerWindow';
 import { destroyQuickNotifWindow } from './quickNotifWindow';
 import { destroyQuickControlsWindow } from './quickControlsWindow';
+import { destroyCrewPip } from './crewPipWindow';
 
 // Handle Squirrel install/update/uninstall events
 const squirrelArg = process.argv[1];
@@ -103,6 +104,7 @@ function createWindow(): void {
     destroyNotificationWindow();
     destroyQuickNotifWindow();
     destroyQuickControlsWindow();
+    destroyCrewPip();
   });
 }
 
@@ -141,6 +143,7 @@ app.on('will-quit', () => {
   destroyBannerWindow();
   destroyNotificationWindow();
   destroyQuickNotifWindow();
+  destroyCrewPip();
 });
 
 app.on('window-all-closed', () => {

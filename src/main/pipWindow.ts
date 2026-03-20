@@ -87,6 +87,15 @@ const PIP_HTML = `<!DOCTYPE html>
     background: rgba(239, 68, 68, 0.3);
     border-color: rgba(239, 68, 68, 0.7);
   }
+  #btn-spot {
+    background: rgba(255, 213, 79, 0.15);
+    color: #ffd54f;
+    border-color: rgba(255, 213, 79, 0.5);
+  }
+  #btn-spot:hover {
+    background: rgba(255, 213, 79, 0.3);
+    border-color: rgba(255, 213, 79, 0.7);
+  }
   .row {
     display: flex;
     align-items: center;
@@ -108,6 +117,7 @@ const PIP_HTML = `<!DOCTYPE html>
     <div id="btns">
       <button id="btn-fire" onclick="window.pipBridge.sendCommand('fire')">Fire</button>
       <button id="btn-stop" onclick="window.pipBridge.sendCommand('stop')">Stop</button>
+      <button id="btn-spot" onclick="window.pipBridge.openSpotter()">Spot</button>
     </div>
     <div id="root"></div>
   </div>

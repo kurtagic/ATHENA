@@ -3,9 +3,12 @@ import type {
   ServerMessage,
   Entity,
   EntityType,
+  CrewType,
+  CrewStatus,
 } from './protocol';
 import { PROTOCOL_VERSION } from './protocol';
 import { useSessionStore } from '../stores/sessionStore';
+import { useCrewStore } from '../stores/crewStore';
 import { debugLog } from '../stores/debugStore';
 
 type MessageHandler = (msg: ServerMessage) => void;
@@ -80,6 +83,7 @@ export class SessionManager {
     store.setPendingApprovals([]);
     store.setIsOwner(false);
     store.setOwnerId(null);
+    useCrewStore.getState().reset();
   }
 
   closeLobby(): void {
@@ -152,6 +156,32 @@ export class SessionManager {
 
   sendCustomNotification(text: string): void {
     this.send({ type: 'custom-notification', text });
+  }
+
+  // ── Crew methods ──
+
+  createCrew(name: string, crewType: CrewType): void {
+    this.send({ type: 'crew-create', name, crewType });
+  }
+
+  joinCrew(crewId: string): void {
+    this.send({ type: 'crew-join', crewId });
+  }
+
+  leaveCrew(): void {
+    this.send({ type: 'crew-leave' });
+  }
+
+  disbandCrew(): void {
+    this.send({ type: 'crew-disband' });
+  }
+
+  crewKick(memberId: string): void {
+    this.send({ type: 'crew-kick', memberId });
+  }
+
+  setCrewStatus(status: CrewStatus): void {
+    this.send({ type: 'crew-set-status', status });
   }
 
   // ── Internal ──
@@ -246,6 +276,7 @@ export class SessionManager {
           store.setMembers([]);
           store.setPendingApprovals([]);
           store.setError('You were kicked from the lobby');
+          useCrewStore.getState().reset();
           debugLog('session', 'You were kicked');
         } else {
           store.removeMember(m.memberId);
@@ -261,17 +292,28 @@ export class SessionManager {
         store.setPendingApprovals([]);
         store.setIsOwner(false);
         store.setOwnerId(null);
+        useCrewStore.getState().reset();
         debugLog('session', 'Lobby closed');
         break;
       case 'full-snapshot':
         store.setMembers(m.members);
         store.setOwnerId(m.ownerId);
+        useCrewStore.getState().setCrews(m.crews ?? []);
         break;
       case 'join-request':
         store.setPendingApprovals([
           ...store.pendingApprovals,
           { requestId: m.requestId, memberId: '', displayName: m.displayName, requestedAt: Date.now() },
         ]);
+        break;
+      case 'crew-created':
+        useCrewStore.getState().addCrew(m.crew);
+        break;
+      case 'crew-updated':
+        useCrewStore.getState().updateCrew(m.crew);
+        break;
+      case 'crew-disbanded':
+        useCrewStore.getState().removeCrew(m.crewId);
         break;
     }
   }
