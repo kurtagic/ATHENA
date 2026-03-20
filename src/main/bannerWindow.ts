@@ -1,4 +1,5 @@
 import { BrowserWindow, screen } from 'electron';
+import { createOverlayWindow, isAlive, safeExec } from './overlayWindow';
 
 let bannerWin: BrowserWindow | null = null;
 let hideTimer: ReturnType<typeof setTimeout> | null = null;
@@ -55,41 +56,23 @@ export function showBannerWindow(command: 'fire' | 'stop'): void {
     hideTimer = null;
   }
 
-  if (bannerWin && !bannerWin.isDestroyed()) {
+  if (isAlive(bannerWin)) {
     bannerWin.destroy();
     bannerWin = null;
   }
 
-  const { width: screenW, height: screenH } = screen.getPrimaryDisplay().bounds;
-  const winW = 900;
-  const winH = 200;
+  const html = buildBannerHTML(command);
 
-  bannerWin = new BrowserWindow({
-    width: winW,
-    height: winH,
-    x: Math.round((screenW - winW) / 2),
-    y: Math.round((screenH - winH) / 2),
-    frame: false,
-    transparent: true,
-    alwaysOnTop: true,
-    skipTaskbar: true,
-    resizable: false,
-    focusable: false,
-    show: false,
-    webPreferences: {
-      contextIsolation: true,
-      nodeIntegration: false,
-    },
+  bannerWin = createOverlayWindow(html, {
+    width: 900,
+    height: 200,
+    position: 'center',
   });
 
-  bannerWin.setAlwaysOnTop(true, 'screen-saver');
   bannerWin.setIgnoreMouseEvents(true);
 
-  const html = buildBannerHTML(command);
-  bannerWin.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
-
   bannerWin.webContents.once('did-finish-load', () => {
-    if (bannerWin && !bannerWin.isDestroyed()) {
+    if (isAlive(bannerWin)) {
       bannerWin.showInactive();
     }
   });
@@ -99,7 +82,7 @@ export function showBannerWindow(command: 'fire' | 'stop'): void {
   });
 
   hideTimer = setTimeout(() => {
-    if (bannerWin && !bannerWin.isDestroyed()) {
+    if (isAlive(bannerWin)) {
       bannerWin.destroy();
       bannerWin = null;
     }
@@ -180,36 +163,21 @@ function getNotifHTML(): string {
 }
 
 function ensureNotifWindow(): void {
-  if (notifWin && !notifWin.isDestroyed()) return;
+  if (isAlive(notifWin)) return;
 
-  const { width: screenW } = screen.getPrimaryDisplay().bounds;
-
-  notifWin = new BrowserWindow({
+  notifWin = createOverlayWindow(getNotifHTML(), {
     width: NOTIF_WIN_W,
     height: NOTIF_WIN_H,
-    x: Math.round((screenW - NOTIF_WIN_W) / 2),
-    y: 0,
-    frame: false,
-    transparent: true,
-    alwaysOnTop: true,
-    skipTaskbar: true,
-    resizable: false,
-    focusable: false,
-    show: false,
+    position: 'top-center',
     webPreferences: {
       contextIsolation: false,
-      nodeIntegration: false,
     },
   });
 
-  notifWin.setAlwaysOnTop(true, 'screen-saver');
   notifWin.setIgnoreMouseEvents(true);
 
-  const html = getNotifHTML();
-  notifWin.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
-
   notifWin.webContents.once('did-finish-load', () => {
-    if (notifWin && !notifWin.isDestroyed()) {
+    if (isAlive(notifWin)) {
       notifWin.showInactive();
     }
   });
@@ -225,12 +193,10 @@ function removeNotif(id: number): void {
   const idx = activeNotifs.findIndex((n) => n.id === id);
   if (idx !== -1) activeNotifs.splice(idx, 1);
 
-  if (notifWin && !notifWin.isDestroyed()) {
-    notifWin.webContents.executeJavaScript(`removeNotification(${id})`).catch(() => {});
-  }
+  safeExec(notifWin, `removeNotification(${id})`);
 
   // Destroy window when all notifications are gone
-  if (activeNotifs.length === 0 && notifWin && !notifWin.isDestroyed()) {
+  if (activeNotifs.length === 0 && isAlive(notifWin)) {
     notifWin.destroy();
     notifWin = null;
   }
@@ -243,7 +209,7 @@ export function showNotificationWindow(text: string, senderName: string): void {
   const escaped = (s: string) => JSON.stringify(s);
 
   const ready = () => {
-    if (notifWin && !notifWin.isDestroyed()) {
+    if (isAlive(notifWin)) {
       notifWin.webContents.executeJavaScript(
         `addNotification(${id}, ${escaped(text)}, ${escaped(senderName)})`
       ).catch(() => {});
@@ -251,9 +217,9 @@ export function showNotificationWindow(text: string, senderName: string): void {
   };
 
   // If window just created, wait for load; otherwise inject immediately
-  if (notifWin && !notifWin.isDestroyed() && !notifWin.webContents.isLoading()) {
+  if (isAlive(notifWin) && !notifWin.webContents.isLoading()) {
     ready();
-  } else if (notifWin && !notifWin.isDestroyed()) {
+  } else if (isAlive(notifWin)) {
     notifWin.webContents.once('did-finish-load', ready);
   }
 
@@ -264,7 +230,7 @@ export function showNotificationWindow(text: string, senderName: string): void {
 export function destroyNotificationWindow(): void {
   for (const n of activeNotifs) clearTimeout(n.timer);
   activeNotifs.length = 0;
-  if (notifWin && !notifWin.isDestroyed()) {
+  if (isAlive(notifWin)) {
     notifWin.destroy();
     notifWin = null;
   }
@@ -275,7 +241,7 @@ export function destroyBannerWindow(): void {
     clearTimeout(hideTimer);
     hideTimer = null;
   }
-  if (bannerWin && !bannerWin.isDestroyed()) {
+  if (isAlive(bannerWin)) {
     bannerWin.destroy();
     bannerWin = null;
   }

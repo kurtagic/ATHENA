@@ -1,5 +1,6 @@
 import { BrowserWindow, screen } from 'electron';
 import path from 'node:path';
+import { createOverlayWindow, isAlive, safeExec, safeExecAndResize } from './overlayWindow';
 
 let notesPipWin: BrowserWindow | null = null;
 
@@ -103,55 +104,33 @@ const NOTES_PIP_HTML = `<!DOCTYPE html>
 function createNotesPipWindow(): BrowserWindow {
   const { width: screenW } = screen.getPrimaryDisplay().bounds;
 
-  notesPipWin = new BrowserWindow({
+  notesPipWin = createOverlayWindow(NOTES_PIP_HTML, {
     width: NOTES_PIP_WIDTH,
     height: NOTES_PIP_HEIGHT,
-    x: screenW - NOTES_PIP_WIDTH - 200,
-    y: NOTES_PIP_MARGIN + 160, // offset below artillery PIP default position
-    frame: false,
-    transparent: true,
-    alwaysOnTop: true,
-    skipTaskbar: true,
-    resizable: false,
+    position: { x: screenW - NOTES_PIP_WIDTH - 200, y: NOTES_PIP_MARGIN + 160 },
     focusable: true,
-    show: false,
     webPreferences: {
-      contextIsolation: true,
-      nodeIntegration: false,
       preload: path.join(__dirname, 'notesPipPreload.js'),
     },
   });
-
-  notesPipWin.setAlwaysOnTop(true, 'screen-saver');
-  notesPipWin.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(NOTES_PIP_HTML)}`);
 
   notesPipWin.on('closed', () => {
     notesPipWin = null;
   });
 
   notesPipWin.on('focus', () => {
-    notesPipWin?.webContents.executeJavaScript(
-      `document.querySelector('.panel').classList.add('focused')`,
-    ).catch(() => {});
+    safeExec(notesPipWin, `document.querySelector('.panel').classList.add('focused')`);
   });
 
   notesPipWin.on('blur', () => {
-    notesPipWin?.webContents.executeJavaScript(
-      `document.querySelector('.panel').classList.remove('focused')`,
-    ).catch(() => {});
+    safeExec(notesPipWin, `document.querySelector('.panel').classList.remove('focused')`);
   });
 
   return notesPipWin;
 }
 
-function resizeFromResult(result: { w: number; h: number } | undefined): void {
-  if (!result || !notesPipWin || notesPipWin.isDestroyed()) return;
-  const bounds = notesPipWin.getBounds();
-  notesPipWin.setBounds({ x: bounds.x, y: bounds.y, width: result.w, height: result.h });
-}
-
 export function updateNotesPipData(text: string): void {
-  if (!notesPipWin || notesPipWin.isDestroyed()) return;
+  if (!isAlive(notesPipWin)) return;
   const escaped = JSON.stringify(text);
   const script = `(() => {
     const el = document.getElementById('notes-content');
@@ -167,13 +146,11 @@ export function updateNotesPipData(text: string): void {
     const d = document.documentElement;
     return { w: d.scrollWidth, h: d.scrollHeight };
   })()`;
-  notesPipWin.webContents.executeJavaScript(script)
-    .then(resizeFromResult)
-    .catch(() => {});
+  safeExecAndResize(notesPipWin, script);
 }
 
 export function showNotesPip(text?: string): void {
-  const freshlyCreated = !notesPipWin || notesPipWin.isDestroyed();
+  const freshlyCreated = !isAlive(notesPipWin);
   if (freshlyCreated) {
     createNotesPipWindow();
   }
@@ -189,21 +166,17 @@ export function showNotesPip(text?: string): void {
 
   if (freshlyCreated || win.webContents.isLoading()) {
     win.webContents.once('did-finish-load', () => {
-      win.webContents.executeJavaScript(script)
-        .then(resizeFromResult)
-        .catch(() => {});
+      safeExecAndResize(notesPipWin, script);
     });
   } else {
-    win.webContents.executeJavaScript(script)
-      .then(resizeFromResult)
-      .catch(() => {});
+    safeExecAndResize(notesPipWin, script);
   }
 
   win.showInactive();
 }
 
 export function destroyNotesPip(): void {
-  if (notesPipWin && !notesPipWin.isDestroyed()) {
+  if (isAlive(notesPipWin)) {
     notesPipWin.destroy();
     notesPipWin = null;
   }

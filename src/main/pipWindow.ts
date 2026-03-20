@@ -1,6 +1,7 @@
 import { BrowserWindow, screen } from 'electron';
 import path from 'node:path';
 import type { PinnedSolution } from '../shared/types';
+import { createOverlayWindow, isAlive, safeExec, safeExecAndResize } from './overlayWindow';
 
 let pipWin: BrowserWindow | null = null;
 let latestData: PinnedSolution[] = [];
@@ -116,27 +117,14 @@ const PIP_HTML = `<!DOCTYPE html>
 function createPipWindow(): BrowserWindow {
   const { width: screenW } = screen.getPrimaryDisplay().bounds;
 
-  pipWin = new BrowserWindow({
+  pipWin = createOverlayWindow(PIP_HTML, {
     width: PIP_INITIAL_WIDTH,
     height: PIP_INITIAL_HEIGHT,
-    x: screenW - PIP_INITIAL_WIDTH - 200,
-    y: PIP_MARGIN,
-    frame: false,
-    transparent: true,
-    alwaysOnTop: true,
-    skipTaskbar: true,
-    resizable: false,
-    focusable: false,
-    show: false,
+    position: { x: screenW - PIP_INITIAL_WIDTH - 200, y: PIP_MARGIN },
     webPreferences: {
       preload: path.join(__dirname, 'pipPreload.js'),
-      contextIsolation: true,
-      nodeIntegration: false,
     },
   });
-
-  pipWin.setAlwaysOnTop(true, 'screen-saver');
-  pipWin.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(PIP_HTML)}`);
 
   pipWin.on('closed', () => {
     pipWin = null;
@@ -219,33 +207,25 @@ const FLASH_SCRIPT = `(() => {
   }, 150);
 })()`;
 
-function resizeFromResult(result: { w: number; h: number } | undefined): void {
-  if (!result || !pipWin || pipWin.isDestroyed()) return;
-  const bounds = pipWin.getBounds();
-  pipWin.setBounds({ x: bounds.x, y: bounds.y, width: result.w, height: result.h });
-}
-
 export function updatePipData(data: PinnedSolution[]): void {
   const changed = hasValuesChanged(data);
   latestData = data;
 
-  if (pipWin && !pipWin.isDestroyed() && pipWin.isVisible()) {
+  if (isAlive(pipWin) && pipWin.isVisible()) {
     const { script, needsResize } = renderDataScript(data);
     if (needsResize) {
-      pipWin.webContents.executeJavaScript(script)
-        .then(resizeFromResult)
-        .catch(() => {});
+      safeExecAndResize(pipWin, script);
     } else {
-      pipWin.webContents.executeJavaScript(script).catch(() => {});
+      safeExec(pipWin, script);
     }
     if (changed) {
-      pipWin.webContents.executeJavaScript(FLASH_SCRIPT).catch(() => {});
+      safeExec(pipWin, FLASH_SCRIPT);
     }
   }
 }
 
 export function showPip(): void {
-  const freshlyCreated = !pipWin || pipWin.isDestroyed();
+  const freshlyCreated = !isAlive(pipWin);
   if (freshlyCreated) {
     createPipWindow();
   }
@@ -262,29 +242,25 @@ export function showPip(): void {
 
   if (freshlyCreated || win.webContents.isLoading()) {
     win.webContents.once('did-finish-load', () => {
-      win.webContents.executeJavaScript(lobbyScript).catch(() => {});
-      win.webContents.executeJavaScript(script)
-        .then(resizeFromResult)
-        .catch(() => {});
+      safeExec(pipWin, lobbyScript);
+      safeExecAndResize(pipWin, script);
     });
   } else {
-    win.webContents.executeJavaScript(lobbyScript).catch(() => {});
-    win.webContents.executeJavaScript(script)
-      .then(resizeFromResult)
-      .catch(() => {});
+    safeExec(pipWin, lobbyScript);
+    safeExecAndResize(pipWin, script);
   }
 
   win.showInactive();
 }
 
 export function hidePip(): void {
-  if (pipWin && !pipWin.isDestroyed()) {
+  if (isAlive(pipWin)) {
     pipWin.hide();
   }
 }
 
 export function destroyPip(): void {
-  if (pipWin && !pipWin.isDestroyed()) {
+  if (isAlive(pipWin)) {
     pipWin.destroy();
     pipWin = null;
   }
@@ -292,11 +268,9 @@ export function destroyPip(): void {
 
 export function updatePipLobbyStatus(connected: boolean): void {
   latestLobbyConnected = connected;
-  if (!pipWin || pipWin.isDestroyed()) return;
+  if (!isAlive(pipWin)) return;
   const script = connected
     ? `document.getElementById('btns').classList.add('visible'); (() => { const d = document.documentElement; return { w: d.scrollWidth, h: d.scrollHeight }; })()`
     : `document.getElementById('btns').classList.remove('visible'); (() => { const d = document.documentElement; return { w: d.scrollWidth, h: d.scrollHeight }; })()`;
-  pipWin.webContents.executeJavaScript(script)
-    .then(resizeFromResult)
-    .catch(() => {});
+  safeExecAndResize(pipWin, script);
 }

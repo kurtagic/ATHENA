@@ -1,7 +1,7 @@
-import { BrowserWindow, globalShortcut, screen } from 'electron';
+import { BrowserWindow, screen } from 'electron';
+import { createOverlayWindow, isAlive } from './overlayWindow';
 
 let quickNotifWin: BrowserWindow | null = null;
-let reRegisterCallback: (() => void) | null = null;
 
 function buildQuickNotifHTML(): string {
   return `<!DOCTYPE html>
@@ -40,51 +40,27 @@ function buildQuickNotifHTML(): string {
 
 export function showQuickNotifWindow(
   mainWindow: BrowserWindow,
-  accelerator: string | null,
-  onReRegister: () => void,
 ): void {
   // Toggle: if already open, close it
-  if (quickNotifWin && !quickNotifWin.isDestroyed()) {
+  if (isAlive(quickNotifWin)) {
     quickNotifWin.destroy();
     return;
   }
 
-  reRegisterCallback = onReRegister;
+  const { height: screenH } = screen.getPrimaryDisplay().bounds;
 
-  const { width: screenW, height: screenH } = screen.getPrimaryDisplay().bounds;
-  const winW = 420;
-  const winH = 52;
-
-  quickNotifWin = new BrowserWindow({
-    width: winW,
-    height: winH,
-    x: Math.round((screenW - winW) / 2),
-    y: Math.round(screenH * 0.3),
-    frame: false,
-    transparent: true,
-    alwaysOnTop: true,
-    skipTaskbar: true,
-    resizable: false,
+  quickNotifWin = createOverlayWindow(buildQuickNotifHTML(), {
+    width: 420,
+    height: 52,
+    position: { x: Math.round((screen.getPrimaryDisplay().bounds.width - 420) / 2), y: Math.round(screenH * 0.3) },
     focusable: true,
-    show: false,
     webPreferences: {
       contextIsolation: false,
-      nodeIntegration: false,
     },
   });
 
-  quickNotifWin.setAlwaysOnTop(true, 'screen-saver');
-
-  // Temporarily unregister the hotkey so user can type that character
-  if (accelerator) {
-    globalShortcut.unregister(accelerator);
-  }
-
-  const html = buildQuickNotifHTML();
-  quickNotifWin.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
-
   quickNotifWin.webContents.once('did-finish-load', () => {
-    if (quickNotifWin && !quickNotifWin.isDestroyed()) {
+    if (isAlive(quickNotifWin)) {
       quickNotifWin.show();
       quickNotifWin.focus();
     }
@@ -96,7 +72,7 @@ export function showQuickNotifWindow(
 
     if (input.key === 'Escape') {
       event.preventDefault();
-      if (quickNotifWin && !quickNotifWin.isDestroyed()) {
+      if (isAlive(quickNotifWin)) {
         quickNotifWin.destroy();
       }
       return;
@@ -104,18 +80,18 @@ export function showQuickNotifWindow(
 
     if (input.key === 'Enter') {
       event.preventDefault();
-      if (!quickNotifWin || quickNotifWin.isDestroyed()) return;
+      if (!isAlive(quickNotifWin)) return;
 
       quickNotifWin.webContents.executeJavaScript('getValue()').then((value: string) => {
         const text = (value || '').trim();
         if (text && mainWindow && !mainWindow.isDestroyed()) {
           mainWindow.webContents.send('send-quick-notification', text);
         }
-        if (quickNotifWin && !quickNotifWin.isDestroyed()) {
+        if (isAlive(quickNotifWin)) {
           quickNotifWin.destroy();
         }
       }).catch(() => {
-        if (quickNotifWin && !quickNotifWin.isDestroyed()) {
+        if (isAlive(quickNotifWin)) {
           quickNotifWin.destroy();
         }
       });
@@ -125,23 +101,18 @@ export function showQuickNotifWindow(
 
   quickNotifWin.on('closed', () => {
     quickNotifWin = null;
-    // Re-register the hotkey
-    if (reRegisterCallback) {
-      reRegisterCallback();
-      reRegisterCallback = null;
-    }
   });
 
   // Close if window loses focus
   quickNotifWin.on('blur', () => {
-    if (quickNotifWin && !quickNotifWin.isDestroyed()) {
+    if (isAlive(quickNotifWin)) {
       quickNotifWin.destroy();
     }
   });
 }
 
 export function destroyQuickNotifWindow(): void {
-  if (quickNotifWin && !quickNotifWin.isDestroyed()) {
+  if (isAlive(quickNotifWin)) {
     quickNotifWin.destroy();
     quickNotifWin = null;
   }

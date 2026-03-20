@@ -59,9 +59,7 @@ export function registerQuickNotifHotkey(accelerator: string, mainWindow: Browse
     mainWindow.webContents.send('check-lobby-status');
     ipcMain.once('lobby-status-result', (_event: Electron.IpcMainEvent, inLobby: boolean) => {
       if (!inLobby) return;
-      showQuickNotifWindow(mainWindow, currentQuickNotifAccelerator, () => {
-        registerQuickNotifHotkey(accelerator, mainWindow);
-      });
+      showQuickNotifWindow(mainWindow);
     });
   });
 

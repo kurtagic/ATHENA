@@ -1,4 +1,5 @@
 import { BrowserWindow, globalShortcut, ipcMain, screen } from 'electron';
+import { createOverlayWindow, isAlive } from './overlayWindow';
 
 let qcWin: BrowserWindow | null = null;
 let spotterArrowsRegistered = false;
@@ -226,40 +227,26 @@ function buildQuickControlsHTML(): string {
 export function showQuickControlsWindow(
   mainWindow: BrowserWindow,
 ): void {
-  if (qcWin && !qcWin.isDestroyed()) {
+  if (isAlive(qcWin)) {
     qcWin.destroy();
     return;
   }
 
-  const { width: screenW, height: screenH } = screen.getPrimaryDisplay().bounds;
+  const { height: screenH } = screen.getPrimaryDisplay().bounds;
   const winW = 380;
-  const winH = 260;
 
-  qcWin = new BrowserWindow({
+  qcWin = createOverlayWindow(buildQuickControlsHTML(), {
     width: winW,
-    height: winH,
-    x: Math.round((screenW - winW) / 2),
-    y: Math.round(screenH * 0.25),
-    frame: false,
-    transparent: true,
-    alwaysOnTop: true,
-    skipTaskbar: true,
-    resizable: false,
-    focusable: false,
-    show: false,
+    height: 260,
+    position: { x: Math.round((screen.getPrimaryDisplay().bounds.width - winW) / 2), y: Math.round(screenH * 0.25) },
     webPreferences: {
       contextIsolation: false,
       nodeIntegration: true,
     },
   });
 
-  qcWin.setAlwaysOnTop(true, 'screen-saver');
-
-  const html = buildQuickControlsHTML();
-  qcWin.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
-
   qcWin.webContents.once('did-finish-load', () => {
-    if (qcWin && !qcWin.isDestroyed()) {
+    if (isAlive(qcWin)) {
       qcWin.showInactive();
     }
   });
@@ -277,7 +264,7 @@ export function showQuickControlsWindow(
 
   // IPC: renderer replies with data, forward to qc window
   const onDataReply = (_event: Electron.IpcMainEvent, data: any) => {
-    if (qcWin && !qcWin.isDestroyed()) {
+    if (isAlive(qcWin)) {
       qcWin.webContents.send('qc-artillery-data', data);
     }
   };
@@ -304,7 +291,7 @@ export function showQuickControlsWindow(
 
   // IPC: spotter update from renderer — forward to qc window
   const onSpotterUpdate = (_event: Electron.IpcMainEvent, data: any) => {
-    if (qcWin && !qcWin.isDestroyed()) {
+    if (isAlive(qcWin)) {
       qcWin.webContents.send('qc-spotter-update', data);
     }
   };
@@ -312,7 +299,7 @@ export function showQuickControlsWindow(
 
   // IPC: resize window
   const onResize = (_event: Electron.IpcMainEvent, height: number) => {
-    if (qcWin && !qcWin.isDestroyed()) {
+    if (isAlive(qcWin)) {
       qcWin.setSize(winW, Math.min(Math.max(height + 20, 100), 500));
     }
   };
@@ -341,7 +328,7 @@ export function showQuickControlsWindow(
 }
 
 export function destroyQuickControlsWindow(): void {
-  if (qcWin && !qcWin.isDestroyed()) {
+  if (isAlive(qcWin)) {
     qcWin.destroy();
     qcWin = null;
   }
