@@ -122,7 +122,7 @@ function buildQuickControlsHTML(): string {
       'turret-damaged': [165,48,90], 'large-hole': [139,26,26]
     };
 
-    const genericIds = new Set(['afk','ready','holding','standby','withdraw','prepping','engaging','reposition']);
+    const genericIds = new Set(['afk','standby','withdraw','prepping','engaging','reposition']);
 
     function buildStatusGrid(statuses, label) {
       if (!statuses.length) return '';

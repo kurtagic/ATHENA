@@ -11,10 +11,10 @@ export const ALL_CREW_STATUSES: StatusDef[] = [
   { id: 'ready',          label: 'Ready',          color: '#4caf50' },
   { id: 'holding',        label: 'Holding',        color: '#42a5f5' },
   { id: 'standby',        label: 'Standby',        color: '#29b6f6' },
-  { id: 'withdraw',       label: 'Withdraw',       color: '#ffa726' },
+  { id: 'withdraw',       label: 'Withdrawing',    color: '#ffa726' },
   { id: 'prepping',       label: 'Prepping',       color: '#66bb6a' },
-  { id: 'engaging',       label: 'Engaging',       color: '#ef5350' },
-  { id: 'reposition',     label: 'Reposition',     color: '#ffca28' },
+  { id: 'engaging',       label: 'Engaged',        color: '#ef5350' },
+  { id: 'reposition',     label: 'Repositioning',  color: '#ffca28' },
   { id: 'at',             label: 'AT',             color: '#f44336' },
   { id: 'pve',            label: 'PvE',            color: '#7e57c2' },
   { id: 'refuel-rearm',   label: 'Refuel Rearm',   color: '#26c6da' },
@@ -26,7 +26,7 @@ export const ALL_CREW_STATUSES: StatusDef[] = [
   { id: 'large-hole',     label: 'Large Hole',     color: '#d32f2f' },
 ];
 
-const GENERIC_IDS: CrewStatus[] = ['afk', 'ready', 'holding', 'standby', 'withdraw', 'prepping', 'engaging', 'reposition'];
+const GENERIC_IDS: CrewStatus[] = ['afk', 'standby', 'withdraw', 'prepping', 'engaging', 'reposition'];
 
 const EXTRA_BY_TYPE: Record<CrewType, CrewStatus[]> = {
   infantry:  ['at', 'pve'],
