@@ -22,7 +22,7 @@ const NOTES_PIP_HTML = `<!DOCTYPE html>
   }
   .panel {
     display: inline-block;
-    background: rgba(12, 12, 16, 0.85);
+    background: rgba(12, 12, 16, 0.95);
     color: #fff;
     font-family: 'Cascadia Code', 'Consolas', 'SF Mono', monospace;
     font-size: 12px;

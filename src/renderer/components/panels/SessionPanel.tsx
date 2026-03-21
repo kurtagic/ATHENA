@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { Users, Crown, X, Check, Copy, LogOut, Loader2, Volume2, Phone, PhoneOff, Send, Pin, Plus } from 'lucide-react';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useVoiceStore } from '../../stores/voiceStore';
@@ -118,9 +119,10 @@ function MainView() {
 
   return (
     <>
-      <label className="text-[10px] uppercase tracking-[0.12em] text-white/30 font-semibold px-1">
-        Display Name
-      </label>
+      <div className="flex items-center gap-2 mt-1 px-1">
+        <label className="text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--color-gold)] whitespace-nowrap">Display Name</label>
+        <div className="flex-1 h-px bg-gradient-to-r from-[var(--color-gold-dim)] to-transparent" />
+      </div>
       <input
         type="text"
         value={name}
@@ -252,6 +254,30 @@ function LobbyView({
         </button>
       </div>
 
+      {/* Voice + Actions */}
+      <VoiceButton />
+      <div className="flex gap-1.5">
+        <button
+          onClick={() => {
+            if (useVoiceStore.getState().joined) voice.leaveVoice();
+            session.leaveLobby();
+            session.disconnect();
+          }}
+          className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 bg-white/[0.06] hover:bg-white/[0.12] border border-white/10 rounded text-[11px] text-white/60 font-medium transition-colors"
+        >
+          <LogOut size={10} />
+          Leave
+        </button>
+        {isOwner && (
+          <button
+            onClick={() => session.closeLobby()}
+            className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 bg-red-600/30 hover:bg-red-600/50 border border-red-400/20 rounded text-[11px] text-white/60 font-medium transition-colors"
+          >
+            Close Lobby
+          </button>
+        )}
+      </div>
+
       {/* Divider */}
       <div className="h-px bg-white/[0.08] my-1" />
 
@@ -282,13 +308,12 @@ function LobbyView({
       )}
 
       {/* Member list */}
-      <div className="flex items-center gap-1.5 px-1 mt-1">
-        <span className="text-[10px] uppercase tracking-[0.12em] text-white/30 font-semibold">
-          Members
-        </span>
+      <div className="flex items-center gap-2 px-1 mt-1">
+        <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--color-gold)] whitespace-nowrap">Members</span>
         <span className="text-[10px] font-mono font-bold text-white/50 bg-white/[0.08] rounded px-1.5 py-0.5">
           {members.length}/16
         </span>
+        <div className="flex-1 h-px bg-gradient-to-r from-[var(--color-gold-dim)] to-transparent" />
       </div>
       <div className="flex flex-col gap-0.5 max-h-[150px] overflow-y-auto">
         {sortedMembers.map((m) => {
@@ -341,41 +366,16 @@ function LobbyView({
       {/* Crews */}
       <CrewSection memberId={memberId} members={members} />
 
-      {/* Voice */}
-      <VoiceButton />
-
-      {/* Actions */}
-      <div className="flex gap-1.5 mt-1">
-        <button
-          onClick={() => {
-            if (useVoiceStore.getState().joined) voice.leaveVoice();
-            session.leaveLobby();
-            session.disconnect();
-          }}
-          className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 bg-white/[0.06] hover:bg-white/[0.12] border border-white/10 rounded text-[11px] text-white/60 font-medium transition-colors"
-        >
-          <LogOut size={10} />
-          Leave
-        </button>
-        {isOwner && (
-          <button
-            onClick={() => session.closeLobby()}
-            className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 bg-red-600/30 hover:bg-red-600/50 border border-red-400/20 rounded text-[11px] text-white/60 font-medium transition-colors"
-          >
-            Close Lobby
-          </button>
-        )}
-      </div>
-
       {/* Notes */}
       <NotesSection />
 
       {/* Notifications */}
       <div className="h-px bg-white/[0.08] my-1" />
       <div className="flex flex-col gap-1.5">
-        <span className="text-[10px] uppercase tracking-[0.12em] text-white/30 font-semibold px-1">
-          Notifications
-        </span>
+        <div className="flex items-center gap-2 px-1">
+          <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--color-gold)] whitespace-nowrap">Notifications</span>
+          <div className="flex-1 h-px bg-gradient-to-r from-[var(--color-gold-dim)] to-transparent" />
+        </div>
         <div className="relative">
           <textarea
             ref={textareaRef}
@@ -433,10 +433,9 @@ function NotesSection() {
     <>
       <div className="h-px bg-white/[0.08] my-1" />
       <div className="flex flex-col gap-1.5">
-        <div className="flex items-center justify-between px-1">
-          <span className="text-[10px] uppercase tracking-[0.12em] text-white/30 font-semibold">
-            Notes
-          </span>
+        <div className="flex items-center gap-2 px-1">
+          <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--color-gold)] whitespace-nowrap">Notes</span>
+          <div className="flex-1 h-px bg-gradient-to-r from-[var(--color-gold-dim)] to-transparent" />
           <button
             onClick={togglePin}
             className={`p-0.5 transition-all duration-150 ${
@@ -475,7 +474,7 @@ function CrewSection({ memberId, members }: { memberId: string | null; members: 
   const [crewName, setCrewName] = useState('');
   const [crewType, setCrewType] = useState<CrewType>('infantry');
 
-  const TYPE_LABELS: Record<CrewType, string> = { infantry: 'Infantry', air: 'Air', tank: 'Tank', artillery: 'Arty', naval: 'Naval' };
+  const TYPE_LABELS: Record<CrewType, string> = { infantry: 'Infantry', air: 'Air', tank: 'Tank', artillery: 'Artillery', naval: 'Naval' };
   const CREW_TYPE_OPTIONS: CrewType[] = ['infantry', 'air', 'tank', 'artillery', 'naval'];
 
   const togglePin = () => {
@@ -488,6 +487,7 @@ function CrewSection({ memberId, members }: { memberId: string | null; members: 
     if (!crewName.trim()) return;
     session.createCrew(crewName.trim(), crewType);
     setCrewName('');
+    setCrewType('infantry');
     setShowCreate(false);
   };
 
@@ -497,10 +497,11 @@ function CrewSection({ memberId, members }: { memberId: string | null; members: 
     <>
       <div className="h-px bg-white/[0.08] my-1" />
       <div className="flex flex-col gap-1">
-        <div className="flex items-center gap-1.5 px-1">
-          <span className="text-[11px] uppercase tracking-[0.12em] text-white/30 font-semibold flex-1">
+        <div className="flex items-center gap-2 px-1">
+          <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--color-gold)] whitespace-nowrap">
             {myCrew ? 'Your Crew' : 'Crews'}
           </span>
+          <div className="flex-1 h-px bg-gradient-to-r from-[var(--color-gold-dim)] to-transparent" />
           <button
             onClick={togglePin}
             className={`p-0.5 transition-all duration-150 ${
@@ -512,52 +513,7 @@ function CrewSection({ memberId, members }: { memberId: string | null; members: 
           >
             <Pin size={13} fill={pinned ? 'currentColor' : 'none'} />
           </button>
-          {!myCrew && (
-            <button
-              onClick={() => setShowCreate(!showCreate)}
-              className="p-0.5 text-white/30 hover:text-[var(--color-gold)] transition-colors"
-              title="Create crew"
-            >
-              <Plus size={14} />
-            </button>
-          )}
         </div>
-
-        {/* Create form */}
-        {showCreate && !myCrew && (
-          <div className="flex flex-col gap-1.5 px-1 py-2 bg-white/[0.04] rounded">
-            <input
-              type="text"
-              value={crewName}
-              onChange={(e) => setCrewName(e.target.value.slice(0, 24))}
-              className="w-full bg-white/[0.06] border border-white/10 rounded px-2.5 py-1.5 text-[13px] text-white/80 outline-none focus:border-white/25"
-              placeholder="Crew name"
-              maxLength={24}
-            />
-            <div className="flex flex-wrap gap-1">
-              {CREW_TYPE_OPTIONS.map((t) => (
-                <button
-                  key={t}
-                  onClick={() => setCrewType(t)}
-                  className={`px-2.5 py-1 rounded text-[11px] font-medium border transition-colors ${
-                    crewType === t
-                      ? 'border-[var(--color-gold)]/40 text-[var(--color-gold)] bg-[var(--color-gold)]/10'
-                      : 'border-white/10 text-white/40 hover:text-white/60'
-                  }`}
-                >
-                  {TYPE_LABELS[t]}
-                </button>
-              ))}
-            </div>
-            <button
-              onClick={handleCreate}
-              disabled={!crewName.trim()}
-              className="flex items-center justify-center gap-1.5 px-2.5 py-1.5 bg-blue-600/40 hover:bg-blue-600/60 disabled:opacity-30 disabled:cursor-not-allowed border border-blue-400/20 rounded text-[13px] text-white font-medium transition-colors"
-            >
-              Create
-            </button>
-          </div>
-        )}
 
         {/* Own crew card */}
         {myCrew && (
@@ -566,8 +522,14 @@ function CrewSection({ memberId, members }: { memberId: string | null; members: 
               <span className="text-[14px] font-semibold text-white/90 flex-1 truncate">{myCrew.name}</span>
               <span className="text-[12px] text-white/30">{TYPE_LABELS[myCrew.type]}</span>
               <span
-                className="px-2 py-0.5 rounded-full text-[11px] font-semibold text-white flex-shrink-0"
-                style={{ background: getStatusDef(myCrew.status).color }}
+                className="px-2.5 py-1 rounded-md text-[11px] font-bold uppercase tracking-[0.1em] flex-shrink-0"
+                style={{
+                  background: getStatusDef(myCrew.status).color + '26',
+                  borderWidth: 1,
+                  borderStyle: 'solid',
+                  borderColor: getStatusDef(myCrew.status).color + '80',
+                  color: getStatusDef(myCrew.status).color,
+                }}
               >{getStatusDef(myCrew.status).label}</span>
             </div>
             {myCrew.memberIds.map((id) => (
@@ -616,8 +578,14 @@ function CrewSection({ memberId, members }: { memberId: string | null; members: 
                 <span className="text-[11px] text-white/25">{c.memberIds.length}/5</span>
                 <span className="text-[11px] text-white/25">{TYPE_LABELS[c.type]}</span>
                 <span
-                  className="px-1.5 py-0.5 rounded-full text-[10px] font-semibold text-white flex-shrink-0"
-                  style={{ background: getStatusDef(c.status).color }}
+                  className="px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-[0.1em] flex-shrink-0"
+                  style={{
+                    background: getStatusDef(c.status).color + '26',
+                    borderWidth: 1,
+                    borderStyle: 'solid',
+                    borderColor: getStatusDef(c.status).color + '80',
+                    color: getStatusDef(c.status).color,
+                  }}
                 >{getStatusDef(c.status).label}</span>
                 {c.memberIds.length < 5 && (
                   <button
@@ -630,6 +598,64 @@ function CrewSection({ memberId, members }: { memberId: string | null; members: 
               </div>
             ))}
           </div>
+        )}
+
+        {!myCrew && (
+          <button
+            onClick={() => setShowCreate(true)}
+            className="flex items-center justify-center gap-1.5 w-full px-2.5 py-1.5 bg-[var(--color-gold)]/10 hover:bg-[var(--color-gold)]/20 border border-[var(--color-gold)]/20 rounded text-[12px] text-[var(--color-gold)] font-medium transition-colors"
+          >
+            <Plus size={13} />
+            Create Crew
+          </button>
+        )}
+
+        {showCreate && !myCrew && createPortal(
+          <div
+            className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40"
+            onMouseDown={(e) => { if (e.target === e.currentTarget) { setShowCreate(false); setCrewName(''); setCrewType('infantry'); } }}
+          >
+            <div className="w-72 flex flex-col gap-2.5 p-4 rounded-lg border border-[var(--color-border-glass)] bg-[#1a1a1e] shadow-2xl">
+              <div className="flex items-center justify-between">
+                <span className="text-[12px] font-semibold text-white/60 uppercase tracking-wider">New Crew</span>
+                <button onClick={() => { setShowCreate(false); setCrewName(''); setCrewType('infantry'); }} className="p-0.5 text-white/30 hover:text-white/60 transition-colors">
+                  <X size={14} />
+                </button>
+              </div>
+              <input
+                type="text"
+                value={crewName}
+                onChange={(e) => setCrewName(e.target.value.slice(0, 24))}
+                className="w-full bg-white/[0.06] border border-white/10 rounded px-2.5 py-1.5 text-[13px] text-white/80 outline-none focus:border-white/25"
+                placeholder="Crew name"
+                maxLength={24}
+                autoFocus
+              />
+              <div className="flex flex-wrap gap-1">
+                {CREW_TYPE_OPTIONS.map((t) => (
+                  <button
+                    key={t}
+                    onClick={() => setCrewType(t)}
+                    className={`px-2.5 py-1 rounded text-[11px] font-medium border transition-colors ${
+                      crewType === t
+                        ? 'border-[var(--color-gold)]/40 text-[var(--color-gold)] bg-[var(--color-gold)]/10'
+                        : 'border-white/10 text-white/40 hover:text-white/60'
+                    }`}
+                  >
+                    {TYPE_LABELS[t]}
+                  </button>
+                ))}
+              </div>
+              <button
+                onClick={handleCreate}
+                disabled={!crewName.trim()}
+                className="flex items-center justify-center gap-1.5 px-2.5 py-1.5 bg-[var(--color-gold)]/20 hover:bg-[var(--color-gold)]/30 disabled:opacity-30 disabled:cursor-not-allowed border border-[var(--color-gold)]/30 rounded text-[13px] text-[var(--color-gold)] font-medium transition-colors"
+              >
+                Create
+              </button>
+            </div>
+          </div>,
+          document.body
         )}
 
         {!myCrew && crews.length === 0 && !showCreate && (

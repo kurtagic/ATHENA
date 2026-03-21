@@ -38,18 +38,19 @@ function buildQuickControlsHTML(): string {
   body {
     display: flex; align-items: flex-start; justify-content: center;
     width: 100vw; height: 100vh;
-    font-family: 'Segoe UI', system-ui, sans-serif;
+    font-family: 'Cascadia Code', 'Consolas', 'SF Mono', monospace;
     color: #e0e0e0;
   }
   .container {
-    background: rgba(14, 14, 18, 0.96);
+    background: rgba(12, 12, 16, 0.95);
     border: 1px solid rgba(255, 213, 79, 0.2);
-    border-radius: 12px;
+    border-radius: 8px;
     padding: 16px;
     min-width: 300px;
     max-width: 360px;
     box-shadow: 0 0 24px rgba(0,0,0,0.6), 0 0 12px rgba(255,213,79,0.06);
     -webkit-app-region: drag;
+    -webkit-font-smoothing: antialiased;
   }
   button, .btn, .back-btn, .item-btn {
     -webkit-app-region: no-drag;
@@ -60,46 +61,54 @@ function buildQuickControlsHTML(): string {
     text-align: center; margin-bottom: 12px;
   }
   .back-btn {
-    background: none; border: none; color: rgba(255,255,255,0.35);
+    background: rgba(255, 213, 79, 0.1); border: 1px solid rgba(255, 213, 79, 0.25);
+    border-radius: 6px; color: rgba(255, 213, 79, 0.7);
     cursor: pointer; font-size: 14px; padding: 2px 4px; margin-right: 4px;
-    transition: color 0.15s;
+    transition: background 0.15s, color 0.15s;
   }
-  .back-btn:hover { color: rgba(255,255,255,0.7); }
+  .back-btn:hover { background: rgba(255, 213, 79, 0.2); color: rgba(255, 213, 79, 0.5); }
   .header-row { display: flex; align-items: center; margin-bottom: 12px; }
   .hex-label {
     font-size: 10px; font-weight: 700; text-transform: uppercase;
     letter-spacing: 0.08em; color: rgba(255,255,255,0.25); padding: 0 4px; margin-bottom: 4px;
   }
   .item-btn {
-    display: block; width: 100%; padding: 8px 12px; border-radius: 8px;
-    border: 1px solid rgba(255,255,255,0.08);
+    display: block; width: 100%; padding: 8px 12px; border-radius: 6px;
+    border: 1px solid rgba(255, 213, 79, 0.15);
     background: rgba(255,255,255,0.02); color: rgba(255,255,255,0.75);
-    cursor: pointer; font-size: 12px; font-weight: 500;
+    cursor: pointer; font-size: 11px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.1em;
     text-align: left; margin-bottom: 4px;
     transition: background 0.15s, border-color 0.15s;
   }
-  .item-btn:hover { background: rgba(255,255,255,0.06); border-color: rgba(255,213,79,0.25); }
+  .item-btn:hover { background: rgba(255, 213, 79, 0.15); border-color: rgba(255, 213, 79, 0.5); }
   .empty { text-align: center; color: rgba(255,255,255,0.25); font-size: 12px; padding: 16px 0; }
-  .hint { text-align: center; font-size: 10px; color: rgba(255,255,255,0.18); margin-top: 8px; }
+  .hint { text-align: center; font-size: 10px; color: rgba(255, 213, 79, 0.3); letter-spacing: 0.05em; margin-top: 8px; }
   .hex-group { margin-bottom: 8px; }
   .section-header {
-    font-size: 9px; font-weight: 700; text-transform: uppercase;
-    letter-spacing: 0.1em; color: rgba(255,255,255,0.25);
+    display: flex; align-items: center; gap: 8px;
+    font-size: 10px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.12em; color: #ffd54f;
     margin-bottom: 6px; padding: 0 2px;
+  }
+  .section-header::after {
+    content: ''; flex: 1; height: 1px;
+    background: linear-gradient(to right, rgba(255, 213, 79, 0.15), transparent);
   }
   .pin-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 4px; margin-bottom: 8px; }
   .pin-btn {
     display: flex; align-items: center; justify-content: center;
-    border-radius: 20px; padding: 6px 10px; font-size: 11px; font-weight: 600;
-    border: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.04);
+    border-radius: 6px; padding: 6px 10px; font-size: 11px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.1em;
+    border: 1px solid rgba(255, 213, 79, 0.15); background: rgba(255,255,255,0.04);
     color: rgba(255,255,255,0.6); cursor: pointer;
     transition: background 0.15s, border-color 0.15s, color 0.15s;
     -webkit-app-region: no-drag;
   }
-  .pin-btn:hover { background: rgba(255,255,255,0.08); border-color: rgba(255,213,79,0.25); }
+  .pin-btn:hover { background: rgba(255, 213, 79, 0.15); border-color: rgba(255, 213, 79, 0.5); }
   .pin-btn.active {
-    background: rgba(46,125,50,0.7); border-color: rgba(46,125,50,0.9);
-    color: #fff;
+    background: rgba(16, 185, 129, 0.15); border-color: rgba(16, 185, 129, 0.5);
+    color: #34d399;
   }
 
   /* HUD styles */
@@ -169,24 +178,27 @@ function buildQuickControlsHTML(): string {
     }
 
     const statusColors = {
-      afk: '#4b5a61', ready: '#2e7d32', holding: '#2a5da8', standby: '#1a7a9e',
-      withdraw: '#b5721a', prepping: '#3d7a40', engaging: '#b03030', reposition: '#b5901a',
-      at: '#a52a2a', pve: '#553a8a', 'refuel-rearm': '#1a8a96', downed: '#a52525',
-      repairing: '#7a3490', 'armour-repair': '#5e483d', 'out-of-ammo': '#b5502a',
-      'turret-damaged': '#a5305a', 'large-hole': '#8b1a1a'
+      afk: [75,90,97], ready: [46,125,50], holding: [42,93,168], standby: [26,122,158],
+      withdraw: [181,114,26], prepping: [61,122,64], engaging: [176,48,48], reposition: [181,144,26],
+      at: [165,42,42], pve: [85,58,138], 'refuel-rearm': [26,138,150], downed: [165,37,37],
+      repairing: [122,52,144], 'armour-repair': [94,72,61], 'out-of-ammo': [181,80,42],
+      'turret-damaged': [165,48,90], 'large-hole': [139,26,26]
     };
 
     const genericIds = new Set(['afk','ready','holding','standby','withdraw','prepping','engaging','reposition']);
 
     function buildStatusGrid(statuses, label) {
       if (!statuses.length) return '';
-      let html = '<div style="font-size:9px;color:rgba(255,255,255,0.25);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:3px;padding:0 2px">' + label + '</div>' +
+      let html = '<div style="font-size:10px;color:rgba(255,213,79,0.5);font-weight:700;text-transform:uppercase;letter-spacing:0.12em;margin-bottom:3px;padding:0 2px">' + label + '</div>' +
         '<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:6px">';
       statuses.forEach(function(s) {
         const active = s.id === crewData.currentStatus;
-        const color = statusColors[s.id] || '#888';
-        const activeStyle = active ? 'border-color:#ffd54f;box-shadow:0 0 8px rgba(255,213,79,0.4),inset 0 0 4px rgba(255,213,79,0.15)' : 'border-color:transparent';
-        html += '<button class="item-btn" data-status="' + s.id + '" style="text-align:center;display:flex;align-items:center;justify-content:center;border-radius:20px;padding:5px 10px;font-size:11px;font-weight:600;color:#000;background:' + color + ';' + activeStyle + '">' +
+        const rgb = statusColors[s.id] || [136,136,136];
+        const r = rgb[0], g = rgb[1], b = rgb[2];
+        const bg = active ? 'rgba(' + r + ',' + g + ',' + b + ',0.35)' : 'rgba(' + r + ',' + g + ',' + b + ',0.15)';
+        const textColor = active ? 'rgba(' + Math.min(r+80,255) + ',' + Math.min(g+80,255) + ',' + Math.min(b+80,255) + ',1)' : 'rgba(' + Math.min(r+60,255) + ',' + Math.min(g+60,255) + ',' + Math.min(b+60,255) + ',0.9)';
+        const borderColor = active ? 'rgba(' + r + ',' + g + ',' + b + ',0.9)' : 'rgba(' + r + ',' + g + ',' + b + ',0.5)';
+        html += '<button class="item-btn" data-status="' + s.id + '" style="text-align:center;display:flex;align-items:center;justify-content:center;border-radius:6px;padding:5px 10px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:' + textColor + ';background:' + bg + ';border-color:' + borderColor + '">' +
           s.label + '</button>';
       });
       html += '</div>';

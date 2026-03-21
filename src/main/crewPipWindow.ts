@@ -39,7 +39,7 @@ const CREW_PIP_HTML = `<!DOCTYPE html>
   body { padding: 4px; }
   .panel {
     display: inline-block;
-    background: rgba(12, 12, 16, 0.85);
+    background: rgba(12, 12, 16, 0.95);
     color: #fff;
     font-family: 'Cascadia Code', 'Consolas', 'SF Mono', monospace;
     font-size: 14px;
@@ -80,13 +80,15 @@ const CREW_PIP_HTML = `<!DOCTYPE html>
   }
   .status-pill {
     display: inline-block;
-    padding: 3px 10px;
-    border-radius: 9999px;
-    font-size: 12px;
-    font-weight: 600;
-    color: #fff;
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
     flex-shrink: 0;
     white-space: nowrap;
+    border: 1px solid;
   }
   .empty {
     color: rgba(255, 255, 255, 0.25);
@@ -119,7 +121,7 @@ function buildCrewListScript(crews: any[]): string {
         const label = c.status.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
         return '<div class="crew-row">' +
           '<span class="crew-name">' + c.name + '</span>' +
-          '<span class="status-pill" style="background:' + color + '">' + label + '</span>' +
+          '<span class="status-pill" style="background:' + color + '26;border-color:' + color + '80;color:' + color + '">' + label + '</span>' +
         '</div>';
       }).join('');
     }
