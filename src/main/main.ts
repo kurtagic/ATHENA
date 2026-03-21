@@ -126,10 +126,10 @@ ipcMain.on('show-command-banner', (_event, command: string) => {
   }
 });
 
-ipcMain.on('show-custom-notification', (_event, text: string, senderName: string) => {
+ipcMain.on('show-custom-notification', (_event, text: string, senderName: string, targetKind?: string, senderRole?: string, targetLabel?: string) => {
   if (typeof text === 'string' && text.length > 0 && typeof senderName === 'string') {
     if (mainWindow && !mainWindow.isDestroyed() && mainWindow.getOpacity() === 0) {
-      showNotificationWindow(text, senderName);
+      showNotificationWindow(text, senderName, targetKind, senderRole, targetLabel);
     }
   }
 });

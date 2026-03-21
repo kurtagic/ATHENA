@@ -12,6 +12,7 @@ interface SessionState {
   isOwner: boolean;
   ownerId: string | null;
   members: LobbyMember[];
+  officerIds: string[];
   pendingApprovals: PendingJoin[];
   error: string | null;
 
@@ -22,6 +23,8 @@ interface SessionState {
   setIsOwner: (isOwner: boolean) => void;
   setOwnerId: (id: string | null) => void;
   setMembers: (members: LobbyMember[]) => void;
+  setOfficerIds: (ids: string[]) => void;
+  updateOfficer: (memberId: string, officer: boolean) => void;
   setPendingApprovals: (pending: PendingJoin[]) => void;
   addMember: (member: LobbyMember) => void;
   removeMember: (memberId: string) => void;
@@ -38,6 +41,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   isOwner: false,
   ownerId: null,
   members: [],
+  officerIds: [],
   pendingApprovals: [],
   error: null,
 
@@ -50,6 +54,12 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     set({ ownerId, isOwner: ownerId === get().memberId });
   },
   setMembers: (members) => set({ members }),
+  setOfficerIds: (officerIds) => set({ officerIds }),
+  updateOfficer: (memberId, officer) => set((s) => ({
+    officerIds: officer
+      ? [...s.officerIds, memberId]
+      : s.officerIds.filter((id) => id !== memberId),
+  })),
   setPendingApprovals: (pendingApprovals) => set({ pendingApprovals }),
   addMember: (member) => set((s) => ({ members: [...s.members, member] })),
   removeMember: (memberId) => set((s) => ({
@@ -64,6 +74,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     isOwner: false,
     ownerId: null,
     members: [],
+    officerIds: [],
     pendingApprovals: [],
     error: null,
   }),

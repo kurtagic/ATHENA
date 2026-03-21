@@ -271,11 +271,28 @@ function routeMessage(msg: ServerMessage): void {
     case 'custom-notification': {
       const notifPayload = (msg as any).payload ?? msg;
       const notifSenderId = (msg as any).senderId;
-      const members = useSessionStore.getState().members;
-      const sender = members.find((m) => m.id === notifSenderId);
+      const store = useSessionStore.getState();
+      const sender = store.members.find((m) => m.id === notifSenderId);
       const senderName = sender?.displayName ?? 'Unknown';
-      useNotificationStore.getState().showNotification(notifPayload.text, senderName);
-      window.athena.showCustomNotification(notifPayload.text, senderName);
+      const target = notifPayload.target ?? { kind: 'everyone' };
+      const targetKind = target.kind as 'everyone' | 'officers' | 'crew';
+
+      // Determine sender role
+      const senderRole = notifSenderId === store.ownerId ? 'owner' as const
+        : store.officerIds.includes(notifSenderId) ? 'officer' as const
+        : undefined;
+
+      // Determine target label
+      let targetLabel = 'Everyone';
+      if (targetKind === 'officers') targetLabel = 'Officers';
+      else if (targetKind === 'crew' && target.crewId) {
+        const crews = useCrewStore.getState().crews;
+        const crew = crews.find((c: any) => c.id === target.crewId);
+        targetLabel = crew?.name ?? 'Crew';
+      }
+
+      useNotificationStore.getState().showNotification(notifPayload.text, senderName, { targetKind, targetLabel, senderRole });
+      window.athena.showCustomNotification(notifPayload.text, senderName, targetKind, senderRole, targetLabel);
       break;
     }
   }

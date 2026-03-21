@@ -89,8 +89,10 @@ export interface AthenaAPI {
   setSettings: (partial: SettingsPartial) => Promise<{ settings: Settings; error?: string }>;
   updatePinnedArtillery: (data: PinnedSolution[]) => void;
   showCommandBanner: (command: 'fire' | 'stop') => void;
-  showCustomNotification: (text: string, senderName: string) => void;
-  onSendQuickNotification: (callback: (text: string) => void) => void;
+  showCustomNotification: (text: string, senderName: string, targetKind?: string, senderRole?: string, targetLabel?: string) => void;
+  onSendQuickNotification: (callback: (data: { text: string; target?: { kind: string; crewId?: string } }) => void) => void;
+  onRequestNotifContext: (callback: () => void) => void;
+  sendNotifContextReply: (data: { isOfficer: boolean; crews: { id: string; name: string }[] }) => void;
   onCheckLobbyStatus: (callback: () => void) => void;
   sendLobbyStatusResult: (inLobby: boolean) => void;
   togglePip: (show: boolean) => void;

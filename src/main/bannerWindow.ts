@@ -117,6 +117,20 @@ function getNotifHTML(): string {
     animation: notif-enter 3s ease-out forwards;
     max-width: 500px;
   }
+  .card-officers {
+    border-color: rgba(192, 132, 252, 0.4);
+    background: linear-gradient(180deg, rgba(32, 16, 48, 0.85) 0%, rgba(18, 8, 32, 0.92) 100%);
+    box-shadow: 0 0 20px rgba(192, 132, 252, 0.15), 0 4px 16px rgba(0, 0, 0, 0.4);
+  }
+  .card-officers .sender { color: rgba(192, 132, 252, 0.6); }
+  .card-officers .text { color: #c084fc; }
+  .card-crew {
+    border-color: rgba(248, 113, 113, 0.4);
+    background: linear-gradient(180deg, rgba(48, 16, 16, 0.85) 0%, rgba(32, 8, 8, 0.92) 100%);
+    box-shadow: 0 0 20px rgba(248, 113, 113, 0.15), 0 4px 16px rgba(0, 0, 0, 0.4);
+  }
+  .card-crew .sender { color: rgba(248, 113, 113, 0.6); }
+  .card-crew .text { color: #f87171; }
   .sender {
     font-family: 'Segoe UI', system-ui, sans-serif;
     font-size: 10px;
@@ -125,7 +139,12 @@ function getNotifHTML(): string {
     color: rgba(255, 213, 79, 0.6);
     font-weight: 600;
     margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
   }
+  .arrow { font-size: 14px; opacity: 0.5; }
+  .role-icon { font-size: 10px; }
   .text {
     font-family: 'Segoe UI', system-ui, sans-serif;
     font-size: 24px;
@@ -142,11 +161,16 @@ function getNotifHTML(): string {
   }
 </style></head><body>
 <script>
-  function addNotification(id, text, senderName) {
+  function addNotification(id, text, senderName, targetKind, senderRole, targetLabel) {
     const card = document.createElement('div');
-    card.className = 'card';
+    var cls = 'card';
+    if (targetKind === 'officers') cls += ' card-officers';
+    else if (targetKind === 'crew') cls += ' card-crew';
+    card.className = cls;
     card.dataset.id = id;
-    card.innerHTML = '<div class="sender">' + esc(senderName) + '</div><div class="text">' + esc(text) + '</div>';
+    var star = (senderRole === 'owner' || senderRole === 'officer') ? '<span class="role-icon">\u2605</span> ' : '';
+    var arrow = (targetLabel && targetKind !== 'everyone') ? ' <span class="arrow">\u2192</span> ' + esc(targetLabel) : '';
+    card.innerHTML = '<div class="sender">' + star + esc(senderName) + arrow + '</div><div class="text">' + esc(text) + '</div>';
     document.body.appendChild(card);
   }
   function removeNotification(id) {
@@ -202,16 +226,19 @@ function removeNotif(id: number): void {
   }
 }
 
-export function showNotificationWindow(text: string, senderName: string): void {
+export function showNotificationWindow(text: string, senderName: string, targetKind?: string, senderRole?: string, targetLabel?: string): void {
   ensureNotifWindow();
 
   const id = ++notifId;
   const escaped = (s: string) => JSON.stringify(s);
+  const tkArg = targetKind ? escaped(targetKind) : 'undefined';
+  const srArg = senderRole ? escaped(senderRole) : 'undefined';
+  const tlArg = targetLabel ? escaped(targetLabel) : 'undefined';
 
   const ready = () => {
     if (isAlive(notifWin)) {
       notifWin.webContents.executeJavaScript(
-        `addNotification(${id}, ${escaped(text)}, ${escaped(senderName)})`
+        `addNotification(${id}, ${escaped(text)}, ${escaped(senderName)}, ${tkArg}, ${srArg}, ${tlArg})`
       ).catch(() => {});
     }
   };

@@ -37,11 +37,22 @@ export function useGlobalKeyboard(mapRef: React.MutableRefObject<maplibregl.Map 
     });
   }, []);
 
+  // Reply to notif context requests from main process
+  useEffect(() => {
+    window.athena.onRequestNotifContext(() => {
+      const store = useSessionStore.getState();
+      const isOfficer = store.officerIds.includes(store.memberId!);
+      const crews = useCrewStore.getState().crews.map(c => ({ id: c.id, name: c.name }));
+      window.athena.sendNotifContextReply({ isOfficer, crews });
+    });
+  }, []);
+
   // Handle quick notification sends from the input window
   useEffect(() => {
-    window.athena.onSendQuickNotification((text: string) => {
+    window.athena.onSendQuickNotification((data) => {
       if (useSessionStore.getState().lobbyId) {
-        session.sendCustomNotification(text);
+        const target = data.target as import('../multiplayer/protocol').NotificationTarget | undefined;
+        session.sendCustomNotification(data.text, target);
       }
     });
   }, []);

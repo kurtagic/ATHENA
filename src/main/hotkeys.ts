@@ -59,7 +59,11 @@ export function registerQuickNotifHotkey(accelerator: string, mainWindow: Browse
     mainWindow.webContents.send('check-lobby-status');
     ipcMain.once('lobby-status-result', (_event: Electron.IpcMainEvent, inLobby: boolean) => {
       if (!inLobby) return;
-      showQuickNotifWindow(mainWindow);
+      // Request notif context (officer status, crews) from renderer
+      mainWindow.webContents.send('request-notif-context');
+      ipcMain.once('notif-context-reply', (_ev: Electron.IpcMainEvent, context: { isOfficer: boolean; crews: { id: string; name: string }[] }) => {
+        showQuickNotifWindow(mainWindow, context);
+      });
     });
   });
 

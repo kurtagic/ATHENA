@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Users, Crown, X, Check, Copy, LogOut, Loader2, Volume2, Phone, PhoneOff, Send, Pin, Plus } from 'lucide-react';
+import { Users, Crown, X, Check, Copy, LogOut, Loader2, Volume2, Phone, PhoneOff, Pin, Plus, Star } from 'lucide-react';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useVoiceStore } from '../../stores/voiceStore';
 import { useSettingsStore } from '../../stores/settingsStore';
@@ -25,6 +25,7 @@ export function SessionPanel() {
   const isOwner = useSessionStore((s) => s.isOwner);
   const ownerId = useSessionStore((s) => s.ownerId);
   const memberId = useSessionStore((s) => s.memberId);
+  const officerIds = useSessionStore((s) => s.officerIds);
   const pendingApprovals = useSessionStore((s) => s.pendingApprovals);
   const error = useSessionStore((s) => s.error);
 
@@ -61,6 +62,7 @@ export function SessionPanel() {
             isOwner={isOwner}
             ownerId={ownerId}
             memberId={memberId}
+            officerIds={officerIds}
             pendingApprovals={pendingApprovals}
           />
         )}
@@ -192,38 +194,22 @@ function LobbyView({
   isOwner,
   ownerId,
   memberId,
+  officerIds,
   pendingApprovals,
 }: {
   lobbyId: string;
   lobbyName: string | null;
-  members: { id: string; displayName: string; voiceEnabled: boolean; colorIndex: number }[];
+  members: { id: string; displayName: string; voiceEnabled: boolean; colorIndex: number; connectedAt: number }[];
   isOwner: boolean;
   ownerId: string | null;
   memberId: string | null;
+  officerIds: string[];
   pendingApprovals: { requestId: string; displayName: string }[];
 }) {
   const [copied, setCopied] = useState(false);
-  const [notifText, setNotifText] = useState('');
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const voicePeers = useVoiceStore((s) => s.peers);
   const tttActive = useVoiceStore((s) => s.tttActive);
   const crews = useCrewStore((s) => s.crews);
-
-  const canSend = notifText.trim().length > 0;
-
-  const handleSendNotification = () => {
-    if (!canSend) return;
-    session.sendCustomNotification(notifText.trim());
-    setNotifText('');
-    textareaRef.current?.focus();
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSendNotification();
-    }
-  };
 
   const copyCode = () => {
     navigator.clipboard.writeText(lobbyId);
@@ -233,10 +219,17 @@ function LobbyView({
 
   const voiceJoined = useVoiceStore((s) => s.joined);
 
-  // Sort members: owner first, then rest in original order
+  const officerSet = new Set(officerIds);
+
+  // Sort members: owner first, then officers (by connectedAt), then regular members
   const sortedMembers = [...members].sort((a, b) => {
     if (a.id === ownerId) return -1;
     if (b.id === ownerId) return 1;
+    const aOfficer = officerSet.has(a.id);
+    const bOfficer = officerSet.has(b.id);
+    if (aOfficer && !bOfficer) return -1;
+    if (!aOfficer && bOfficer) return 1;
+    if (aOfficer && bOfficer) return a.connectedAt - b.connectedAt;
     return 0;
   });
 
@@ -319,6 +312,7 @@ function LobbyView({
         {sortedMembers.map((m) => {
           const isSelf = m.id === memberId;
           const isMemberOwner = m.id === ownerId;
+          const isOfficer = officerSet.has(m.id);
           const voicePeer = voicePeers.find(p => p.id === m.id);
           const isInVoice = isSelf ? voiceJoined : !!voicePeer;
           const isSpeaking = isSelf ? tttActive : voicePeer?.speaking;
@@ -326,6 +320,7 @@ function LobbyView({
           return (
             <div key={m.id} className="flex items-center gap-1.5 px-2 py-1 rounded hover:bg-white/[0.04]">
               {isMemberOwner && <Crown size={11} className="text-amber-400 shrink-0 fill-amber-400" />}
+              {isOfficer && !isMemberOwner && <Star size={11} className="text-amber-400 shrink-0 fill-amber-400" />}
               <span
                 className={`text-[13px] flex-1 truncate ${isSelf ? 'font-medium' : ''}`}
                 style={{ color: colorByIndex(m.colorIndex) }}
@@ -339,6 +334,15 @@ function LobbyView({
                   size={11}
                   className={`shrink-0 ${isSpeaking ? 'text-emerald-400 animate-pulse' : 'text-white/60'}`}
                 />
+              )}
+              {isOwner && !isSelf && !isMemberOwner && (
+                <button
+                  onClick={() => session.setOfficer(m.id, !isOfficer)}
+                  className={`p-1 transition-colors ${isOfficer ? 'text-amber-400 hover:text-white/40' : 'text-white/20 hover:text-amber-400'}`}
+                  title={isOfficer ? 'Remove officer' : 'Make officer'}
+                >
+                  <Star size={12} />
+                </button>
               )}
               {isOwner && !isSelf && (
                 <>
@@ -371,37 +375,21 @@ function LobbyView({
 
       {/* Notifications */}
       <div className="h-px bg-white/[0.08] my-1" />
-      <div className="flex flex-col gap-1.5">
-        <div className="flex items-center gap-2 px-1">
-          <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--color-gold)] whitespace-nowrap">Notifications</span>
-          <div className="flex-1 h-px bg-gradient-to-r from-[var(--color-gold-dim)] to-transparent" />
-        </div>
-        <div className="relative">
-          <textarea
-            ref={textareaRef}
-            rows={4}
-            maxLength={256}
-            value={notifText}
-            onChange={(e) => setNotifText(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Broadcast message..."
-            className="w-full resize-none rounded-[var(--radius-sm)] border border-[var(--color-border-tactical)] bg-[var(--color-surface-inset)] text-[12px] text-white/80 placeholder:text-white/25 px-2.5 py-2 outline-none transition-colors duration-150 focus:border-[var(--color-border-focus)]"
-          />
-          <span className="absolute bottom-1.5 right-2 text-[9px] text-white/20">
-            {notifText.length}/256
-          </span>
-        </div>
-        <button
-          onClick={handleSendNotification}
-          disabled={!canSend}
-          className="flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-[var(--radius-sm)] border border-[var(--color-gold)]/30 text-[var(--color-gold)] text-[11px] font-bold uppercase tracking-[0.1em] cursor-pointer transition-all duration-150 hover:bg-[var(--color-gold-dim)] hover:border-[var(--color-gold)] disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:border-[var(--color-gold)]/30"
-          style={{ background: 'rgba(255, 213, 79, 0.06)' }}
-        >
-          <Send size={11} />
-          Send
-        </button>
+      <div className="flex items-center gap-2 px-1 py-1">
+        <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--color-gold)] whitespace-nowrap">Notifications</span>
+        <div className="flex-1 h-px bg-gradient-to-r from-[var(--color-gold-dim)] to-transparent" />
       </div>
+      <NotifKeybindHint />
     </>
+  );
+}
+
+function NotifKeybindHint() {
+  const notifKey = useSettingsStore((s) => s.settings?.keybinds.quickNotification ?? 'F6');
+  return (
+    <span className="text-[11px] text-white/30 px-2 py-0.5">
+      Press <span className="text-white/50 font-medium">{acceleratorToDisplay(notifKey)}</span> to send a notification
+    </span>
   );
 }
 

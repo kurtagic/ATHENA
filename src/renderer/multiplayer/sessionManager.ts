@@ -80,6 +80,7 @@ export class SessionManager {
     const store = useSessionStore.getState();
     store.setLobby(null, null);
     store.setMembers([]);
+    store.setOfficerIds([]);
     store.setPendingApprovals([]);
     store.setIsOwner(false);
     store.setOwnerId(null);
@@ -104,6 +105,10 @@ export class SessionManager {
 
   transferOwnership(targetMemberId: string): void {
     this.send({ type: 'transfer-ownership', targetMemberId });
+  }
+
+  setOfficer(memberId: string, officer: boolean): void {
+    this.send({ type: 'set-officer', memberId, officer });
   }
 
   // ── Entity sync ──
@@ -154,8 +159,8 @@ export class SessionManager {
 
   // ── Custom notifications ──
 
-  sendCustomNotification(text: string): void {
-    this.send({ type: 'custom-notification', text });
+  sendCustomNotification(text: string, target?: import('./protocol').NotificationTarget): void {
+    this.send({ type: 'custom-notification', text, ...(target ? { target } : {}) });
   }
 
   // ── Crew methods ──
@@ -244,12 +249,14 @@ export class SessionManager {
         store.setLobby(m.lobbyId, m.name);
         store.setIsOwner(true);
         store.setOwnerId(store.memberId);
+        store.setOfficerIds([store.memberId!]);
         store.setMembers([{
           id: store.memberId!,
           displayName: store.displayName,
           connectedAt: Date.now(),
           voiceEnabled: false,
           colorIndex: 0,
+          isOfficer: true,
         }]);
         debugLog('session', `Lobby created: ${m.name}`);
         break;
@@ -270,10 +277,14 @@ export class SessionManager {
         store.removeMember(m.memberId);
         debugLog('session', `${m.memberId} left`);
         break;
+      case 'officer-changed':
+        store.updateOfficer(m.memberId, m.officer);
+        break;
       case 'peer-kicked':
         if (m.memberId === store.memberId) {
           store.setLobby(null, null);
           store.setMembers([]);
+          store.setOfficerIds([]);
           store.setPendingApprovals([]);
           store.setError('You were kicked from the lobby');
           useCrewStore.getState().reset();
@@ -289,6 +300,7 @@ export class SessionManager {
       case 'lobby-closed':
         store.setLobby(null, null);
         store.setMembers([]);
+        store.setOfficerIds([]);
         store.setPendingApprovals([]);
         store.setIsOwner(false);
         store.setOwnerId(null);
@@ -298,6 +310,7 @@ export class SessionManager {
       case 'full-snapshot':
         store.setMembers(m.members);
         store.setOwnerId(m.ownerId);
+        store.setOfficerIds(m.officerIds ?? []);
         useCrewStore.getState().setCrews(m.crews ?? []);
         break;
       case 'join-request':

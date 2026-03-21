@@ -34,11 +34,17 @@ contextBridge.exposeInMainWorld('athena', {
   showCommandBanner: (command: string) => {
     ipcRenderer.send('show-command-banner', command);
   },
-  showCustomNotification: (text: string, senderName: string) => {
-    ipcRenderer.send('show-custom-notification', text, senderName);
+  showCustomNotification: (text: string, senderName: string, targetKind?: string, senderRole?: string, targetLabel?: string) => {
+    ipcRenderer.send('show-custom-notification', text, senderName, targetKind, senderRole, targetLabel);
   },
-  onSendQuickNotification: (callback: (text: string) => void) => {
-    ipcRenderer.on('send-quick-notification', (_event, text) => callback(text));
+  onSendQuickNotification: (callback: (data: { text: string; target?: { kind: string; crewId?: string } }) => void) => {
+    ipcRenderer.on('send-quick-notification', (_event, data) => callback(data));
+  },
+  onRequestNotifContext: (callback: () => void) => {
+    ipcRenderer.on('request-notif-context', () => callback());
+  },
+  sendNotifContextReply: (data: { isOfficer: boolean; crews: { id: string; name: string }[] }) => {
+    ipcRenderer.send('notif-context-reply', data);
   },
   onCheckLobbyStatus: (callback: () => void) => {
     ipcRenderer.on('check-lobby-status', () => callback());

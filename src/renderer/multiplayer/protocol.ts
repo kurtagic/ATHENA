@@ -71,6 +71,7 @@ export interface LobbyMember {
   connectedAt: number;
   voiceEnabled: boolean;
   colorIndex: number;
+  isOfficer: boolean;
 }
 
 export interface PendingJoin {
@@ -143,6 +144,12 @@ export interface TransferOwnershipMsg {
   targetMemberId: string;
 }
 
+export interface SetOfficerMsg {
+  type: 'set-officer';
+  memberId: string;
+  officer: boolean;
+}
+
 export interface EntityCreateMsg {
   type: 'entity-create';
   entity: Omit<Entity, 'authorId'>;
@@ -173,9 +180,15 @@ export interface CommandBannerMsg {
   command: 'fire' | 'stop';
 }
 
+export type NotificationTarget =
+  | { kind: 'everyone' }
+  | { kind: 'officers' }
+  | { kind: 'crew'; crewId: string };
+
 export interface CustomNotificationMsg {
   type: 'custom-notification';
   text: string;
+  target?: NotificationTarget;
 }
 
 export interface VoiceJoinMsg { type: 'voice-join'; }
@@ -287,6 +300,12 @@ export interface OwnerChangedMsg {
   newOwnerId: string;
 }
 
+export interface OfficerChangedMsg {
+  type: 'officer-changed';
+  memberId: string;
+  officer: boolean;
+}
+
 export interface LobbyClosedMsg {
   type: 'lobby-closed';
 }
@@ -297,6 +316,7 @@ export interface FullSnapshotMsg {
   seq: number;
   members: LobbyMember[];
   ownerId: string;
+  officerIds?: string[];
   crews?: Crew[];
 }
 
@@ -358,6 +378,7 @@ export type ClientMessage =
   | DenyJoinMsg
   | KickMemberMsg
   | TransferOwnershipMsg
+  | SetOfficerMsg
   | EntityCreateMsg
   | EntityDeleteMsg
   | EntityUpdateMsg
@@ -388,6 +409,7 @@ export type ServerMessage =
   | PeerLeftMsg
   | PeerKickedMsg
   | OwnerChangedMsg
+  | OfficerChangedMsg
   | LobbyClosedMsg
   | FullSnapshotMsg
   | VoicePeerJoinedMsg
