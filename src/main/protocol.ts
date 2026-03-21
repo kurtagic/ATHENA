@@ -9,11 +9,7 @@ const assetsRoot = app.isPackaged
 const TILE_ROOT = path.join(assetsRoot, 'tiles');
 const ICON_ROOT = path.join(assetsRoot, 'icons');
 const HEX_MAP_ROOT = path.join(assetsRoot, 'hexmaps');
-
-// Resolve node_modules for serving lib files (MapLibre GL etc.)
-const nodeModulesRoot = app.isPackaged
-  ? path.join(process.resourcesPath, 'node_modules')
-  : path.join(app.getAppPath(), 'node_modules');
+const LIB_ROOT = path.join(assetsRoot, 'lib');
 
 export function registerTileProtocol(): void {
   protocol.handle('tile', async (request) => {
@@ -24,9 +20,9 @@ export function registerTileProtocol(): void {
     let contentType = 'image/png';
 
     if (relPath.startsWith('lib/')) {
-      // Serve library files from node_modules
-      const libFile = relPath.slice(4); // e.g. "maplibre-gl/dist/maplibre-gl.js"
-      filePath = path.join(nodeModulesRoot, libFile);
+      // Serve library files from assets/lib/
+      const libFile = relPath.slice(4); // e.g. "maplibre-gl.js"
+      filePath = path.join(LIB_ROOT, libFile);
       if (filePath.endsWith('.js')) contentType = 'application/javascript';
       else if (filePath.endsWith('.css')) contentType = 'text/css';
     } else if (relPath.startsWith('icons/')) {

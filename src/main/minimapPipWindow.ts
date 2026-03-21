@@ -41,8 +41,8 @@ const ARTILLERY_PLATFORMS_JSON = JSON.stringify([
 
 const MINIMAP_HTML = `<!DOCTYPE html>
 <html><head>
-<link href="tile:///lib/maplibre-gl/dist/maplibre-gl.css" rel="stylesheet" />
-<script src="tile:///lib/maplibre-gl/dist/maplibre-gl.js"><\/script>
+<link href="tile:///lib/maplibre-gl.css" rel="stylesheet" />
+<script src="tile:///lib/maplibre-gl.js"><\/script>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; user-select: none; }
   html, body { background: transparent; overflow: hidden; }
