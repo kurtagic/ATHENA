@@ -38,6 +38,8 @@ export function registerIpcHandlers(win: BrowserWindow): void {
     const oldSettings = getSettings();
     const oldKey = oldSettings.keybinds.toggleOverlay;
     const oldTttKey = oldSettings.keybinds.toggleToTalk;
+    const oldQnKey = oldSettings.keybinds.quickNotification;
+    const oldQcKey = oldSettings.keybinds.quickControls;
 
     const newSettings = updateSettings(partial);
 
@@ -66,10 +68,9 @@ export function registerIpcHandlers(win: BrowserWindow): void {
       }
     }
 
-    if (partial.keybinds?.quickNotification && partial.keybinds.quickNotification !== oldSettings.keybinds.quickNotification) {
+    if (partial.keybinds?.quickNotification && partial.keybinds.quickNotification !== oldQnKey) {
       const qnSuccess = registerQuickNotifHotkey(newSettings.keybinds.quickNotification, win);
       if (!qnSuccess) {
-        const oldQnKey = oldSettings.keybinds.quickNotification;
         updateSettings({ keybinds: { quickNotification: oldQnKey } });
         registerQuickNotifHotkey(oldQnKey, win);
         return {
@@ -79,10 +80,9 @@ export function registerIpcHandlers(win: BrowserWindow): void {
       }
     }
 
-    if (partial.keybinds?.quickControls && partial.keybinds.quickControls !== oldSettings.keybinds.quickControls) {
+    if (partial.keybinds?.quickControls && partial.keybinds.quickControls !== oldQcKey) {
       const qcSuccess = registerQuickControlsHotkey(newSettings.keybinds.quickControls, win);
       if (!qcSuccess) {
-        const oldQcKey = oldSettings.keybinds.quickControls;
         updateSettings({ keybinds: { quickControls: oldQcKey } });
         registerQuickControlsHotkey(oldQcKey, win);
         return {
