@@ -204,8 +204,8 @@ export function useGlobalKeyboard(mapRef: React.MutableRefObject<maplibregl.Map 
         if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) {
           e.preventDefault();
           const store = useQuickControlsStore.getState();
-          if (e.key === 'ArrowLeft') store.adjustAzimuth(-4);
-          if (e.key === 'ArrowRight') store.adjustAzimuth(4);
+          if (e.key === 'ArrowLeft') store.adjustAzimuth(-2);
+          if (e.key === 'ArrowRight') store.adjustAzimuth(2);
           if (e.key === 'ArrowUp') store.adjustDistance(8);
           if (e.key === 'ArrowDown') store.adjustDistance(-8);
           // Update the qc window too

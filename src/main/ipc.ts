@@ -5,11 +5,10 @@ import { setSelectedHexes } from './warPoller';
 import { getSettings, updateSettings } from './settings';
 import { registerOverlayHotkey, registerTttHotkey, registerQuickNotifHotkey, registerQuickControlsHotkey } from './hotkeys';
 import { muteOtherApps, unmuteOtherApps } from './audioSilencer';
-import { updatePipData, showPip, destroyPip, updatePipLobbyStatus } from './pipWindow';
+import { updatePipData, showPip, destroyPip, updatePipLobbyStatus, getPipWin } from './pipWindow';
 import { showNotesPip, destroyNotesPip, updateNotesPipData } from './notesPipWindow';
 import { showCrewPip, destroyCrewPip, updateCrewPipData } from './crewPipWindow';
 import { showBannerWindow } from './bannerWindow';
-import { showQuickControlsWindow } from './quickControlsWindow';
 import type { SettingsPartial, PinnedSolution } from '../shared/types';
 
 export function registerIpcHandlers(win: BrowserWindow): void {
@@ -108,7 +107,7 @@ export function registerIpcHandlers(win: BrowserWindow): void {
   });
 
   ipcMain.on('toggle-pip', (_event, show: boolean) => {
-    if (show) showPip(); else destroyPip();
+    if (show) showPip(win); else destroyPip();
   });
 
   ipcMain.on('pip-lobby-status', (_event, connected: boolean) => {
@@ -116,7 +115,10 @@ export function registerIpcHandlers(win: BrowserWindow): void {
   });
 
   ipcMain.on('pip-open-spotter', () => {
-    showQuickControlsWindow(win, 'spotter');
+    const pipWin = getPipWin();
+    if (pipWin) {
+      pipWin.webContents.send('pip-start-spotter');
+    }
   });
 
   ipcMain.on('pip-command', (_event, command: string) => {
