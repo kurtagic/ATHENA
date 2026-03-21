@@ -5,15 +5,16 @@ import { setupEnemyMarkerObserver, teardownEnemyMarkerObserver, loadHexEnemyMark
 import { setupNotesObserver, teardownNotesObserver, loadHexNotes, hexNotesCache, syncNotesUpdate } from './notesSync';
 import { useNotesStore } from '../stores/notesStore';
 import { voice } from './voiceManager';
-import { setSyncMode, setCurrentHexId, clearAllStrokes, restoreDrawState, setDrawColor } from '../map/drawing';
+import { setSyncMode, setCurrentHexId, clearAllStrokes, restoreDrawState, setDrawColor, saveDrawState } from '../map/drawing';
 import { colorByIndex } from '../data/colorFromUuid';
 import { useDrawStore } from '../stores/drawStore';
-import { setArtilleryHexId, restoreArtilleryState } from '../map/artillery';
-import { setEnemyMarkerHexId, restoreEnemyMarkerState } from '../map/enemyMarkers';
+import { setArtilleryHexId, restoreArtilleryState, saveArtilleryState } from '../map/artillery';
+import { setEnemyMarkerHexId, restoreEnemyMarkerState, saveEnemyMarkerState } from '../map/enemyMarkers';
 import { DEFAULT_PLATFORM_INDEX } from '../data/artilleryPlatforms';
-import { hexDrawingData, hexArtilleryData, hexEnemyMarkerData } from '../data/store';
+import { hexDrawingData, hexArtilleryData, hexEnemyMarkerData, hexDynamicData, hexStaticData } from '../data/store';
 import { useSessionStore } from '../stores/sessionStore';
 import { useMapStore } from '../stores/mapStore';
+import { hexes, hexLookup, hexImageUrl } from '../data/hexMapping';
 import { useBannerStore } from '../stores/bannerStore';
 import { useNotificationStore } from '../stores/notificationStore';
 import { connectYjs, disconnectYjs, getRootMap } from './yjsSync';
@@ -119,6 +120,11 @@ export function initMultiplayerSync(): void {
       // Reset crew state and close crew PIP
       useCrewStore.getState().reset();
       window.athena.toggleCrewPip(false);
+      // Close minimap PIP
+      if (useMapStore.getState().minimapPinned) {
+        useMapStore.getState().setMinimapPinned(false);
+        window.athena.toggleMinimapPip(false);
+      }
       for (const key of Object.keys(hexNotesCache)) delete hexNotesCache[key];
       disconnectYjs();
     }
@@ -201,6 +207,11 @@ export function initMultiplayerSync(): void {
           window.athena.updatePinnedNotes(notesText);
         }
         debugLog('yjs', `Loaded notes for ${hexId} from Y.Doc`);
+
+        // Update minimap if pinned
+        if (useMapStore.getState().minimapPinned) {
+          pushMinimapStateForHex(hexId);
+        }
       } else {
         // Exiting hex — reset notes text
         useNotesStore.getState().setText('');
@@ -214,6 +225,38 @@ export function initMultiplayerSync(): void {
     if (!hexId) return;
     useNotesStore.getState().setText(text);
     syncNotesUpdate(hexId, text);
+  });
+
+  // Minimap: reply to hex list requests — if a hex is currently viewed, push that instead
+  window.athena.onMinimapRequestHexList(() => {
+    const currentHexId = useMapStore.getState().detailMode?.apiName;
+    if (currentHexId) {
+      pushMinimapStateForHex(currentHexId);
+    } else {
+      const hexList = hexes.map(h => ({ id: h.apiName, name: h.name }));
+      window.athena.sendMinimapHexListReply(hexList);
+    }
+  });
+
+  // Minimap: back button — always send hex list regardless of current view
+  window.athena.onMinimapRequestHexListForced(() => {
+    const hexList = hexes.map(h => ({ id: h.apiName, name: h.name }));
+    window.athena.sendMinimapHexListReply(hexList);
+  });
+
+  // Minimap: handle hex selection from PIP
+  window.athena.onMinimapSelectHex((hexId: string) => {
+    pushMinimapStateForHex(hexId);
+  });
+
+  // Minimap: push full state when minimap is toggled on, destroy when off
+  useMapStore.subscribe((state, prev) => {
+    if (state.minimapPinned && !prev.minimapPinned) {
+      const hexId = state.detailMode?.apiName;
+      if (hexId) {
+        pushMinimapStateForHex(hexId);
+      }
+    }
   });
 
   // Update crew PIP when crews change
@@ -296,6 +339,32 @@ function routeMessage(msg: ServerMessage): void {
       break;
     }
   }
+}
+
+function pushMinimapStateForHex(hexId: string): void {
+  const hex = hexLookup[hexId];
+  if (!hex) return;
+
+  const currentHexId = useMapStore.getState().detailMode?.apiName;
+  const isCurrentHex = hexId === currentHexId;
+
+  const structures = hexDynamicData[hexId] || [];
+  const labels = hexStaticData[hexId] || [];
+  const strokes = isCurrentHex ? saveDrawState() : (hexDrawingData[hexId] || []);
+  const artillery = isCurrentHex ? saveArtilleryState() : (hexArtilleryData[hexId] || null);
+  const enemies = isCurrentHex ? saveEnemyMarkerState() : (hexEnemyMarkerData[hexId] || null);
+
+  // Send full hex data — PIP has its own MapLibre instance
+  window.athena.sendMinimapHexData({
+    hexId,
+    hexName: hex.name,
+    imageUrl: hexImageUrl(hexId),
+    structures,
+    labels,
+    strokes,
+    artillery,
+    enemies,
+  });
 }
 
 function applyFullSnapshot(msg: FullSnapshotMsg, currentHexId: string): void {

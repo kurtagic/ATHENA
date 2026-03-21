@@ -15,6 +15,7 @@ import type { SavedStroke } from '../data/store';
 import { hexDrawingData } from '../data/store';
 import { getRootMap, getHexMap } from './yjsSync';
 import { useMapStore } from '../stores/mapStore';
+import { minimapNotify } from './minimapNotify';
 import { debugLog } from '../stores/debugStore';
 
 let observer: ((events: Y.YEvent<any>[], tx: Y.Transaction) => void) | null = null;
@@ -66,6 +67,7 @@ export function initDrawingSync(): void {
       stampText: stroke.stampText,
     });
     debugLog('yjs', `Stroke created in ${hexId}: ${id}`);
+    minimapNotify('strokes', hexId);
   });
 
   setStrokeUpdatedCallback((stroke, hexId) => {
@@ -83,6 +85,7 @@ export function initDrawingSync(): void {
       stampText: stroke.stampText,
     });
     debugLog('yjs', `Stroke updated in ${hexId}: ${id}`);
+    minimapNotify('strokes', hexId);
   });
 
   setStrokesErasedCallback((strokeIds, hexId) => {
@@ -92,6 +95,7 @@ export function initDrawingSync(): void {
       hexMap.delete(id);
       debugLog('yjs', `Stroke deleted in ${hexId}: ${id}`);
     }
+    minimapNotify('strokes', hexId);
   });
 }
 
@@ -146,6 +150,7 @@ export function setupDrawingObserver(): void {
             hexDrawingData[hexId].push(toSavedStroke(strokeId, data));
           }
           debugLog('yjs', `Remote stroke ${change.action} in ${hexId}: ${strokeId}`);
+          minimapNotify('strokes', hexId);
         } else if (change.action === 'delete') {
           if (hexId === currentHexId) {
             removeStrokeById(strokeId);
@@ -157,6 +162,7 @@ export function setupDrawingObserver(): void {
             }
           }
           debugLog('yjs', `Remote stroke delete in ${hexId}: ${strokeId}`);
+          minimapNotify('strokes', hexId);
         }
       });
     }

@@ -117,7 +117,15 @@ export interface AthenaAPI {
   onQcToggleNotesPip: (callback: () => void) => void;
   onQcToggleCrewPip: (callback: () => void) => void;
   onQcRequestPinStates: (callback: () => void) => void;
-  sendQcPinStatesReply: (data: { artillery: boolean; notes: boolean; crew: boolean }) => void;
+  sendQcPinStatesReply: (data: { artillery: boolean; notes: boolean; crew: boolean; minimap: boolean }) => void;
+  toggleMinimapPip: (show: boolean, hexData?: unknown) => void;
+  updateMinimapPip: (layer: string, data: unknown) => void;
+  onQcToggleMinimapPip: (callback: () => void) => void;
+  onMinimapSelectHex: (callback: (hexId: string) => void) => void;
+  onMinimapRequestHexList: (callback: () => void) => void;
+  onMinimapRequestHexListForced: (callback: () => void) => void;
+  sendMinimapHexListReply: (hexes: { id: string; name: string }[]) => void;
+  sendMinimapHexData: (data: unknown) => void;
   quit: () => void;
 }
 

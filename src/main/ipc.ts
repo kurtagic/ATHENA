@@ -8,6 +8,7 @@ import { muteOtherApps, unmuteOtherApps } from './audioSilencer';
 import { updatePipData, showPip, destroyPip, updatePipLobbyStatus, getPipWin } from './pipWindow';
 import { showNotesPip, destroyNotesPip, updateNotesPipData } from './notesPipWindow';
 import { showCrewPip, destroyCrewPip, updateCrewPipData } from './crewPipWindow';
+import { showMinimapPip, destroyMinimapPip, updateMinimapPipData, sendMinimapHexData } from './minimapPipWindow';
 import { showBannerWindow } from './bannerWindow';
 import type { SettingsPartial, PinnedSolution } from '../shared/types';
 
@@ -149,6 +150,18 @@ export function registerIpcHandlers(win: BrowserWindow): void {
 
   ipcMain.on('update-crew-pip', (_event, crews: unknown[]) => {
     updateCrewPipData(crews as any[]);
+  });
+
+  ipcMain.on('toggle-minimap-pip', (_event, show: boolean, hexData?: unknown) => {
+    if (show) showMinimapPip(win, hexData); else destroyMinimapPip();
+  });
+
+  ipcMain.on('update-minimap-pip', (_event, layer: string, data: unknown) => {
+    updateMinimapPipData(layer, data);
+  });
+
+  ipcMain.on('minimap-hex-data-from-renderer', (_event, data: unknown) => {
+    sendMinimapHexData(data);
   });
 
 }

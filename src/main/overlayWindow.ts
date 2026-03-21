@@ -94,3 +94,16 @@ export async function safeExecAndResize(win: BrowserWindow | null, script: strin
   const bounds = win.getBounds();
   win.setBounds({ x: bounds.x, y: bounds.y, width: result.w, height: result.h });
 }
+
+// ── Measure .panel element size (shared across all PIPs) ──
+
+export const MEASURE_PANEL_SCRIPT = `(() => {
+  var p = document.querySelector('.panel');
+  if (!p) return null;
+  var r = p.getBoundingClientRect();
+  return { w: Math.ceil(r.width) + 8, h: Math.ceil(r.height) + 8 };
+})()`;
+
+export async function resizeToPanel(win: BrowserWindow | null): Promise<void> {
+  await safeExecAndResize(win, MEASURE_PANEL_SCRIPT);
+}

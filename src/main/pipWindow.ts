@@ -1,7 +1,7 @@
 import { BrowserWindow, globalShortcut, ipcMain, screen } from 'electron';
 import path from 'node:path';
 import type { PinnedSolution } from '../shared/types';
-import { createOverlayWindow, isAlive, safeExec, safeExecAndResize } from './overlayWindow';
+import { createOverlayWindow, isAlive, safeExec, safeExecAndResize, resizeToPanel } from './overlayWindow';
 
 let pipWin: BrowserWindow | null = null;
 let latestData: PinnedSolution[] = [];
@@ -18,7 +18,7 @@ const PIP_HTML = `<!DOCTYPE html>
 <html>
 <head>
 <style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
+  * { margin: 0; padding: 0; box-sizing: border-box; user-select: none; }
   html, body {
     background: transparent;
     overflow: visible;
@@ -37,10 +37,7 @@ const PIP_HTML = `<!DOCTYPE html>
     border: 1px solid rgba(255, 213, 79, 0.2);
     -webkit-font-smoothing: antialiased;
     transition: background 600ms ease-out, border-color 600ms ease-out, box-shadow 600ms ease-out;
-    cursor: grab;
-    -webkit-app-region: drag;
   }
-  .panel:active { cursor: grabbing; }
   .title {
     font-size: 10px;
     font-weight: 700;
@@ -49,7 +46,10 @@ const PIP_HTML = `<!DOCTYPE html>
     color: #ffd54f;
     margin-bottom: 8px;
     opacity: 0.8;
+    cursor: grab;
+    -webkit-app-region: drag;
   }
+  .title:active { cursor: grabbing; }
   #btns {
     display: none;
     gap: 6px;
@@ -340,8 +340,7 @@ function renderDataScript(data: PinnedSolution[]): { script: string; needsResize
 
   if (rowCountChanged) {
     const html = buildFullHTML(data);
-    const script = `document.getElementById('root').innerHTML = ${JSON.stringify(html)};` +
-      `(() => { const d = document.documentElement; return { w: d.scrollWidth, h: d.scrollHeight }; })()`;
+    const script = `document.getElementById('root').innerHTML = ${JSON.stringify(html)}; void 0`;
     return { script, needsResize: true };
   }
 
@@ -401,10 +400,9 @@ export function updatePipData(data: PinnedSolution[]): void {
 
   if (isAlive(pipWin) && pipWin.isVisible()) {
     const { script, needsResize } = renderDataScript(data);
+    safeExec(pipWin, script);
     if (needsResize) {
-      safeExecAndResize(pipWin, script);
-    } else {
-      safeExec(pipWin, script);
+      resizeToPanel(pipWin);
     }
     if (changed) {
       safeExec(pipWin, FLASH_SCRIPT);
@@ -436,11 +434,13 @@ export function showPip(mainWindow?: BrowserWindow): void {
   if (freshlyCreated || win.webContents.isLoading()) {
     win.webContents.once('did-finish-load', () => {
       safeExec(pipWin, lobbyScript);
-      safeExecAndResize(pipWin, script);
+      safeExec(pipWin, script);
+      resizeToPanel(pipWin);
     });
   } else {
     safeExec(pipWin, lobbyScript);
-    safeExecAndResize(pipWin, script);
+    safeExec(pipWin, script);
+    resizeToPanel(pipWin);
   }
 
   win.showInactive();
@@ -510,7 +510,7 @@ function setupSpotterRelay(pip: BrowserWindow, mainWindow: BrowserWindow) {
   // PIP requests resize after spotter UI changes
   const onRequestResize = () => {
     if (isAlive(pip)) {
-      safeExecAndResize(pip, `(() => { const d = document.documentElement; return { w: d.scrollWidth, h: d.scrollHeight }; })()`);
+      resizeToPanel(pip);
     }
   };
   ipcMain.on('pip-request-resize', onRequestResize);
@@ -551,7 +551,8 @@ export function updatePipLobbyStatus(connected: boolean): void {
   latestLobbyConnected = connected;
   if (!isAlive(pipWin)) return;
   const script = connected
-    ? `document.getElementById('btns').classList.add('visible'); (() => { const d = document.documentElement; return { w: d.scrollWidth, h: d.scrollHeight }; })()`
-    : `document.getElementById('btns').classList.remove('visible'); (() => { const d = document.documentElement; return { w: d.scrollWidth, h: d.scrollHeight }; })()`;
-  safeExecAndResize(pipWin, script);
+    ? `document.getElementById('btns').classList.add('visible'); void 0`
+    : `document.getElementById('btns').classList.remove('visible'); void 0`;
+  safeExec(pipWin, script);
+  resizeToPanel(pipWin);
 }

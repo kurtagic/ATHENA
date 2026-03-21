@@ -19,6 +19,7 @@ import { hexArtilleryData } from '../data/store';
 import { useMapStore } from '../stores/mapStore';
 import { useArtilleryStore } from '../stores/artilleryStore';
 import { getRootMap, getHexMap } from './yjsSync';
+import { minimapNotify } from './minimapNotify';
 import { debugLog } from '../stores/debugStore';
 
 // ── Granular outbound sync functions ──
@@ -37,6 +38,7 @@ export function syncGunCreate(
     isMain: entity.isMain,
   });
   debugLog('yjs', `Gun created in ${hexId}: ${entity.entityId}`);
+  minimapNotify('artillery', hexId);
 }
 
 export function syncGunDelete(hexId: string, entityId: string): void {
@@ -44,6 +46,7 @@ export function syncGunDelete(hexId: string, entityId: string): void {
   if (!hexMap) return;
   hexMap.delete(entityId);
   debugLog('yjs', `Gun deleted in ${hexId}: ${entityId}`);
+  minimapNotify('artillery', hexId);
 }
 
 export function syncGunUpdate(hexId: string, entityId: string, changes: Record<string, unknown>): void {
@@ -53,6 +56,7 @@ export function syncGunUpdate(hexId: string, entityId: string, changes: Record<s
   if (!current) return;
   hexMap.set(entityId, { ...current, ...changes });
   debugLog('yjs', `Gun updated in ${hexId}: ${entityId}`);
+  minimapNotify('artillery', hexId);
 }
 
 export function syncTargetSet(hexId: string, entityId: string, position: [number, number]): void {
@@ -60,6 +64,7 @@ export function syncTargetSet(hexId: string, entityId: string, position: [number
   if (!hexMap) return;
   hexMap.set(entityId, { type: 'target', position });
   debugLog('yjs', `Target set in ${hexId}: ${entityId}`);
+  minimapNotify('artillery', hexId);
 }
 
 export function syncTargetDelete(hexId: string, entityId: string): void {
@@ -67,6 +72,7 @@ export function syncTargetDelete(hexId: string, entityId: string): void {
   if (!hexMap) return;
   hexMap.delete(entityId);
   debugLog('yjs', `Target deleted in ${hexId}: ${entityId}`);
+  minimapNotify('artillery', hexId);
 }
 
 export function syncTargetUpdate(hexId: string, entityId: string, changes: Record<string, unknown>): void {
@@ -76,6 +82,7 @@ export function syncTargetUpdate(hexId: string, entityId: string, changes: Recor
   if (!current) return;
   hexMap.set(entityId, { ...current, ...changes });
   debugLog('yjs', `Target updated in ${hexId}: ${entityId}`);
+  minimapNotify('artillery', hexId);
 }
 
 export function syncImpactSet(hexId: string, entityId: string, position: [number, number]): void {
@@ -83,6 +90,7 @@ export function syncImpactSet(hexId: string, entityId: string, position: [number
   if (!hexMap) return;
   hexMap.set(entityId, { type: 'impact', position });
   debugLog('yjs', `Impact set in ${hexId}: ${entityId}`);
+  minimapNotify('artillery', hexId);
 }
 
 export function syncImpactDelete(hexId: string, entityId: string): void {
@@ -90,6 +98,7 @@ export function syncImpactDelete(hexId: string, entityId: string): void {
   if (!hexMap) return;
   hexMap.delete(entityId);
   debugLog('yjs', `Impact deleted in ${hexId}: ${entityId}`);
+  minimapNotify('artillery', hexId);
 }
 
 export function syncImpactUpdate(hexId: string, entityId: string, changes: Record<string, unknown>): void {
@@ -99,6 +108,7 @@ export function syncImpactUpdate(hexId: string, entityId: string, changes: Recor
   if (!current) return;
   hexMap.set(entityId, { ...current, ...changes });
   debugLog('yjs', `Impact updated in ${hexId}: ${entityId}`);
+  minimapNotify('artillery', hexId);
 }
 
 export function syncArtilleryClearAll(hexId: string): void {
@@ -109,6 +119,7 @@ export function syncArtilleryClearAll(hexId: string): void {
     hexMap.delete(key);
   }
   debugLog('yjs', `Artillery cleared in ${hexId}`);
+  minimapNotify('artillery', hexId);
 }
 
 export function syncWindOnly(windDirection: number | null, windStrength: number, hexId: string): void {
@@ -124,6 +135,7 @@ export function syncWindOnly(windDirection: number | null, windStrength: number,
     hexMap.set('wind', { type: 'wind', direction: windDirection, strength: windStrength });
   }
   debugLog('yjs', `Wind set in ${hexId}: dir=${windDirection} str=${windStrength}`);
+  minimapNotify('artillery', hexId);
 }
 
 // ── Observer ──
@@ -163,6 +175,7 @@ export function setupArtilleryObserver(): void {
             updateArtilleryCache(hexId);
           }
           debugLog('yjs', `Remote artillery ${change.action} in ${hexId}: ${entityId} (${data.type})`);
+          minimapNotify('artillery', hexId);
         } else if (change.action === 'delete') {
           const oldData = change.oldValue;
           if (hexId === currentHexId && map) {
@@ -171,6 +184,7 @@ export function setupArtilleryObserver(): void {
             updateArtilleryCache(hexId);
           }
           debugLog('yjs', `Remote artillery delete in ${hexId}: ${entityId} (${oldData?.type})`);
+          minimapNotify('artillery', hexId);
         }
       });
     }

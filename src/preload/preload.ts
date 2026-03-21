@@ -118,8 +118,32 @@ contextBridge.exposeInMainWorld('athena', {
   onQcRequestPinStates: (callback: () => void) => {
     ipcRenderer.on('qc-request-pin-states', () => callback());
   },
-  sendQcPinStatesReply: (data: { artillery: boolean; notes: boolean; crew: boolean }) => {
+  sendQcPinStatesReply: (data: { artillery: boolean; notes: boolean; crew: boolean; minimap: boolean }) => {
     ipcRenderer.send('qc-pin-states-reply', data);
+  },
+  toggleMinimapPip: (show: boolean, hexData?: unknown) => {
+    ipcRenderer.send('toggle-minimap-pip', show, hexData);
+  },
+  updateMinimapPip: (layer: string, data: unknown) => {
+    ipcRenderer.send('update-minimap-pip', layer, data);
+  },
+  onQcToggleMinimapPip: (callback: () => void) => {
+    ipcRenderer.on('qc-toggle-minimap-pip', () => callback());
+  },
+  onMinimapSelectHex: (callback: (hexId: string) => void) => {
+    ipcRenderer.on('minimap-select-hex', (_e, hexId) => callback(hexId));
+  },
+  onMinimapRequestHexList: (callback: () => void) => {
+    ipcRenderer.on('minimap-request-hex-list', () => callback());
+  },
+  onMinimapRequestHexListForced: (callback: () => void) => {
+    ipcRenderer.on('minimap-request-hex-list-forced', () => callback());
+  },
+  sendMinimapHexListReply: (hexes: { id: string; name: string }[]) => {
+    ipcRenderer.send('minimap-hex-list-reply', hexes);
+  },
+  sendMinimapHexData: (data: unknown) => {
+    ipcRenderer.send('minimap-hex-data-from-renderer', data);
   },
   quit: () => {
     ipcRenderer.send('quit');

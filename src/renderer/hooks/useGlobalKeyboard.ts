@@ -155,6 +155,16 @@ export function useGlobalKeyboard(mapRef: React.MutableRefObject<maplibregl.Map 
     });
   }, []);
 
+  // Quick Controls: toggle minimap PIP from the separate window
+  useEffect(() => {
+    window.athena.onQcToggleMinimapPip(() => {
+      const next = !useMapStore.getState().minimapPinned;
+      useMapStore.getState().setMinimapPinned(next);
+      // syncCoordinator subscription handles init/destroy of hidden MapLibre renderer
+      window.athena.toggleMinimapPip(next);
+    });
+  }, []);
+
   // Quick Controls: reply with current pin states
   useEffect(() => {
     window.athena.onQcRequestPinStates(() => {
@@ -162,6 +172,7 @@ export function useGlobalKeyboard(mapRef: React.MutableRefObject<maplibregl.Map 
         artillery: useArtilleryStore.getState().pipVisible,
         notes: useNotesStore.getState().pinned,
         crew: useCrewStore.getState().pinned,
+        minimap: useMapStore.getState().minimapPinned,
       });
     });
   }, []);
@@ -172,14 +183,16 @@ export function useGlobalKeyboard(mapRef: React.MutableRefObject<maplibregl.Map 
       artillery: useArtilleryStore.getState().pipVisible,
       notes: useNotesStore.getState().pinned,
       crew: useCrewStore.getState().pinned,
+      minimap: useMapStore.getState().minimapPinned,
     };
     const sendIfChanged = () => {
       const next = {
         artillery: useArtilleryStore.getState().pipVisible,
         notes: useNotesStore.getState().pinned,
         crew: useCrewStore.getState().pinned,
+        minimap: useMapStore.getState().minimapPinned,
       };
-      if (next.artillery !== prev.artillery || next.notes !== prev.notes || next.crew !== prev.crew) {
+      if (next.artillery !== prev.artillery || next.notes !== prev.notes || next.crew !== prev.crew || next.minimap !== prev.minimap) {
         prev = next;
         window.athena.sendQcPinStatesReply(next);
       }
@@ -188,6 +201,7 @@ export function useGlobalKeyboard(mapRef: React.MutableRefObject<maplibregl.Map 
       useArtilleryStore.subscribe(sendIfChanged),
       useNotesStore.subscribe(sendIfChanged),
       useCrewStore.subscribe(sendIfChanged),
+      useMapStore.subscribe(sendIfChanged),
     ];
     return () => unsubs.forEach((u) => u());
   }, []);

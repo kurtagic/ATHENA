@@ -1,5 +1,5 @@
 import { BrowserWindow, screen } from 'electron';
-import { createOverlayWindow, isAlive, safeExecAndResize } from './overlayWindow';
+import { createOverlayWindow, isAlive, safeExec, resizeToPanel } from './overlayWindow';
 
 let crewPipWin: BrowserWindow | null = null;
 
@@ -31,7 +31,7 @@ const CREW_PIP_HTML = `<!DOCTYPE html>
 <html>
 <head>
 <style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
+  * { margin: 0; padding: 0; box-sizing: border-box; user-select: none; }
   html, body {
     background: transparent;
     overflow: visible;
@@ -125,8 +125,6 @@ function buildCrewListScript(crews: any[]): string {
         '</div>';
       }).join('');
     }
-    const d = document.documentElement;
-    return { w: d.scrollWidth, h: d.scrollHeight };
   })()`;
 }
 
@@ -148,7 +146,8 @@ function createCrewPipWindow(): BrowserWindow {
 
 export function updateCrewPipData(crews: any[]): void {
   if (!isAlive(crewPipWin)) return;
-  safeExecAndResize(crewPipWin, buildCrewListScript(crews));
+  safeExec(crewPipWin, buildCrewListScript(crews));
+  resizeToPanel(crewPipWin);
 }
 
 export function showCrewPip(crews?: any[]): void {
@@ -163,10 +162,12 @@ export function showCrewPip(crews?: any[]): void {
 
   if (freshlyCreated || win.webContents.isLoading()) {
     win.webContents.once('did-finish-load', () => {
-      safeExecAndResize(crewPipWin, script);
+      safeExec(crewPipWin, script);
+      resizeToPanel(crewPipWin);
     });
   } else {
-    safeExecAndResize(crewPipWin, script);
+    safeExec(crewPipWin, script);
+    resizeToPanel(crewPipWin);
   }
 
   win.showInactive();

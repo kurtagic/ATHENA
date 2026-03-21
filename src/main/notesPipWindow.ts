@@ -1,6 +1,6 @@
 import { BrowserWindow, screen } from 'electron';
 import path from 'node:path';
-import { createOverlayWindow, isAlive, safeExec, safeExecAndResize } from './overlayWindow';
+import { createOverlayWindow, isAlive, safeExec, safeExecAndResize, resizeToPanel } from './overlayWindow';
 
 let notesPipWin: BrowserWindow | null = null;
 
@@ -12,7 +12,7 @@ const NOTES_PIP_HTML = `<!DOCTYPE html>
 <html>
 <head>
 <style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
+  * { margin: 0; padding: 0; box-sizing: border-box; user-select: none; }
   html, body {
     background: transparent;
     overflow: visible;
@@ -48,6 +48,7 @@ const NOTES_PIP_HTML = `<!DOCTYPE html>
   .title:active { cursor: grabbing; }
   #notes-content {
     -webkit-app-region: no-drag;
+    user-select: text;
     background: transparent;
     border: none;
     outline: none;
@@ -143,10 +144,9 @@ export function updateNotesPipData(text: string): void {
         el.selectionEnd = Math.min(end, el.value.length);
       }
     }
-    const d = document.documentElement;
-    return { w: d.scrollWidth, h: d.scrollHeight };
   })()`;
-  safeExecAndResize(notesPipWin, script);
+  safeExec(notesPipWin, script);
+  resizeToPanel(notesPipWin);
 }
 
 export function showNotesPip(text?: string): void {
@@ -160,16 +160,16 @@ export function showNotesPip(text?: string): void {
   const script = `(() => {
     const el = document.getElementById('notes-content');
     el.value = ${escaped};
-    const d = document.documentElement;
-    return { w: d.scrollWidth, h: d.scrollHeight };
   })()`;
 
   if (freshlyCreated || win.webContents.isLoading()) {
     win.webContents.once('did-finish-load', () => {
-      safeExecAndResize(notesPipWin, script);
+      safeExec(notesPipWin, script);
+      resizeToPanel(notesPipWin);
     });
   } else {
-    safeExecAndResize(notesPipWin, script);
+    safeExec(notesPipWin, script);
+    resizeToPanel(notesPipWin);
   }
 
   win.showInactive();

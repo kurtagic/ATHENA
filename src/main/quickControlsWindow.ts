@@ -54,7 +54,7 @@ function buildQuickControlsHTML(): string {
     content: ''; flex: 1; height: 1px;
     background: linear-gradient(to right, rgba(255, 213, 79, 0.15), transparent);
   }
-  .pin-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 4px; margin-bottom: 8px; }
+  .pin-grid { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 4px; margin-bottom: 8px; }
   .pin-btn {
     display: flex; align-items: center; justify-content: center;
     border-radius: 6px; padding: 6px 10px; font-size: 11px; font-weight: 700;
@@ -76,7 +76,7 @@ function buildQuickControlsHTML(): string {
     let crewData = null;
 
     // Pin states
-    let pinStates = { artillery: false, notes: false, crew: false };
+    let pinStates = { artillery: false, notes: false, crew: false, minimap: false };
 
     function buildPinnedWindowsSection() {
       return '<div class="section-header" style="margin-top:8px">Pinned Windows</div>' +
@@ -84,6 +84,7 @@ function buildQuickControlsHTML(): string {
         '<button class="pin-btn' + (pinStates.artillery ? ' active' : '') + '" data-pin="artillery">Artillery</button>' +
         '<button class="pin-btn' + (pinStates.notes ? ' active' : '') + '" data-pin="notes">Notes</button>' +
         '<button class="pin-btn' + (pinStates.crew ? ' active' : '') + '" data-pin="crew">Crew</button>' +
+        '<button class="pin-btn' + (pinStates.minimap ? ' active' : '') + '" data-pin="minimap">Minimap</button>' +
         '</div>';
     }
 
@@ -94,6 +95,7 @@ function buildQuickControlsHTML(): string {
           if (pin === 'artillery') ipcRenderer.send('qc-toggle-pip');
           else if (pin === 'notes') ipcRenderer.send('qc-toggle-notes-pip');
           else if (pin === 'crew') ipcRenderer.send('qc-toggle-crew-pip');
+          else if (pin === 'minimap') ipcRenderer.send('qc-toggle-minimap-pip');
         };
       });
     }
@@ -283,6 +285,13 @@ export function showQuickControlsWindow(
   };
   ipcMain.on('qc-toggle-crew-pip', onToggleCrewPip);
 
+  const onToggleMinimapPip = () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('qc-toggle-minimap-pip');
+    }
+  };
+  ipcMain.on('qc-toggle-minimap-pip', onToggleMinimapPip);
+
   // IPC: request pin states from renderer
   const onRequestPinStates = () => {
     if (mainWindow && !mainWindow.isDestroyed()) {
@@ -324,6 +333,7 @@ export function showQuickControlsWindow(
     ipcMain.removeListener('qc-toggle-pip', onTogglePip);
     ipcMain.removeListener('qc-toggle-notes-pip', onToggleNotesPip);
     ipcMain.removeListener('qc-toggle-crew-pip', onToggleCrewPip);
+    ipcMain.removeListener('qc-toggle-minimap-pip', onToggleMinimapPip);
     ipcMain.removeListener('qc-request-pin-states', onRequestPinStates);
     ipcMain.removeListener('qc-pin-states-reply', onPinStatesReply);
     ipcMain.removeListener('qc-pin-states-update', onPinStatesUpdate);

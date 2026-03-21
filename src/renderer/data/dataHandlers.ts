@@ -5,6 +5,7 @@ import { resolveHex, apiToMapPoint } from './hexMapping';
 import { mapPointToLngLat } from './coords';
 import { iconUrl } from './assetUrl';
 import { hexStaticData, hexDynamicData } from './store';
+import { minimapNotify } from '../multiplayer/minimapNotify';
 import { setStaticLabelMarkers } from '../map/layerControl';
 
 // Re-export for convenience
@@ -58,6 +59,8 @@ export function updateHexItems(data: HexItemsPayload): void {
   if (_onDetailRefresh) {
     _onDetailRefresh(mapName);
   }
+
+  minimapNotify('structures', mapName);
 }
 
 // Static label markers stored for visibility toggling

@@ -6,6 +6,7 @@ import {
 } from '../map/enemyMarkers';
 import { useMapStore } from '../stores/mapStore';
 import { getRootMap, getHexMap } from './yjsSync';
+import { minimapNotify } from './minimapNotify';
 import { debugLog } from '../stores/debugStore';
 
 // ── Outbound sync ──
@@ -23,6 +24,7 @@ export function syncEnemyMarkerCreate(
     label: entity.label,
   });
   debugLog('yjs', `Enemy marker created in ${hexId}: ${entity.entityId}`);
+  minimapNotify('enemies', hexId);
 }
 
 export function syncEnemyMarkerDelete(hexId: string, entityId: string): void {
@@ -30,6 +32,7 @@ export function syncEnemyMarkerDelete(hexId: string, entityId: string): void {
   if (!hexMap) return;
   hexMap.delete(entityId);
   debugLog('yjs', `Enemy marker deleted in ${hexId}: ${entityId}`);
+  minimapNotify('enemies', hexId);
 }
 
 export function syncEnemyMarkerUpdate(hexId: string, entityId: string, changes: Record<string, unknown>): void {
@@ -39,6 +42,7 @@ export function syncEnemyMarkerUpdate(hexId: string, entityId: string, changes: 
   if (!current) return;
   hexMap.set(entityId, { ...current, ...changes });
   debugLog('yjs', `Enemy marker updated in ${hexId}: ${entityId}`);
+  minimapNotify('enemies', hexId);
 }
 
 // ── Observer ──
@@ -77,11 +81,13 @@ export function setupEnemyMarkerObserver(): void {
             }
           }
           debugLog('yjs', `Remote enemy marker ${change.action} in ${hexId}: ${entityId}`);
+          minimapNotify('enemies', hexId);
         } else if (change.action === 'delete') {
           if (hexId === currentHexId && map) {
             removeRemoteEnemyMarker(entityId, map);
           }
           debugLog('yjs', `Remote enemy marker delete in ${hexId}: ${entityId}`);
+          minimapNotify('enemies', hexId);
         }
       });
     }
