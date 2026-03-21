@@ -1,5 +1,5 @@
 import { BrowserWindow, ipcMain, screen } from 'electron';
-import { createOverlayWindow, isAlive } from './overlayWindow';
+import { createOverlayWindow, isAlive, resizeToPanel } from './overlayWindow';
 
 let qcWin: BrowserWindow | null = null;
 
@@ -7,14 +7,14 @@ function buildQuickControlsHTML(): string {
   return `<!DOCTYPE html>
 <html><head><style>
   * { margin: 0; padding: 0; box-sizing: border-box; user-select: none; }
-  html, body { background: transparent; overflow: hidden; }
+  html, body { background: transparent; overflow: visible; }
   body {
-    display: flex; align-items: flex-start; justify-content: center;
-    width: 100vw; height: 100vh;
+    padding: 4px;
     font-family: 'Cascadia Code', 'Consolas', 'SF Mono', monospace;
     color: #e0e0e0;
   }
-  .container {
+  .panel {
+    display: inline-block;
     background: rgba(12, 12, 16, 0.95);
     border: 1px solid rgba(255, 213, 79, 0.2);
     border-radius: 8px;
@@ -70,7 +70,7 @@ function buildQuickControlsHTML(): string {
     color: #34d399;
   }
 </style></head><body>
-  <div class="container" id="root"></div>
+  <div class="panel" id="root"></div>
   <script>
     const { ipcRenderer } = require('electron');
     let crewData = null;
@@ -113,12 +113,6 @@ function buildQuickControlsHTML(): string {
       pinStates = data;
       updatePinButtons();
     });
-
-    function resize() {
-      setTimeout(() => {
-        ipcRenderer.send('qc-resize', document.body.scrollHeight);
-      }, 10);
-    }
 
     const statusColors = {
       afk: [75,90,97], ready: [46,125,50], holding: [42,93,168], standby: [26,122,158],
@@ -196,7 +190,7 @@ function buildQuickControlsHTML(): string {
         }
         bindStatusButtons();
         bindPinButtons();
-        resize();
+        ipcRenderer.send('qc-content-ready');
       });
     }
 
@@ -230,6 +224,9 @@ export function showQuickControlsWindow(
   qcWin.webContents.once('did-finish-load', () => {
     if (isAlive(qcWin)) {
       qcWin.showInactive();
+      // Initial resize after crew data arrives (via qc-content-ready),
+      // but also do a delayed fallback resize in case content renders without IPC
+      setTimeout(() => resizeToPanel(qcWin), 150);
     }
   });
 
@@ -316,17 +313,15 @@ export function showQuickControlsWindow(
   };
   ipcMain.on('qc-pin-states-update', onPinStatesUpdate);
 
-  // IPC: resize window
-  const onResize = (_event: Electron.IpcMainEvent, height: number) => {
-    if (isAlive(qcWin)) {
-      qcWin.setSize(winW, Math.min(Math.max(height + 20, 100), 600));
-    }
+  // IPC: content ready — resize to fit panel
+  const onContentReady = () => {
+    setTimeout(() => resizeToPanel(qcWin), 20);
   };
-  ipcMain.on('qc-resize', onResize);
+  ipcMain.on('qc-content-ready', onContentReady);
 
   const cleanup = () => {
     ipcMain.removeListener('qc-mode-change', onModeChange);
-    ipcMain.removeListener('qc-resize', onResize);
+    ipcMain.removeListener('qc-content-ready', onContentReady);
     ipcMain.removeListener('qc-request-crew-data', onRequestCrewData);
     ipcMain.removeListener('qc-crew-data-reply', onCrewDataReply);
     ipcMain.removeListener('qc-crew-set-status', onCrewSetStatus);
