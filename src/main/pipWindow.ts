@@ -7,6 +7,7 @@ let pipWin: BrowserWindow | null = null;
 let latestData: PinnedSolution[] = [];
 let prevFingerprint = '';
 let prevRowCount = -1;
+let prevLabels: string[] = [];
 let latestLobbyConnected = false;
 let spotterArrowsRegistered = false;
 
@@ -341,10 +342,14 @@ function buildFullHTML(data: PinnedSolution[]): string {
 }
 
 function renderDataScript(data: PinnedSolution[]): { script: string; needsResize: boolean } {
+  const currentLabels = data.map(d => d.label);
   const rowCountChanged = data.length !== prevRowCount;
+  const labelsChanged = currentLabels.length !== prevLabels.length ||
+    currentLabels.some((l, i) => l !== prevLabels[i]);
   prevRowCount = data.length;
+  prevLabels = currentLabels;
 
-  if (rowCountChanged) {
+  if (rowCountChanged || labelsChanged) {
     const html = buildFullHTML(data);
     const script = `document.getElementById('root').innerHTML = ${JSON.stringify(html)}; void 0`;
     return { script, needsResize: true };
@@ -427,6 +432,7 @@ export function showPip(mainWindow?: BrowserWindow): void {
 
   // Force full rebuild on show (window may be fresh or stale)
   prevRowCount = -1;
+  prevLabels = [];
   const { script } = renderDataScript(latestData);
 
   const lobbyScript = latestLobbyConnected
