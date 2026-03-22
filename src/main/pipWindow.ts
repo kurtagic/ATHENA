@@ -36,7 +36,13 @@ const PIP_HTML = `<!DOCTYPE html>
     border-radius: 8px;
     border: 1px solid rgba(255, 213, 79, 0.2);
     -webkit-font-smoothing: antialiased;
-    transition: background 600ms ease-out, border-color 600ms ease-out, box-shadow 600ms ease-out;
+  }
+  @keyframes panel-flash {
+    0%   { background: rgba(76, 175, 80, 0.3); border-color: rgba(76, 175, 80, 0.8); box-shadow: 0 0 12px rgba(76, 175, 80, 0.5), 0 0 24px rgba(76, 175, 80, 0.2); }
+    100% { background: rgba(12, 12, 16, 0.95); border-color: rgba(255, 213, 79, 0.2); box-shadow: none; }
+  }
+  .panel.flash {
+    animation: panel-flash 500ms ease-out forwards;
   }
   .title {
     font-size: 10px;
@@ -384,14 +390,10 @@ function hasValuesChanged(data: PinnedSolution[]): boolean {
 
 const FLASH_SCRIPT = `(() => {
   const p = document.querySelector('.panel');
-  p.style.background = 'rgba(76, 175, 80, 0.35)';
-  p.style.borderColor = 'rgba(76, 175, 80, 0.9)';
-  p.style.boxShadow = '0 0 12px rgba(76, 175, 80, 0.6), 0 0 24px rgba(76, 175, 80, 0.3)';
-  setTimeout(() => {
-    p.style.background = '';
-    p.style.borderColor = '';
-    p.style.boxShadow = '';
-  }, 150);
+  p.classList.remove('flash');
+  void p.offsetWidth;
+  p.classList.add('flash');
+  p.addEventListener('animationend', () => p.classList.remove('flash'), { once: true });
 })()`;
 
 export function updatePipData(data: PinnedSolution[]): void {

@@ -23,14 +23,6 @@ export function CreateLobbyScreen({ onBack }: Props) {
     });
   }, []);
 
-  const [settings, setSettings] = useState({
-    requireApproval: true,
-    shareMarkers: true,
-    shareDrawings: true,
-    shareArtillery: true,
-    voiceChat: true,
-  });
-
   // Auto-fill lobby name when display name changes
   useEffect(() => {
     if (name.trim()) {
@@ -61,10 +53,6 @@ export function CreateLobbyScreen({ onBack }: Props) {
       setError(e.message || 'Failed to connect');
       setBusy(false);
     }
-  };
-
-  const toggleSetting = (key: keyof typeof settings) => {
-    setSettings((s) => ({ ...s, [key]: !s[key] }));
   };
 
   return (
@@ -124,20 +112,6 @@ export function CreateLobbyScreen({ onBack }: Props) {
             />
           </div>
 
-          {/* Lobby Settings */}
-          <div className="mt-2">
-            <span className="text-[10px] uppercase tracking-[0.12em] text-white/30 font-semibold px-1">
-              Lobby Settings
-            </span>
-            <div className="flex flex-col gap-2.5 mt-3">
-              <ToggleRow label="Require Approval to Join" value={settings.requireApproval} onChange={() => toggleSetting('requireApproval')} />
-              <ToggleRow label="Share Map Markers" value={settings.shareMarkers} onChange={() => toggleSetting('shareMarkers')} />
-              <ToggleRow label="Share Drawings" value={settings.shareDrawings} onChange={() => toggleSetting('shareDrawings')} />
-              <ToggleRow label="Share Artillery Data" value={settings.shareArtillery} onChange={() => toggleSetting('shareArtillery')} />
-              <ToggleRow label="Voice Chat Enabled" value={settings.voiceChat} onChange={() => toggleSetting('voiceChat')} />
-            </div>
-          </div>
-
           {/* Create Button */}
           <button
             onClick={handleCreate}
@@ -149,26 +123,6 @@ export function CreateLobbyScreen({ onBack }: Props) {
           </button>
         </div>
       </div>
-    </div>
-  );
-}
-
-function ToggleRow({ label, value, onChange }: { label: string; value: boolean; onChange: () => void }) {
-  return (
-    <div className="flex items-center justify-between px-1">
-      <span className="text-[12px] text-white/60">{label}</span>
-      <button
-        onClick={onChange}
-        className={`relative w-[40px] h-[22px] rounded-full transition-colors ${
-          value ? 'bg-[var(--color-accent)]' : 'bg-white/10'
-        }`}
-      >
-        <div
-          className={`absolute top-[2px] w-[18px] h-[18px] rounded-full bg-white transition-transform ${
-            value ? 'left-[20px]' : 'left-[2px]'
-          }`}
-        />
-      </button>
     </div>
   );
 }

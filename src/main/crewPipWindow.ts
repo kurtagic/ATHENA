@@ -7,6 +7,8 @@ const CREW_PIP_WIDTH = 320;
 const CREW_PIP_HEIGHT = 120;
 const CREW_PIP_MARGIN = 16;
 
+let prevStatusMap: Record<string, string> = {};
+
 const STATUS_COLORS: Record<string, string> = {
   afk: '#78909c',
   ready: '#4caf50',
@@ -96,6 +98,13 @@ const CREW_PIP_HTML = `<!DOCTYPE html>
     text-align: center;
     padding: 10px 0;
   }
+  @keyframes pill-flash {
+    0%   { box-shadow: 0 0 0 2px currentColor, 0 0 10px currentColor; transform: scale(1.08); }
+    100% { box-shadow: none; transform: scale(1); }
+  }
+  .status-pill.flash {
+    animation: pill-flash 500ms ease-out forwards;
+  }
 </style>
 </head>
 <body>
@@ -105,6 +114,37 @@ const CREW_PIP_HTML = `<!DOCTYPE html>
   </div>
 </body>
 </html>`;
+
+function getChangedCrewNames(crews: any[]): string[] {
+  const changed: string[] = [];
+  const isFirstLoad = Object.keys(prevStatusMap).length === 0;
+  const newMap: Record<string, string> = {};
+  for (const c of crews) {
+    newMap[c.name] = c.status;
+    if (!isFirstLoad && prevStatusMap[c.name] !== c.status) {
+      changed.push(c.name);
+    }
+  }
+  prevStatusMap = newMap;
+  return changed;
+}
+
+function buildFlashScript(names: string[]): string {
+  const escaped = JSON.stringify(names);
+  return `(() => {
+    const names = ${escaped};
+    document.querySelectorAll('.crew-row').forEach(row => {
+      if (names.includes(row.querySelector('.crew-name')?.textContent)) {
+        const pill = row.querySelector('.status-pill');
+        if (!pill) return;
+        pill.classList.remove('flash');
+        void pill.offsetWidth;
+        pill.classList.add('flash');
+        pill.addEventListener('animationend', () => pill.classList.remove('flash'), { once: true });
+      }
+    });
+  })()`;
+}
 
 function buildCrewListScript(crews: any[]): string {
   const escaped = JSON.stringify(crews);
@@ -145,9 +185,13 @@ function createCrewPipWindow(): BrowserWindow {
 }
 
 export function updateCrewPipData(crews: any[]): void {
+  const changedNames = getChangedCrewNames(crews);
   if (!isAlive(crewPipWin)) return;
   safeExec(crewPipWin, buildCrewListScript(crews));
   resizeToPanel(crewPipWin);
+  if (changedNames.length > 0) {
+    safeExec(crewPipWin, buildFlashScript(changedNames));
+  }
 }
 
 export function showCrewPip(crews?: any[]): void {
