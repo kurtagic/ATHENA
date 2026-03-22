@@ -1,6 +1,6 @@
 import { useUndoStore, type UndoableAction } from '../stores/undoStore';
 import { useMapStore } from '../stores/mapStore';
-import { removeStrokeById, addRemoteStroke, moveStampById } from './drawing';
+import { removeStrokeById, addRemoteStroke, moveStampById, updateMeasurementById } from './drawing';
 import { toMapPoint } from '../data/coords';
 import {
   undoRemoveGunByEntityId,
@@ -66,6 +66,8 @@ function undoAction(action: UndoableAction): void {
           brushPattern: s.brushPattern,
           stampType: s.stampType,
           stampText: s.stampText,
+          measureType: s.measureType,
+          radius: s.radius,
         });
         const hexMap = getHexMap('strokes', action.hexId);
         if (hexMap) {
@@ -77,8 +79,23 @@ function undoAction(action: UndoableAction): void {
             brushPattern: s.brushPattern,
             stampType: s.stampType,
             stampText: s.stampText,
+            measureType: s.measureType,
+            radius: s.radius,
           });
           debugLog('yjs', `Undo strokes-erased (restored) in ${action.hexId}: ${s.id}`);
+        }
+      }
+      break;
+    }
+
+    case 'measurement-updated': {
+      updateMeasurementById(action.strokeId, action.prevPoints, action.prevRadius);
+      const hexMap = getHexMap('strokes', action.hexId);
+      if (hexMap) {
+        const data = hexMap.get(action.strokeId);
+        if (data) {
+          hexMap.set(action.strokeId, { ...data, points: action.prevPoints, radius: action.prevRadius });
+          debugLog('yjs', `Undo measurement-updated in ${action.hexId}: ${action.strokeId}`);
         }
       }
       break;
@@ -212,6 +229,8 @@ function redoAction(action: UndoableAction): void {
         brushPattern: action.stroke.brushPattern,
         stampType: action.stroke.stampType,
         stampText: action.stroke.stampText,
+        measureType: action.stroke.measureType,
+        radius: action.stroke.radius,
       });
       const hexMap2 = getHexMap('strokes', action.hexId);
       if (hexMap2) {
@@ -223,6 +242,8 @@ function redoAction(action: UndoableAction): void {
           brushPattern: action.stroke.brushPattern,
           stampType: action.stroke.stampType,
           stampText: action.stroke.stampText,
+          measureType: action.stroke.measureType,
+          radius: action.stroke.radius,
         });
         debugLog('yjs', `Redo stroke-added (restored) in ${action.hexId}: ${action.stroke.id}`);
       }
@@ -236,6 +257,19 @@ function redoAction(action: UndoableAction): void {
         if (hexMap3) {
           hexMap3.delete(s.id);
           debugLog('yjs', `Redo strokes-erased (deleted) in ${action.hexId}: ${s.id}`);
+        }
+      }
+      break;
+    }
+
+    case 'measurement-updated': {
+      updateMeasurementById(action.strokeId, action.newPoints, action.newRadius);
+      const hexMap = getHexMap('strokes', action.hexId);
+      if (hexMap) {
+        const data = hexMap.get(action.strokeId);
+        if (data) {
+          hexMap.set(action.strokeId, { ...data, points: action.newPoints, radius: action.newRadius });
+          debugLog('yjs', `Redo measurement-updated in ${action.hexId}: ${action.strokeId}`);
         }
       }
       break;

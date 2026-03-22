@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { useArtilleryStore } from './artilleryStore';
 
-export type ActiveTool = 'pen' | 'eraser' | 'area' | 'ruler' | 'arrow' | 'stamp' | 'text' | 'enemy-marker';
+export type ActiveTool = 'pen' | 'eraser' | 'area' | 'ruler' | 'circle' | 'arrow' | 'stamp' | 'text' | 'enemy-marker';
 export type BrushPattern = 'diagonal' | 'crosshatch' | 'border';
 
 interface DrawStoreState {

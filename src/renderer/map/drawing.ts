@@ -1,7 +1,7 @@
 import maplibregl from 'maplibre-gl';
 import type { MapPoint } from '../data/coords';
 import { toMapPoint, mapPointToLngLat, lngLatToMapPoint } from '../data/coords';
-import { crsDistanceMeters, crsAzimuth } from '../data/artilleryCalc';
+import { crsDistanceMeters, crsAzimuth, METERS_PER_CRS_UNIT, metersToRadius } from '../data/artilleryCalc';
 import type { SavedStroke } from '../data/store';
 import { useMapStore } from '../stores/mapStore';
 import { useDrawStore, type BrushPattern } from '../stores/drawStore';
@@ -21,6 +21,8 @@ export interface StrokeData {
   isArrow?: boolean;
   stampType?: string;
   stampText?: string;
+  measureType?: 'ruler' | 'circle';
+  radius?: number;
 }
 
 interface DrawState {
@@ -40,10 +42,13 @@ interface DrawState {
   mapRef: maplibregl.Map | null;
   placingPolygon: boolean;
   polygonPreviewPoint: MapPoint | null;
-  rulerStart: MapPoint | null;
-  rulerEnd: MapPoint | null;
-  rulerPreviewPoint: MapPoint | null;
-  placingRuler: boolean;
+  placingMeasurement: boolean;
+  measurementStart: MapPoint | null;
+  measurementPreviewPoint: MapPoint | null;
+  draggingMeasurement: StrokeData | null;
+  dragMeasurementPointIndex: number;
+  dragMeasurementStartPoints: MapPoint[] | null;
+  dragMeasurementStartRadius: number | null;
   isArrow: boolean;
   draggingStamp: StrokeData | null;
   dragStampStartPos: MapPoint | null;
@@ -66,10 +71,13 @@ const drawState: DrawState = {
   mapRef: null,
   placingPolygon: false,
   polygonPreviewPoint: null,
-  rulerStart: null,
-  rulerEnd: null,
-  rulerPreviewPoint: null,
-  placingRuler: false,
+  placingMeasurement: false,
+  measurementStart: null,
+  measurementPreviewPoint: null,
+  draggingMeasurement: null,
+  dragMeasurementPointIndex: 0,
+  dragMeasurementStartPoints: null,
+  dragMeasurementStartRadius: null,
   isArrow: false,
   draggingStamp: null,
   dragStampStartPos: null,
@@ -310,7 +318,7 @@ function resizeCanvas(): void {
   redrawAllStrokes();
 }
 
-function redrawAllStrokes(): void {
+export function redrawAllStrokes(): void {
   if (!drawState.canvas || !drawState.mapRef) return;
   const ctx = drawState.canvas.getContext('2d');
   if (!ctx) return;
@@ -375,9 +383,126 @@ function redrawAllStrokes(): void {
     ctx.restore();
   };
 
+  const drawMeasurementLabel = (cx: number, cy: number, line1: string, line2?: string) => {
+    ctx.save();
+    ctx.font = 'bold 13px monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    const w1 = ctx.measureText(line1).width;
+    const w2 = line2 ? ctx.measureText(line2).width : 0;
+    const pillWidth = Math.max(w1, w2) + 16;
+    const pillHeight = line2 ? 38 : 24;
+
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.75)';
+    ctx.beginPath();
+    const r = 6;
+    const px0 = cx - pillWidth / 2;
+    const py0 = cy - pillHeight / 2;
+    ctx.moveTo(px0 + r, py0);
+    ctx.lineTo(px0 + pillWidth - r, py0);
+    ctx.quadraticCurveTo(px0 + pillWidth, py0, px0 + pillWidth, py0 + r);
+    ctx.lineTo(px0 + pillWidth, py0 + pillHeight - r);
+    ctx.quadraticCurveTo(px0 + pillWidth, py0 + pillHeight, px0 + pillWidth - r, py0 + pillHeight);
+    ctx.lineTo(px0 + r, py0 + pillHeight);
+    ctx.quadraticCurveTo(px0, py0 + pillHeight, px0, py0 + pillHeight - r);
+    ctx.lineTo(px0, py0 + r);
+    ctx.quadraticCurveTo(px0, py0, px0 + r, py0);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.fillStyle = '#ffffff';
+    if (line2) {
+      ctx.fillText(line1, cx, cy - 8);
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+      ctx.font = '11px monospace';
+      ctx.fillText(line2, cx, cy + 9);
+    } else {
+      ctx.fillText(line1, cx, cy);
+    }
+    ctx.restore();
+  };
+
+  const drawRulerStroke = (start: MapPoint, end: MapPoint) => {
+    const startPx = map.project(mapPointToLngLat(start));
+    const endPx = map.project(mapPointToLngLat(end));
+
+    ctx.save();
+    ctx.globalAlpha = 1;
+
+    // Dashed line
+    ctx.beginPath();
+    ctx.setLineDash([8, 5]);
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 2;
+    ctx.moveTo(startPx.x, startPx.y);
+    ctx.lineTo(endPx.x, endPx.y);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Endpoint circles
+    for (const px of [startPx, endPx]) {
+      ctx.beginPath();
+      ctx.arc(px.x, px.y, 5, 0, Math.PI * 2);
+      ctx.fillStyle = '#ffffff';
+      ctx.fill();
+      ctx.strokeStyle = '#000000';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    }
+
+    ctx.restore();
+
+    // Label at midpoint
+    const midX = (startPx.x + endPx.x) / 2;
+    const midY = (startPx.y + endPx.y) / 2;
+    const distM = crsDistanceMeters(start, end);
+    const azDeg = crsAzimuth(start, end);
+    drawMeasurementLabel(midX, midY, `${Math.round(distM)}m`, `${azDeg.toFixed(1)}°`);
+  };
+
+  const drawCircleStroke = (center: MapPoint, radiusCrs: number) => {
+    const centerPx = map.project(mapPointToLngLat(center));
+    // Compute screen-space radius by projecting a point at the edge
+    const edgePt: MapPoint = { x: center.x + radiusCrs, y: center.y };
+    const edgePx = map.project(mapPointToLngLat(edgePt));
+    const screenRadius = Math.hypot(edgePx.x - centerPx.x, edgePx.y - centerPx.y);
+
+    ctx.save();
+    ctx.globalAlpha = 1;
+
+    // Dashed circle
+    ctx.beginPath();
+    ctx.setLineDash([8, 5]);
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 2;
+    ctx.arc(centerPx.x, centerPx.y, screenRadius, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Center dot
+    ctx.beginPath();
+    ctx.arc(centerPx.x, centerPx.y, 4, 0, Math.PI * 2);
+    ctx.fillStyle = '#ffffff';
+    ctx.fill();
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    ctx.restore();
+
+    // Radius label at center
+    const radiusM = radiusCrs * METERS_PER_CRS_UNIT;
+    drawMeasurementLabel(centerPx.x, centerPx.y - screenRadius - 20, `${Math.round(radiusM)}m`);
+  };
+
   // Draw completed strokes (stamps are DOM-based, skip them)
   for (const stroke of drawState.strokes) {
-    if (stroke.stampType) {
+    if (stroke.measureType === 'ruler' && stroke.points.length >= 2) {
+      drawRulerStroke(stroke.points[0], stroke.points[1]);
+    } else if (stroke.measureType === 'circle' && stroke.radius) {
+      drawCircleStroke(stroke.points[0], stroke.radius);
+    } else if (stroke.stampType) {
       continue;
     } else if (stroke.brushPattern) {
       drawAreaShape(ctx, map, stroke.points, stroke.color, stroke.weight, stroke.opacity, stroke.brushPattern);
@@ -450,83 +575,18 @@ function redrawAllStrokes(): void {
     ctx.restore();
   }
 
-  // Draw ruler overlay
-  const rulerEnd = drawState.rulerEnd ?? drawState.rulerPreviewPoint;
-  if (drawState.rulerStart && rulerEnd) {
-    const startLngLat = mapPointToLngLat(drawState.rulerStart);
-    const endLngLat = mapPointToLngLat(rulerEnd);
-    const startPx = map.project(startLngLat);
-    const endPx = map.project(endLngLat);
-
-    ctx.save();
-    ctx.globalAlpha = 1;
-
-    // Dashed line
-    ctx.beginPath();
-    ctx.setLineDash([8, 5]);
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 2;
-    ctx.moveTo(startPx.x, startPx.y);
-    ctx.lineTo(endPx.x, endPx.y);
-    ctx.stroke();
-    ctx.setLineDash([]);
-
-    // Endpoint circles
-    for (const px of [startPx, endPx]) {
-      ctx.beginPath();
-      ctx.arc(px.x, px.y, 5, 0, Math.PI * 2);
-      ctx.fillStyle = '#ffffff';
-      ctx.fill();
-      ctx.strokeStyle = '#000000';
-      ctx.lineWidth = 1.5;
-      ctx.stroke();
+  // Draw measurement placement preview
+  if (drawState.placingMeasurement && drawState.measurementStart && drawState.measurementPreviewPoint) {
+    const store = useDrawStore.getState();
+    if (store.activeTool === 'ruler') {
+      drawRulerStroke(drawState.measurementStart, drawState.measurementPreviewPoint);
+    } else if (store.activeTool === 'circle') {
+      const radiusCrs = Math.sqrt(
+        (drawState.measurementPreviewPoint.x - drawState.measurementStart.x) ** 2 +
+        (drawState.measurementPreviewPoint.y - drawState.measurementStart.y) ** 2,
+      );
+      drawCircleStroke(drawState.measurementStart, radiusCrs || 0.1);
     }
-
-    // Distance and azimuth labels at midpoint
-    const midX = (startPx.x + endPx.x) / 2;
-    const midY = (startPx.y + endPx.y) / 2;
-    const distM = crsDistanceMeters(drawState.rulerStart, rulerEnd);
-    const azDeg = crsAzimuth(drawState.rulerStart, rulerEnd);
-    const distText = `${Math.round(distM)}m`;
-    const azText = `${azDeg.toFixed(1)}°`;
-
-    ctx.font = 'bold 13px monospace';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-
-    const distWidth = ctx.measureText(distText).width;
-    const azWidth = ctx.measureText(azText).width;
-    const pillWidth = Math.max(distWidth, azWidth) + 16;
-    const pillHeight = 38;
-
-    // Background pill
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.75)';
-    ctx.beginPath();
-    const r = 6;
-    const px0 = midX - pillWidth / 2;
-    const py0 = midY - pillHeight / 2;
-    ctx.moveTo(px0 + r, py0);
-    ctx.lineTo(px0 + pillWidth - r, py0);
-    ctx.quadraticCurveTo(px0 + pillWidth, py0, px0 + pillWidth, py0 + r);
-    ctx.lineTo(px0 + pillWidth, py0 + pillHeight - r);
-    ctx.quadraticCurveTo(px0 + pillWidth, py0 + pillHeight, px0 + pillWidth - r, py0 + pillHeight);
-    ctx.lineTo(px0 + r, py0 + pillHeight);
-    ctx.quadraticCurveTo(px0, py0 + pillHeight, px0, py0 + pillHeight - r);
-    ctx.lineTo(px0, py0 + r);
-    ctx.quadraticCurveTo(px0, py0, px0 + r, py0);
-    ctx.closePath();
-    ctx.fill();
-
-    // Distance text
-    ctx.fillStyle = '#ffffff';
-    ctx.fillText(distText, midX, midY - 8);
-
-    // Azimuth text
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
-    ctx.font = '11px monospace';
-    ctx.fillText(azText, midX, midY + 9);
-
-    ctx.restore();
   }
 }
 
@@ -578,10 +638,13 @@ export function cleanupDrawing(map: maplibregl.Map): void {
   drawState.erasedDuringDrag = [];
   drawState.placingPolygon = false;
   drawState.polygonPreviewPoint = null;
-  drawState.rulerStart = null;
-  drawState.rulerEnd = null;
-  drawState.rulerPreviewPoint = null;
-  drawState.placingRuler = false;
+  drawState.placingMeasurement = false;
+  drawState.measurementStart = null;
+  drawState.measurementPreviewPoint = null;
+  drawState.draggingMeasurement = null;
+  drawState.dragMeasurementPointIndex = 0;
+  drawState.dragMeasurementStartPoints = null;
+  drawState.dragMeasurementStartRadius = null;
   drawState.draggingStamp = null;
   drawState.dragStampStartPos = null;
 }
@@ -592,7 +655,7 @@ export function activateDrawing(_map: maplibregl.Map): void {
 
 export function deactivateDrawing(_map: maplibregl.Map): void {
   cancelPolygon();
-  cancelRuler();
+  cancelMeasurement();
   removeTextInput();
   finalizeStroke();
   drawState.active = false;
@@ -664,11 +727,10 @@ export function cancelPolygon(): void {
   }
 }
 
-export function cancelRuler(): void {
-  drawState.rulerStart = null;
-  drawState.rulerEnd = null;
-  drawState.rulerPreviewPoint = null;
-  drawState.placingRuler = false;
+export function cancelMeasurement(): void {
+  drawState.placingMeasurement = false;
+  drawState.measurementStart = null;
+  drawState.measurementPreviewPoint = null;
   redrawAllStrokes();
 }
 
@@ -706,6 +768,15 @@ export function moveStampById(id: string, position: [number, number]): void {
   }
 }
 
+export function updateMeasurementById(id: string, points: [number, number][], radius?: number): void {
+  const stroke = drawState.strokes.find(s => s.id === id);
+  if (stroke) {
+    stroke.points = points.map(([x, y]) => toMapPoint(x, y));
+    if (radius !== undefined) stroke.radius = radius;
+    redrawAllStrokes();
+  }
+}
+
 export function setDrawColor(color: string): void {
   drawState.color = color;
   if (drawState.erasing && drawState.mapRef) {
@@ -736,6 +807,8 @@ export function saveDrawState(): SavedStroke[] {
     isArrow: stroke.isArrow,
     stampType: stroke.stampType,
     stampText: stroke.stampText,
+    measureType: stroke.measureType,
+    radius: stroke.radius,
   }));
 }
 
@@ -751,6 +824,8 @@ export function restoreDrawState(saved: SavedStroke[], _map: maplibregl.Map): vo
       isArrow: stroke.isArrow,
       stampType: stroke.stampType,
       stampText: stroke.stampText,
+      measureType: stroke.measureType,
+      radius: stroke.radius,
     };
     drawState.strokes.push(s);
     if (s.stampType && drawState.mapRef) {
@@ -797,6 +872,14 @@ function eraseStrokesAtPoint(map: maplibregl.Map, lngLat: maplibregl.LngLat): vo
         break;
       }
     }
+    // Also check circle circumference proximity
+    if (!hit && stroke.measureType === 'circle' && stroke.radius) {
+      const center = stroke.points[0];
+      const dFromCenter = Math.sqrt((center.x - point.x) ** 2 + (center.y - point.y) ** 2);
+      if (Math.abs(dFromCenter - stroke.radius) <= Math.sqrt(radiusSq)) {
+        hit = true;
+      }
+    }
     if (hit) {
       const saved: SavedStroke = {
         id: stroke.id,
@@ -808,6 +891,8 @@ function eraseStrokesAtPoint(map: maplibregl.Map, lngLat: maplibregl.LngLat): vo
         isArrow: stroke.isArrow,
         stampType: stroke.stampType,
         stampText: stroke.stampText,
+        measureType: stroke.measureType,
+        radius: stroke.radius,
       };
       drawState.erasedDuringDrag.push(saved);
       if (stroke.stampType && stroke.id) removeStampDomMarker(stroke.id);
@@ -837,6 +922,8 @@ function finalizeErase(map: maplibregl.Map): void {
         isArrow: s.isArrow,
         stampType: s.stampType,
         stampText: s.stampText,
+        measureType: s.measureType,
+        radius: s.radius,
       })),
     });
 
@@ -966,10 +1053,232 @@ function finalizeDrag(): void {
   drawState.dragStampStartPos = null;
 }
 
+function finalizeMeasurementRuler(start: MapPoint, end: MapPoint): void {
+  const id = crypto.randomUUID();
+  const stroke: StrokeData = {
+    id,
+    points: [start, end],
+    color: '#ffffff',
+    weight: 2,
+    opacity: 1,
+    measureType: 'ruler',
+  };
+  drawState.strokes.push(stroke);
+  if (onStrokeFinalized) onStrokeFinalized(stroke, currentHexId);
+  useUndoStore.getState().pushAction({
+    type: 'stroke-added',
+    hexId: currentHexId,
+    stroke: { id, points: [[start.x, start.y], [end.x, end.y]], color: '#ffffff', weight: 2, opacity: 1, measureType: 'ruler' },
+  });
+  drawState.placingMeasurement = false;
+  drawState.measurementStart = null;
+  drawState.measurementPreviewPoint = null;
+  redrawAllStrokes();
+}
+
+function finalizeMeasurementCircle(center: MapPoint, radiusCrs: number): void {
+  const id = crypto.randomUUID();
+  const stroke: StrokeData = {
+    id,
+    points: [center],
+    color: '#ffffff',
+    weight: 2,
+    opacity: 1,
+    measureType: 'circle',
+    radius: radiusCrs,
+  };
+  drawState.strokes.push(stroke);
+  if (onStrokeFinalized) onStrokeFinalized(stroke, currentHexId);
+  useUndoStore.getState().pushAction({
+    type: 'stroke-added',
+    hexId: currentHexId,
+    stroke: { id, points: [[center.x, center.y]], color: '#ffffff', weight: 2, opacity: 1, measureType: 'circle', radius: radiusCrs },
+  });
+  drawState.placingMeasurement = false;
+  drawState.measurementStart = null;
+  drawState.measurementPreviewPoint = null;
+  redrawAllStrokes();
+}
+
+function startMeasurementDrag(stroke: StrokeData, pointIndex: number, map: maplibregl.Map): void {
+  drawState.draggingMeasurement = stroke;
+  drawState.dragMeasurementPointIndex = pointIndex;
+  drawState.dragMeasurementStartPoints = stroke.points.map(p => ({ ...p }));
+  map.dragPan.disable();
+
+  const onMove = (e: MouseEvent) => {
+    const rect = map.getContainer().getBoundingClientRect();
+    const lngLat = map.unproject([e.clientX - rect.left, e.clientY - rect.top]);
+    const point = lngLatToMapPoint(lngLat.lng, lngLat.lat);
+    stroke.points[pointIndex] = point;
+    redrawAllStrokes();
+  };
+
+  const onUp = () => {
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+    map.dragPan.enable();
+
+    const startPoints = drawState.dragMeasurementStartPoints!;
+    const newPoints = stroke.points;
+    const moved = startPoints[pointIndex].x !== newPoints[pointIndex].x ||
+                  startPoints[pointIndex].y !== newPoints[pointIndex].y;
+
+    if (moved) {
+      if (onStrokeUpdated) onStrokeUpdated(stroke, currentHexId);
+      useUndoStore.getState().pushAction({
+        type: 'measurement-updated',
+        hexId: currentHexId,
+        strokeId: stroke.id!,
+        prevPoints: startPoints.map(p => [p.x, p.y] as [number, number]),
+        newPoints: newPoints.map(p => [p.x, p.y] as [number, number]),
+      });
+    }
+
+    drawState.draggingMeasurement = null;
+    drawState.dragMeasurementStartPoints = null;
+  };
+
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('mouseup', onUp);
+}
+
+function startCircleResize(stroke: StrokeData, map: maplibregl.Map): void {
+  drawState.draggingMeasurement = stroke;
+  drawState.dragMeasurementStartRadius = stroke.radius!;
+  map.dragPan.disable();
+
+  const center = stroke.points[0];
+
+  const onMove = (e: MouseEvent) => {
+    const rect = map.getContainer().getBoundingClientRect();
+    const lngLat = map.unproject([e.clientX - rect.left, e.clientY - rect.top]);
+    const point = lngLatToMapPoint(lngLat.lng, lngLat.lat);
+    const dx = point.x - center.x;
+    const dy = point.y - center.y;
+    stroke.radius = Math.sqrt(dx * dx + dy * dy) || 0.1;
+    redrawAllStrokes();
+  };
+
+  const onUp = () => {
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+    map.dragPan.enable();
+
+    const startRadius = drawState.dragMeasurementStartRadius!;
+    const changed = startRadius !== stroke.radius;
+
+    if (changed) {
+      if (onStrokeUpdated) onStrokeUpdated(stroke, currentHexId);
+      useUndoStore.getState().pushAction({
+        type: 'measurement-updated',
+        hexId: currentHexId,
+        strokeId: stroke.id!,
+        prevPoints: stroke.points.map(p => [p.x, p.y] as [number, number]),
+        prevRadius: startRadius,
+        newPoints: stroke.points.map(p => [p.x, p.y] as [number, number]),
+        newRadius: stroke.radius,
+      });
+    }
+
+    drawState.draggingMeasurement = null;
+    drawState.dragMeasurementStartRadius = null;
+  };
+
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('mouseup', onUp);
+}
+
+function startCircleMove(stroke: StrokeData, map: maplibregl.Map): void {
+  drawState.draggingMeasurement = stroke;
+  drawState.dragMeasurementStartPoints = stroke.points.map(p => ({ ...p }));
+  map.dragPan.disable();
+
+  const onMove = (e: MouseEvent) => {
+    const rect = map.getContainer().getBoundingClientRect();
+    const lngLat = map.unproject([e.clientX - rect.left, e.clientY - rect.top]);
+    const point = lngLatToMapPoint(lngLat.lng, lngLat.lat);
+    stroke.points[0] = point;
+    redrawAllStrokes();
+  };
+
+  const onUp = () => {
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+    map.dragPan.enable();
+
+    const startPoints = drawState.dragMeasurementStartPoints!;
+    const moved = startPoints[0].x !== stroke.points[0].x || startPoints[0].y !== stroke.points[0].y;
+
+    if (moved) {
+      if (onStrokeUpdated) onStrokeUpdated(stroke, currentHexId);
+      useUndoStore.getState().pushAction({
+        type: 'measurement-updated',
+        hexId: currentHexId,
+        strokeId: stroke.id!,
+        prevPoints: startPoints.map(p => [p.x, p.y] as [number, number]),
+        prevRadius: stroke.radius,
+        newPoints: stroke.points.map(p => [p.x, p.y] as [number, number]),
+        newRadius: stroke.radius,
+      });
+    }
+
+    drawState.draggingMeasurement = null;
+    drawState.dragMeasurementStartPoints = null;
+  };
+
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('mouseup', onUp);
+}
+
 export function setupDrawingEvents(map: maplibregl.Map): void {
   drawState.mapRef = map;
 
   const container = map.getContainer();
+
+  // Left-click handler for dragging measurement endpoints/circumference
+  // Use capture phase so we fire before MapLibre's internal drag-pan handler
+  container.addEventListener('mousedown', (e: MouseEvent) => {
+    if (!drawState.active || e.button !== 0) return;
+
+    const rect = container.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const clickY = e.clientY - rect.top;
+
+    for (const stroke of drawState.strokes) {
+      if (stroke.measureType === 'ruler' && stroke.points.length >= 2) {
+        for (let i = 0; i < 2; i++) {
+          const ptPx = map.project(mapPointToLngLat(stroke.points[i]));
+          if (Math.hypot(clickX - ptPx.x, clickY - ptPx.y) <= 10) {
+            e.stopPropagation();
+            e.preventDefault();
+            startMeasurementDrag(stroke, i, map);
+            return;
+          }
+        }
+      } else if (stroke.measureType === 'circle' && stroke.radius) {
+        const centerPx = map.project(mapPointToLngLat(stroke.points[0]));
+        const dist = Math.hypot(clickX - centerPx.x, clickY - centerPx.y);
+        // Center dot drag — move the whole circle
+        if (dist <= 10) {
+          e.stopPropagation();
+          e.preventDefault();
+          startCircleMove(stroke, map);
+          return;
+        }
+        // Circumference drag — resize
+        const edgeCrs: MapPoint = { x: stroke.points[0].x + stroke.radius, y: stroke.points[0].y };
+        const edgePx = map.project(mapPointToLngLat(edgeCrs));
+        const screenRadius = Math.hypot(edgePx.x - centerPx.x, edgePx.y - centerPx.y);
+        if (Math.abs(dist - screenRadius) <= 15) {
+          e.stopPropagation();
+          e.preventDefault();
+          startCircleResize(stroke, map);
+          return;
+        }
+      }
+    }
+  }, { capture: true });
 
   container.addEventListener('mousedown', (e: MouseEvent) => {
     if (!drawState.active) return;
@@ -1004,15 +1313,28 @@ export function setupDrawingEvents(map: maplibregl.Map): void {
 
     if (store.activeTool === 'ruler') {
       const point = lngLatToMapPoint(lngLat.lng, lngLat.lat);
-      if (!drawState.placingRuler) {
-        drawState.rulerStart = point;
-        drawState.rulerEnd = null;
-        drawState.rulerPreviewPoint = null;
-        drawState.placingRuler = true;
+      if (!drawState.placingMeasurement) {
+        drawState.measurementStart = point;
+        drawState.measurementPreviewPoint = null;
+        drawState.placingMeasurement = true;
       } else {
-        drawState.rulerEnd = point;
-        drawState.placingRuler = false;
-        drawState.rulerPreviewPoint = null;
+        finalizeMeasurementRuler(drawState.measurementStart!, point);
+      }
+      redrawAllStrokes();
+      return;
+    }
+
+    if (store.activeTool === 'circle') {
+      const point = lngLatToMapPoint(lngLat.lng, lngLat.lat);
+      if (!drawState.placingMeasurement) {
+        drawState.measurementStart = point;
+        drawState.measurementPreviewPoint = null;
+        drawState.placingMeasurement = true;
+      } else {
+        const dx = point.x - drawState.measurementStart!.x;
+        const dy = point.y - drawState.measurementStart!.y;
+        const radiusCrs = Math.sqrt(dx * dx + dy * dy);
+        finalizeMeasurementCircle(drawState.measurementStart!, radiusCrs || metersToRadius(150));
       }
       redrawAllStrokes();
       return;
@@ -1077,9 +1399,9 @@ export function setupDrawingEvents(map: maplibregl.Map): void {
       return;
     }
 
-    // Ruler placement preview
-    if (drawState.placingRuler) {
-      drawState.rulerPreviewPoint = lngLatToMapPoint(lngLat.lng, lngLat.lat);
+    // Measurement placement preview
+    if (drawState.placingMeasurement) {
+      drawState.measurementPreviewPoint = lngLatToMapPoint(lngLat.lng, lngLat.lat);
       redrawAllStrokes();
       return;
     }
@@ -1096,9 +1418,9 @@ export function setupDrawingEvents(map: maplibregl.Map): void {
       finalizeErase(map);
       return;
     }
-    // Don't finalize polygon/ruler on mouseup — they use click-click
+    // Don't finalize polygon/measurement on mouseup — they use click-click
     if (drawState.placingPolygon) return;
-    if (drawState.placingRuler) return;
+    if (drawState.placingMeasurement) return;
     if (drawState.drawing) finalizeStroke();
   };
 
@@ -1110,19 +1432,19 @@ export function setupDrawingEvents(map: maplibregl.Map): void {
     if (drawState.active) e.preventDefault();
   });
 
-  // Escape cancels polygon/ruler placement
+  // Escape cancels polygon/measurement placement
   document.addEventListener('keydown', (e: KeyboardEvent) => {
     if (e.key === 'Escape') {
       if (drawState.placingPolygon) cancelPolygon();
-      if (drawState.placingRuler) cancelRuler();
+      if (drawState.placingMeasurement) cancelMeasurement();
     }
   });
 
-  // Cancel polygon/ruler/enemy-marker/text if tool changes mid-placement
+  // Cancel polygon/measurement/enemy-marker/text if tool changes mid-placement
   useDrawStore.subscribe((state, prev) => {
     if (state.activeTool !== prev.activeTool) {
       if (drawState.placingPolygon) cancelPolygon();
-      if (prev.activeTool === 'ruler') cancelRuler();
+      if (prev.activeTool === 'ruler' || prev.activeTool === 'circle') cancelMeasurement();
       if (prev.activeTool === 'text') removeTextInput();
       if (prev.activeTool === 'enemy-marker') {
         useEnemyMarkerStore.getState().setPlacingMarker(false);

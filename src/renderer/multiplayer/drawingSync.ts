@@ -9,6 +9,7 @@ import {
   clearAllStrokes,
   getDrawState,
   updateStampDomMarkerPosition,
+  redrawAllStrokes,
 } from '../map/drawing';
 import { toMapPoint } from '../data/coords';
 import type { SavedStroke } from '../data/store';
@@ -32,6 +33,8 @@ function fromYjsStroke(id: string, data: any): StrokeData {
     isArrow: data.isArrow,
     stampType: data.stampType,
     stampText: data.stampText,
+    measureType: data.measureType,
+    radius: data.radius,
   };
 }
 
@@ -47,6 +50,8 @@ function toSavedStroke(id: string, data: any): SavedStroke {
     isArrow: data.isArrow,
     stampType: data.stampType,
     stampText: data.stampText,
+    measureType: data.measureType,
+    radius: data.radius,
   };
 }
 
@@ -65,6 +70,8 @@ export function initDrawingSync(): void {
       isArrow: stroke.isArrow,
       stampType: stroke.stampType,
       stampText: stroke.stampText,
+      measureType: stroke.measureType,
+      radius: stroke.radius,
     });
     debugLog('yjs', `Stroke created in ${hexId}: ${id}`);
     minimapNotify('strokes', hexId);
@@ -83,6 +90,8 @@ export function initDrawingSync(): void {
       isArrow: stroke.isArrow,
       stampType: stroke.stampType,
       stampText: stroke.stampText,
+      measureType: stroke.measureType,
+      radius: stroke.radius,
     });
     debugLog('yjs', `Stroke updated in ${hexId}: ${id}`);
     minimapNotify('strokes', hexId);
@@ -127,16 +136,24 @@ export function setupDrawingObserver(): void {
           if (!data) return;
 
           if (hexId === currentHexId) {
-            // Skip remote updates for a stamp we're actively dragging
+            // Skip remote updates for a stroke we're actively dragging
             const ds = getDrawState();
             if (ds.draggingStamp && ds.draggingStamp.id === strokeId) return;
+            if (ds.draggingMeasurement && ds.draggingMeasurement.id === strokeId) return;
 
             if (change.action === 'update') {
-              // For stamps, update position in-place + move DOM marker (no flicker)
               const existing = ds.strokes.find(s => s.id === strokeId);
+              // For stamps, update position in-place + move DOM marker (no flicker)
               if (existing?.stampType) {
                 existing.points = (data.points as [number, number][]).map(([x, y]) => toMapPoint(x, y));
                 updateStampDomMarkerPosition(strokeId, existing.points[0]);
+                return;
+              }
+              // For measurements, update in-place (no flicker)
+              if (existing?.measureType) {
+                existing.points = (data.points as [number, number][]).map(([x, y]) => toMapPoint(x, y));
+                if (data.radius !== undefined) existing.radius = data.radius;
+                redrawAllStrokes();
                 return;
               }
               removeStrokeById(strokeId);

@@ -1,5 +1,5 @@
 import React, { useCallback, useRef, useMemo, useState } from 'react';
-import { Pencil, Eraser, Ruler, Slash, Hash, Square, MoveRight, Sticker, Type, Undo2, Redo2 } from 'lucide-react';
+import { Pencil, Eraser, Ruler, Circle, Slash, Hash, Square, MoveRight, Sticker, Type, Undo2, Redo2 } from 'lucide-react';
 import { useDrawStore, type BrushPattern } from '../../stores/drawStore';
 import { useMapStore } from '../../stores/mapStore';
 import { useUndoStore } from '../../stores/undoStore';
@@ -195,6 +195,17 @@ export function BottomBar() {
       useDrawStore.getState().setActiveTool('pen');
     } else {
       useDrawStore.getState().setActiveTool('ruler');
+    }
+  }, [activeTool, map]);
+
+  const handleCircleClick = useCallback(() => {
+    if (activeTool === 'eraser' && map) {
+      toggleEraser(map);
+    }
+    if (activeTool === 'circle') {
+      useDrawStore.getState().setActiveTool('pen');
+    } else {
+      useDrawStore.getState().setActiveTool('circle');
     }
   }, [activeTool, map]);
 
@@ -408,6 +419,25 @@ export function BottomBar() {
                 </TooltipTrigger>
                 <TooltipContent side="top" className="bg-[#1a1a1e] border-[var(--color-border-glass)] text-white text-xs">
                   Ruler (Right-click)
+                </TooltipContent>
+              </Tooltip>
+
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Toggle
+                    pressed={activeTool === 'circle'}
+                    onPressedChange={handleCircleClick}
+                    className={`h-[34px] w-[34px] bg-transparent hover:bg-white/[0.08] text-white/50 border-b-2 transition-all ${
+                      activeTool === 'circle'
+                        ? 'border-b-white/80 bg-white/[0.12] text-white'
+                        : 'border-b-transparent'
+                    }`}
+                  >
+                    <Circle size={16} />
+                  </Toggle>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="bg-[#1a1a1e] border-[var(--color-border-glass)] text-white text-xs">
+                  Circle (Right-click)
                 </TooltipContent>
               </Tooltip>
             </div>

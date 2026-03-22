@@ -15,6 +15,8 @@ export interface SavedStroke {
   isArrow?: boolean;
   stampType?: string;
   stampText?: string;
+  measureType?: 'ruler' | 'circle';
+  radius?: number;
 }
 
 export interface SavedArtilleryState {

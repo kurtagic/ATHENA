@@ -13,6 +13,8 @@ export interface StrokeSnapshot {
   isArrow?: boolean;
   stampType?: string;
   stampText?: string;
+  measureType?: 'ruler' | 'circle';
+  radius?: number;
 }
 
 // ── Gun snapshots ──
@@ -133,6 +135,16 @@ interface StampMovedAction {
   to: [number, number];
 }
 
+interface MeasurementUpdatedAction {
+  type: 'measurement-updated';
+  hexId: string;
+  strokeId: string;
+  prevPoints: [number, number][];
+  prevRadius?: number;
+  newPoints: [number, number][];
+  newRadius?: number;
+}
+
 export type UndoableAction =
   | StrokeAddedAction
   | StrokesErasedAction
@@ -146,7 +158,8 @@ export type UndoableAction =
   | EnemyMarkerAddedAction
   | EnemyMarkerRemovedAction
   | EnemyMarkerMovedAction
-  | StampMovedAction;
+  | StampMovedAction
+  | MeasurementUpdatedAction;
 
 const MAX_STACK_SIZE = 50;
 

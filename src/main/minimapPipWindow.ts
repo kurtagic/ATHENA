@@ -633,6 +633,42 @@ const MINIMAP_HTML = `<!DOCTYPE html>
     var cachedStrokes = [];
     var stampDomMarkers = []; // for text label DOM markers
 
+    function drawMeasureLabel(cx, cy, line1, line2) {
+      drawCtx.save();
+      drawCtx.font = 'bold 11px monospace';
+      drawCtx.textAlign = 'center';
+      drawCtx.textBaseline = 'middle';
+      var w1 = drawCtx.measureText(line1).width;
+      var w2 = line2 ? drawCtx.measureText(line2).width : 0;
+      var pw = Math.max(w1, w2) + 12;
+      var ph = line2 ? 30 : 20;
+      var r = 5;
+      var x0 = cx - pw/2, y0 = cy - ph/2;
+      drawCtx.fillStyle = 'rgba(0,0,0,0.75)';
+      drawCtx.beginPath();
+      drawCtx.moveTo(x0+r, y0);
+      drawCtx.lineTo(x0+pw-r, y0);
+      drawCtx.quadraticCurveTo(x0+pw, y0, x0+pw, y0+r);
+      drawCtx.lineTo(x0+pw, y0+ph-r);
+      drawCtx.quadraticCurveTo(x0+pw, y0+ph, x0+pw-r, y0+ph);
+      drawCtx.lineTo(x0+r, y0+ph);
+      drawCtx.quadraticCurveTo(x0, y0+ph, x0, y0+ph-r);
+      drawCtx.lineTo(x0, y0+r);
+      drawCtx.quadraticCurveTo(x0, y0, x0+r, y0);
+      drawCtx.closePath();
+      drawCtx.fill();
+      drawCtx.fillStyle = '#ffffff';
+      if (line2) {
+        drawCtx.fillText(line1, cx, cy - 6);
+        drawCtx.fillStyle = 'rgba(255,255,255,0.7)';
+        drawCtx.font = '9px monospace';
+        drawCtx.fillText(line2, cx, cy + 7);
+      } else {
+        drawCtx.fillText(line1, cx, cy);
+      }
+      drawCtx.restore();
+    }
+
     function redrawStrokes() {
       if (!drawCtx || !map) return;
       drawCtx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
@@ -664,6 +700,70 @@ const MINIMAP_HTML = `<!DOCTYPE html>
           drawCtx.globalAlpha = s.opacity != null ? s.opacity : 1;
           drawCtx.translate(spx.x - STAMP_SIZE/2, spx.y - STAMP_SIZE/2);
           STAMP_DRAW_FNS[s.stampType](drawCtx, STAMP_SIZE, color);
+          drawCtx.restore();
+          continue;
+        }
+
+        // ── Ruler measurement ──
+        if (s.measureType === 'ruler' && s.points.length >= 2) {
+          var rp0 = crsToLngLat(s.points[0][0], s.points[0][1]);
+          var rp1 = crsToLngLat(s.points[1][0], s.points[1][1]);
+          var rpx0 = map.project(rp0);
+          var rpx1 = map.project(rp1);
+          drawCtx.save();
+          drawCtx.globalAlpha = 1;
+          drawCtx.beginPath();
+          drawCtx.setLineDash([8, 5]);
+          drawCtx.strokeStyle = '#ffffff';
+          drawCtx.lineWidth = 2;
+          drawCtx.moveTo(rpx0.x, rpx0.y);
+          drawCtx.lineTo(rpx1.x, rpx1.y);
+          drawCtx.stroke();
+          drawCtx.setLineDash([]);
+          [rpx0, rpx1].forEach(function(p) {
+            drawCtx.beginPath();
+            drawCtx.arc(p.x, p.y, 4, 0, Math.PI * 2);
+            drawCtx.fillStyle = '#ffffff';
+            drawCtx.fill();
+            drawCtx.strokeStyle = '#000000';
+            drawCtx.lineWidth = 1.5;
+            drawCtx.stroke();
+          });
+          var rmx = (rpx0.x + rpx1.x) / 2, rmy = (rpx0.y + rpx1.y) / 2;
+          var rdx = s.points[1][0] - s.points[0][0], rdy = s.points[1][1] - s.points[0][1];
+          var rdistM = Math.round(Math.sqrt(rdx*rdx + rdy*rdy) * METERS_PER_CRS);
+          var razRad = Math.atan2(rdx, rdy);
+          var razDeg = ((razRad * 180 / Math.PI) + 360) % 360;
+          drawMeasureLabel(rmx, rmy, rdistM + 'm', razDeg.toFixed(1) + '\u00B0');
+          drawCtx.restore();
+          continue;
+        }
+
+        // ── Circle measurement ──
+        if (s.measureType === 'circle' && s.radius) {
+          var cll = crsToLngLat(s.points[0][0], s.points[0][1]);
+          var cpx = map.project(cll);
+          var ell = crsToLngLat(s.points[0][0] + s.radius, s.points[0][1]);
+          var epx = map.project(ell);
+          var csr = Math.sqrt((epx.x-cpx.x)*(epx.x-cpx.x)+(epx.y-cpx.y)*(epx.y-cpx.y));
+          drawCtx.save();
+          drawCtx.globalAlpha = 1;
+          drawCtx.beginPath();
+          drawCtx.setLineDash([8, 5]);
+          drawCtx.strokeStyle = '#ffffff';
+          drawCtx.lineWidth = 2;
+          drawCtx.arc(cpx.x, cpx.y, csr, 0, Math.PI * 2);
+          drawCtx.stroke();
+          drawCtx.setLineDash([]);
+          drawCtx.beginPath();
+          drawCtx.arc(cpx.x, cpx.y, 3, 0, Math.PI * 2);
+          drawCtx.fillStyle = '#ffffff';
+          drawCtx.fill();
+          drawCtx.strokeStyle = '#000000';
+          drawCtx.lineWidth = 1.5;
+          drawCtx.stroke();
+          var cradiusM = Math.round(s.radius * METERS_PER_CRS);
+          drawMeasureLabel(cpx.x, cpx.y - csr - 14, cradiusM + 'm');
           drawCtx.restore();
           continue;
         }
