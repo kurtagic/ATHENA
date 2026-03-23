@@ -221,18 +221,8 @@ function LobbyView({
 
   const officerSet = new Set(officerIds);
 
-  // TODO: REMOVE — fake members for scrollbar testing
-  const fakeMembers = Array.from({ length: 20 }, (_, i) => ({
-    id: `fake-${i}`,
-    displayName: ['Siegfried', 'Blitz', 'Ironhide', 'Wraith', 'Nomad', 'Vanguard', 'Frostbite', 'Echo', 'Sable', 'Phantom', 'Gunner', 'Ashfall', 'Ridgeback', 'Foxhound', 'Havoc', 'Dagger', 'Sentinel', 'Rook', 'Breaker', 'Cobalt'][i],
-    voiceEnabled: true,
-    colorIndex: i % 8,
-    connectedAt: Date.now() - i * 60000,
-  }));
-  const allMembers = [...members, ...fakeMembers];
-
   // Sort members: owner first, then officers (by connectedAt), then regular members
-  const sortedMembers = [...allMembers].sort((a, b) => {
+  const sortedMembers = [...members].sort((a, b) => {
     if (a.id === ownerId) return -1;
     if (b.id === ownerId) return 1;
     const aOfficer = officerSet.has(a.id);
