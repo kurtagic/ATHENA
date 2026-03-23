@@ -49,6 +49,7 @@ export function loadSettings(): Settings {
         ...DEFAULT_SETTINGS.general,
         ...(parsed.general || {}),
       },
+      ...(parsed.beta ? { beta: { ...parsed.beta } } : {}),
     };
   } catch {
     currentSettings = {
@@ -75,6 +76,9 @@ export function updateSettings(partial: SettingsPartial): Settings {
   }
   if (partial.general) {
     currentSettings.general = { ...currentSettings.general, ...partial.general };
+  }
+  if (partial.beta) {
+    currentSettings.beta = { ...(currentSettings.beta || { code: '' }), ...partial.beta };
   }
   saveSettings(currentSettings);
   return currentSettings;

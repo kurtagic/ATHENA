@@ -61,10 +61,15 @@ export interface GeneralSettings {
   displayName: string;
 }
 
+export interface BetaSettings {
+  code: string;
+}
+
 export interface Settings {
   keybinds: KeybindSettings;
   audio: AudioSettings;
   general: GeneralSettings;
+  beta?: BetaSettings;
 }
 
 export type SettingsPartial = {
