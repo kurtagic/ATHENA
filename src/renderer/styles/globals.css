@@ -506,6 +506,24 @@ textarea::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.22);
 }
 
+/* ── Lobby members scrollbar ─────────────────────────────── */
+#lobby-members::-webkit-scrollbar {
+  width: 4px;
+}
+
+#lobby-members::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+#lobby-members::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+}
+
+#lobby-members::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+
 /* ── Artillery sidebar scrollbar ─────────────────────────── */
 #arty-sidebar::-webkit-scrollbar {
   width: 6px;
