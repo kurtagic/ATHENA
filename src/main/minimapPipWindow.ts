@@ -221,6 +221,7 @@ const MINIMAP_HTML = `<!DOCTYPE html>
         map.addSource('structures', { type:'geojson', data:emptyFC });
         map.addLayer({
           id:'structures-bg', type:'circle', source:'structures',
+          minzoom: 3,
           paint:{
             'circle-radius': ['get','radius'],
             'circle-color': ['match',['get','teamId'], 'COLONIALS','#6D7B34', 'WARDENS','#516C96', '#888'],
@@ -231,6 +232,7 @@ const MINIMAP_HTML = `<!DOCTYPE html>
         });
         map.addLayer({
           id:'structures-icons', type:'symbol', source:'structures',
+          minzoom: 3,
           layout:{
             'icon-image': ['get','icon'],
             'icon-size': ['/',['get','size'], 64],
@@ -332,20 +334,10 @@ const MINIMAP_HTML = `<!DOCTYPE html>
       if (src) src.setData({ type: 'FeatureCollection', features: features });
     }
 
-    // ── Static labels (DOM markers, same as main map) ──
+    // ── Static labels (disabled on minimap — too cluttered) ──
     function updateLabels(labels) {
       labelMarkers.forEach(function(m){m.remove();});
       labelMarkers = [];
-      if (!labels) return;
-      labels.forEach(function(lbl) {
-        var lngLat = crsToLngLat(lbl.x * IMG_W, -lbl.y * IMG_H);
-        var isMajor = lbl.mapMarkerType === 'Major';
-        var el = document.createElement('div');
-        el.className = isMajor ? 'map-text-major' : 'map-text-minor';
-        el.textContent = lbl.text;
-        var marker = new maplibregl.Marker({element:el}).setLngLat(lngLat).addTo(map);
-        labelMarkers.push(marker);
-      });
     }
 
     // ── Artillery helpers ──
@@ -631,6 +623,34 @@ const MINIMAP_HTML = `<!DOCTYPE html>
 
     var STAMP_SIZE = 40; // slightly smaller than main map's 56 for minimap scale
 
+    // ── Hatch pattern for area strokes ──
+    var hatchPatternCache = {};
+    function createHatchPattern(ctx, color, type) {
+      var key = color + '-' + type;
+      if (hatchPatternCache[key]) return hatchPatternCache[key];
+      var size = 28;
+      var offscreen = new OffscreenCanvas(size, size);
+      var pCtx = offscreen.getContext('2d');
+      if (!pCtx) return null;
+      pCtx.strokeStyle = color;
+      pCtx.lineWidth = 1.5;
+      pCtx.beginPath();
+      pCtx.moveTo(0, 0); pCtx.lineTo(size, size);
+      pCtx.moveTo(-size, 0); pCtx.lineTo(size, size * 2);
+      pCtx.moveTo(0, -size); pCtx.lineTo(size * 2, size);
+      pCtx.stroke();
+      if (type === 'crosshatch') {
+        pCtx.beginPath();
+        pCtx.moveTo(size, 0); pCtx.lineTo(0, size);
+        pCtx.moveTo(size * 2, 0); pCtx.lineTo(0, size * 2);
+        pCtx.moveTo(size, -size); pCtx.lineTo(-size, size);
+        pCtx.stroke();
+      }
+      var pattern = ctx.createPattern(offscreen, 'repeat');
+      if (pattern) hatchPatternCache[key] = pattern;
+      return pattern;
+    }
+
     // ── Strokes, arrows, stamps, text (canvas + DOM overlay) ──
     var cachedStrokes = [];
     var stampDomMarkers = []; // for text label DOM markers
@@ -766,6 +786,40 @@ const MINIMAP_HTML = `<!DOCTYPE html>
           drawCtx.stroke();
           var cradiusM = Math.round(s.radius * METERS_PER_CRS);
           drawMeasureLabel(cpx.x, cpx.y - csr - 14, cradiusM + 'm');
+          drawCtx.restore();
+          continue;
+        }
+
+        // ── Area strokes (polygon with optional hatch fill) ──
+        if (s.brushPattern) {
+          if (s.points.length < 3) continue;
+          drawCtx.save();
+          drawCtx.globalAlpha = s.opacity != null ? s.opacity : 1;
+          drawCtx.beginPath();
+          for (var j=0; j<s.points.length; j++) {
+            var ll = crsToLngLat(s.points[j][0], s.points[j][1]);
+            var px = map.project(ll);
+            if (j===0) drawCtx.moveTo(px.x, px.y);
+            else drawCtx.lineTo(px.x, px.y);
+          }
+          drawCtx.closePath();
+          drawCtx.strokeStyle = color;
+          drawCtx.lineWidth = weight;
+          drawCtx.lineCap = 'round';
+          drawCtx.lineJoin = 'round';
+          drawCtx.stroke();
+          if (s.brushPattern === 'diagonal' || s.brushPattern === 'crosshatch') {
+            var pattern = createHatchPattern(drawCtx, color, s.brushPattern);
+            if (pattern) {
+              var firstLL = crsToLngLat(s.points[0][0], s.points[0][1]);
+              var firstPx = map.project(firstLL);
+              var zoom = map.getZoom();
+              var scale = Math.pow(2, zoom - 4);
+              pattern.setTransform(new DOMMatrix().translateSelf(firstPx.x, firstPx.y).scaleSelf(scale, scale));
+              drawCtx.fillStyle = pattern;
+              drawCtx.fill('evenodd');
+            }
+          }
           drawCtx.restore();
           continue;
         }

@@ -273,6 +273,7 @@ const PIP_HTML = `<!DOCTYPE html>
         '<span class="gun-val">' + Math.round(main.distanceM) + 'm</span>' +
         '<span class="gun-val">' + Math.round(main.azimuthDeg) + '\\u00B0</span>' +
       '</div>';
+      resizePip();
     });
 
     // External trigger (e.g. from IPC)
@@ -408,9 +409,7 @@ export function updatePipData(data: PinnedSolution[]): void {
   if (isAlive(pipWin) && pipWin.isVisible()) {
     const { script, needsResize } = renderDataScript(data);
     safeExec(pipWin, script);
-    if (needsResize) {
-      resizeToPanel(pipWin);
-    }
+    resizeToPanel(pipWin);
     if (changed) {
       safeExec(pipWin, FLASH_SCRIPT);
     }
