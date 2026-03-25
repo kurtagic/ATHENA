@@ -2,7 +2,7 @@
   "name": "athena",
   "version": "0.4.2",
   "productName": "Athena",
-  "description": "Foxhole Map Viewer",
+  "description": "Athena",
   "author": "teo",
   "main": ".vite/build/main.js",
   "scripts": {

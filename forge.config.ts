@@ -1,6 +1,6 @@
 import type { ForgeConfig } from '@electron-forge/shared-types';
 import { VitePlugin } from '@electron-forge/plugin-vite';
-import { rmSync } from 'node:fs';
+import { readdirSync, rmSync } from 'node:fs';
 import path from 'node:path';
 
 const config: ForgeConfig = {
@@ -37,6 +37,17 @@ const config: ForgeConfig = {
       try {
         rmSync(unusedHexDir, { recursive: true, force: true });
         console.log(`[forge] Removed unused hexmap format: ${unusedHexDir}`);
+      } catch {}
+
+      // Strip unused locales (keep only en-US)
+      const localesDir = path.join(outDir, 'locales');
+      try {
+        for (const file of readdirSync(localesDir)) {
+          if (file !== 'en-US.pak') {
+            rmSync(path.join(localesDir, file));
+          }
+        }
+        console.log(`[forge] Stripped locales (kept en-US.pak only)`);
       } catch {}
     },
   },
