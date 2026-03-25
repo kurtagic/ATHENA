@@ -9,10 +9,16 @@ const CREW_PIP_MARGIN = 16;
 
 let prevStatusMap: Record<string, string> = {};
 
+const STATUS_LABELS: Record<string, string> = {
+  afk: 'AFK', standby: 'Standby', withdraw: 'Withdrawing', prepping: 'Prepping',
+  engaging: 'Engaging', reposition: 'Repositioning', at: 'AT', pve: 'PvE',
+  'refuel-rearm': 'Refuel Rearm', downed: 'Downed', repairing: 'Repairing',
+  'armour-repair': 'Armour Repair', 'out-of-ammo': 'Out Of Ammo',
+  'turret-damaged': 'Turret Damaged', 'large-hole': 'Large Hole',
+};
+
 const STATUS_COLORS: Record<string, string> = {
   afk: '#78909c',
-  ready: '#4caf50',
-  holding: '#42a5f5',
   standby: '#29b6f6',
   withdraw: '#ffa726',
   prepping: '#66bb6a',
@@ -149,16 +155,18 @@ function buildFlashScript(names: string[]): string {
 function buildCrewListScript(crews: any[]): string {
   const escaped = JSON.stringify(crews);
   const colorsJson = JSON.stringify(STATUS_COLORS);
+  const labelsJson = JSON.stringify(STATUS_LABELS);
   return `(() => {
     const crews = ${escaped};
     const colors = ${colorsJson};
+    const labels = ${labelsJson};
     const list = document.getElementById('crew-list');
     if (crews.length === 0) {
       list.innerHTML = '<div class="empty">No crews</div>';
     } else {
       list.innerHTML = crews.map(c => {
         const color = colors[c.status] || '#888';
-        const label = c.status.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+        const label = labels[c.status] || c.status;
         return '<div class="crew-row">' +
           '<span class="crew-name">' + c.name + '</span>' +
           '<span class="status-pill" style="background:' + color + '26;border-color:' + color + '80;color:' + color + '">' + label + '</span>' +

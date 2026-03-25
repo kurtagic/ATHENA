@@ -85,7 +85,7 @@ export interface PendingJoin {
 
 export type CrewType = 'infantry' | 'air' | 'tank' | 'artillery' | 'naval';
 export type CrewStatus =
-  | 'afk' | 'ready' | 'holding' | 'standby' | 'withdraw' | 'prepping' | 'engaging' | 'reposition'
+  | 'afk' | 'standby' | 'withdraw' | 'prepping' | 'engaging' | 'reposition'
   | 'at' | 'pve'
   | 'refuel-rearm' | 'downed' | 'repairing' | 'armour-repair' | 'out-of-ammo'
   | 'turret-damaged' | 'large-hole';

@@ -115,7 +115,7 @@ function buildQuickControlsHTML(): string {
     });
 
     const statusColors = {
-      afk: [75,90,97], ready: [46,125,50], holding: [42,93,168], standby: [26,122,158],
+      afk: [75,90,97], standby: [26,122,158],
       withdraw: [181,114,26], prepping: [61,122,64], engaging: [176,48,48], reposition: [181,144,26],
       at: [165,42,42], pve: [85,58,138], 'refuel-rearm': [26,138,150], downed: [165,37,37],
       repairing: [122,52,144], 'armour-repair': [94,72,61], 'out-of-ammo': [181,80,42],
