@@ -33,6 +33,8 @@ export function registerTileProtocol(): void {
       filePath = path.join(TILE_ROOT, ...relPath.split('/'));
     }
 
+    if (filePath.endsWith('.webp')) contentType = 'image/webp';
+
     try {
       const data = await readFile(filePath);
       return new Response(data, {

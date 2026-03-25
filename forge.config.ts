@@ -20,6 +20,15 @@ const config: ForgeConfig = {
           console.log(`[forge] Removed: ${dir}`);
         } catch {}
       }
+
+      // Remove unused hexmap format (keep only the active one)
+      const hexFormat = process.env.VITE_HEXMAP_FORMAT === 'png' ? 'png' : 'webp';
+      const unusedFormat = hexFormat === 'webp' ? 'png' : 'webp';
+      const unusedHexDir = path.join(outDir, 'resources', 'assets', 'hexmaps', unusedFormat);
+      try {
+        rmSync(unusedHexDir, { recursive: true, force: true });
+        console.log(`[forge] Removed unused hexmap format: ${unusedHexDir}`);
+      } catch {}
     },
   },
   makers: [
