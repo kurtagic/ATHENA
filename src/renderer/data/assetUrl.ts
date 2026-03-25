@@ -1,9 +1,10 @@
 const isElectron = typeof window !== 'undefined' && !!(window as any).athena;
 
-const hexFormat = import.meta.env.VITE_HEXMAP_FORMAT === 'png' ? 'png' : 'webp';
+export const mapFormat = import.meta.env.VITE_MAP_FORMAT === 'png' ? 'png' : 'webp';
+export const tileExt = mapFormat === 'webp' ? 'webp' : 'png';
 
 export function tileUrlTemplate(): string {
-  return 'tile:///{z}/{z}_{x}_{y}.png';
+  return `tile:///${mapFormat}/{z}/{z}_{x}_{y}.${tileExt}`;
 }
 
 export function iconUrl(iconFile: string): string {
@@ -12,7 +13,7 @@ export function iconUrl(iconFile: string): string {
 
 export function hexMapUrl(hexId: string, file: string): string {
   const pngName = file || `Map${hexId}.png`;
-  const filename = hexFormat === 'webp' ? pngName.replace(/\.png$/, '.webp') : pngName;
-  const subpath = `hexmaps/${hexFormat}/${filename}`;
+  const filename = mapFormat === 'webp' ? pngName.replace(/\.png$/, '.webp') : pngName;
+  const subpath = `hexmaps/${mapFormat}/${filename}`;
   return isElectron ? `tile:///${subpath}` : `/assets/${subpath}`;
 }

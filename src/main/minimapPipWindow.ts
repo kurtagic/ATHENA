@@ -8,6 +8,8 @@ let mainWinRef: BrowserWindow | null = null;
 const MINIMAP_WIDTH = 320;
 const MINIMAP_HEIGHT = 340;
 const MINIMAP_MARGIN = 16;
+const MAP_FORMAT = process.env.VITE_MAP_FORMAT === 'png' ? 'png' : 'webp';
+const TILE_EXT = MAP_FORMAT === 'webp' ? 'webp' : 'png';
 
 // Inline data needed by the PIP (from iconTypes.ts, artilleryPlatforms.ts)
 const ICON_TYPE_MAP_JSON = JSON.stringify({
@@ -170,11 +172,11 @@ const MINIMAP_HTML = `<!DOCTYPE html>
       if (map) return;
       var TPNG = Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVQI12NgAAIABQABNjN9GQAAAABJRU5ErkJggg=='), function(c){return c.charCodeAt(0);});
       maplibregl.addProtocol('tile', function(params, ac) {
-        var m = params.url.match(/\\/(\\d+)\\/\\d+_(\\d+)_(\\d+)\\.png/);
+        var m = params.url.match(/\\/(\\d+)\\/\\d+_(\\d+)_(\\d+)\\.\\w+/);
         if (m) {
           var z=+m[1],x=+m[2],y=+m[3],oz=z-1,off=1<<(z-2),ox=x-off,oy=y-off;
           if (z<2||ox<0||oy<0||ox>=(1<<oz)||oy>=(1<<oz)) return Promise.resolve({data:TPNG.buffer.slice(0)});
-          return fetchTile('tile:///'+oz+'/'+oz+'_'+ox+'_'+oy+'.png', ac.signal);
+          return fetchTile('tile:///${MAP_FORMAT}/'+oz+'/'+oz+'_'+ox+'_'+oy+'.${TILE_EXT}', ac.signal);
         }
         return fetchTile(params.url, ac.signal);
       });
@@ -189,7 +191,7 @@ const MINIMAP_HTML = `<!DOCTYPE html>
       var center = crsToLngLat(128,-128);
       map = new maplibregl.Map({
         container:'map-container',
-        style:{version:8,sources:{'world-tiles':{type:'raster',tiles:['tile:///{z}/{z}_{x}_{y}.png'],tileSize:256,minzoom:2,maxzoom:4,scheme:'xyz'}},layers:[{id:'world-tiles',type:'raster',source:'world-tiles'}]},
+        style:{version:8,sources:{'world-tiles':{type:'raster',tiles:['tile:///${MAP_FORMAT}/{z}/{z}_{x}_{y}.${TILE_EXT}'],tileSize:256,minzoom:2,maxzoom:4,scheme:'xyz'}},layers:[{id:'world-tiles',type:'raster',source:'world-tiles'}]},
         center:[center[0],center[1]], zoom:4, minZoom:0, maxZoom:9,
         renderWorldCopies:false, dragRotate:false, pitchWithRotate:false, attributionControl:false, fadeDuration:0,
       });

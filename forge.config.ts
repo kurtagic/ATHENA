@@ -12,7 +12,11 @@ const config: ForgeConfig = {
   hooks: {
     postPackage: async (_forgeConfig, options) => {
       const outDir = options.outputPaths[0];
-      const tilesDir = path.join(outDir, 'resources', 'assets', 'tiles');
+      const mapFormat = process.env.VITE_MAP_FORMAT === 'png' ? 'png' : 'webp';
+      const unusedFormat = mapFormat === 'webp' ? 'png' : 'webp';
+
+      // Remove zoom 5-6 from active tile format
+      const tilesDir = path.join(outDir, 'resources', 'assets', 'tiles', mapFormat);
       for (const z of [5, 6]) {
         const dir = path.join(tilesDir, String(z));
         try {
@@ -21,9 +25,14 @@ const config: ForgeConfig = {
         } catch {}
       }
 
-      // Remove unused hexmap format (keep only the active one)
-      const hexFormat = process.env.VITE_HEXMAP_FORMAT === 'png' ? 'png' : 'webp';
-      const unusedFormat = hexFormat === 'webp' ? 'png' : 'webp';
+      // Remove unused tile format
+      const unusedTileDir = path.join(outDir, 'resources', 'assets', 'tiles', unusedFormat);
+      try {
+        rmSync(unusedTileDir, { recursive: true, force: true });
+        console.log(`[forge] Removed unused tile format: ${unusedTileDir}`);
+      } catch {}
+
+      // Remove unused hexmap format
       const unusedHexDir = path.join(outDir, 'resources', 'assets', 'hexmaps', unusedFormat);
       try {
         rmSync(unusedHexDir, { recursive: true, force: true });

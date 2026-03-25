@@ -1,6 +1,6 @@
 import maplibregl from 'maplibre-gl';
 import { mapPointToLngLat } from '../data/coords';
-import { tileUrlTemplate } from '../data/assetUrl';
+import { tileUrlTemplate, mapFormat, tileExt } from '../data/assetUrl';
 
 const isElectron = !!(window as any).athena;
 
@@ -33,7 +33,7 @@ export function createMap(container: HTMLElement): maplibregl.Map {
   // Register tile:// protocol with tile index remapping (both Electron and web)
   maplibregl.addProtocol('tile', (params: { url: string }, abortController: AbortController) => {
     // Check if this is a z/x/y tile request (vs hexmaps, icons)
-    const tileMatch = params.url.match(/\/(\d+)\/\d+_(\d+)_(\d+)\.png/);
+    const tileMatch = params.url.match(/\/(\d+)\/\d+_(\d+)_(\d+)\.\w+/);
 
     if (tileMatch) {
       const z = parseInt(tileMatch[1]);
@@ -52,8 +52,8 @@ export function createMap(container: HTMLElement): maplibregl.Map {
       }
 
       const remappedUrl = isElectron
-        ? `tile:///${origZ}/${origZ}_${origX}_${origY}.png`
-        : `/assets/tiles/${origZ}/${origZ}_${origX}_${origY}.png`;
+        ? `tile:///${mapFormat}/${origZ}/${origZ}_${origX}_${origY}.${tileExt}`
+        : `/assets/tiles/${mapFormat}/${origZ}/${origZ}_${origX}_${origY}.${tileExt}`;
 
       return fetchAsArrayBuffer(remappedUrl, abortController.signal);
     }
