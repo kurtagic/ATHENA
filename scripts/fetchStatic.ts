@@ -1,6 +1,8 @@
 import { writeFileSync } from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const API_BASE = 'https://war-service-live.foxholeservices.com/api/worldconquest';
 
 async function fetchJson(url: string): Promise<unknown> {
@@ -26,7 +28,7 @@ async function main(): Promise<void> {
     console.log(`${labels.length} labels`);
   }
 
-  const outPath = path.join(import.meta.dirname, '..', 'static', 'static_data.json');
+  const outPath = path.join(__dirname, '..', 'static', 'static_data.json');
   writeFileSync(outPath, JSON.stringify(staticData), 'utf-8');
   console.log(`Wrote ${outPath} (${Object.keys(staticData).length} hexes)`);
 }
