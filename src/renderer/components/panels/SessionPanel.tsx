@@ -561,28 +561,32 @@ function CrewSection({ memberId, members }: { memberId: string | null; members: 
         {!myCrew && crews.length > 0 && (
           <div className="flex flex-col gap-1">
             {crews.map((c) => (
-              <div key={c.id} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-white/[0.04]">
-                <span className="text-[13px] text-white/70 flex-1 truncate">{c.name}</span>
-                <span className="text-[11px] text-white/25">{c.memberIds.length}/5</span>
-                <span className="text-[11px] text-white/25">{TYPE_LABELS[c.type]}</span>
-                <span
-                  className="px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-[0.1em] flex-shrink-0"
-                  style={{
-                    background: getStatusDef(c.status).color + '26',
-                    borderWidth: 1,
-                    borderStyle: 'solid',
-                    borderColor: getStatusDef(c.status).color + '80',
-                    color: getStatusDef(c.status).color,
-                  }}
-                >{getStatusDef(c.status).label}</span>
-                {c.memberIds.length < 5 && (
-                  <button
-                    onClick={() => session.joinCrew(c.id)}
-                    className="px-2 py-0.5 text-[11px] font-medium text-blue-400 bg-blue-600/20 border border-blue-400/20 rounded hover:bg-blue-600/40 transition-colors"
-                  >
-                    Join
-                  </button>
-                )}
+              <div key={c.id} className="flex flex-col gap-1 px-2 py-1.5 rounded hover:bg-white/[0.04]">
+                <div className="flex items-center gap-2">
+                  <span className="text-[13px] text-white/70 flex-1 truncate">{c.name}</span>
+                  <span
+                    className="px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-[0.1em] flex-shrink-0"
+                    style={{
+                      background: getStatusDef(c.status).color + '26',
+                      borderWidth: 1,
+                      borderStyle: 'solid',
+                      borderColor: getStatusDef(c.status).color + '80',
+                      color: getStatusDef(c.status).color,
+                    }}
+                  >{getStatusDef(c.status).label}</span>
+                  {c.memberIds.length < 5 && (
+                    <button
+                      onClick={() => session.joinCrew(c.id)}
+                      className="px-2 py-0.5 text-[11px] font-medium text-blue-400 bg-blue-600/20 border border-blue-400/20 rounded hover:bg-blue-600/40 transition-colors flex-shrink-0"
+                    >
+                      Join
+                    </button>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] text-white/25">{c.memberIds.length}/5</span>
+                  <span className="text-[11px] text-white/25">{TYPE_LABELS[c.type]}</span>
+                </div>
               </div>
             ))}
           </div>

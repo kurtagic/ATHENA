@@ -1,6 +1,6 @@
-import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import type maplibregl from 'maplibre-gl';
-import { Crosshair, Target, Flame, Trash2, Shield, Check, Copy, ChevronRight, ChevronLeft, Pin, Megaphone } from 'lucide-react';
+import { Crosshair, Target, Flame, Trash2, Shield, Check, Copy, ChevronRight, ChevronLeft, Pin, Megaphone, ChevronDown } from 'lucide-react';
 import { useArtilleryStore } from '../../stores/artilleryStore';
 import { useMapStore } from '../../stores/mapStore';
 import { ARTILLERY_PLATFORMS, platformDisplayName } from '../../data/artilleryPlatforms';
@@ -241,6 +241,17 @@ export function RightSidebar() {
   const isConnected = useSessionStore((s) => s.lobbyId) !== null;
   const hasGuns = solutions.length > 0;
 
+  const [clearOpen, setClearOpen] = useState(false);
+  const clearRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!clearOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (clearRef.current && !clearRef.current.contains(e.target as Node)) setClearOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [clearOpen]);
+
   const groups = useMemo(() => {
     const typeOrder = ['120mm', '150mm', '3C-High Explosive Rocket', '4C-Fire Rocket', 'Mortar', '300mm'];
     const factionOrder = (a: { platform: typeof ARTILLERY_PLATFORMS[number] }, b: { platform: typeof ARTILLERY_PLATFORMS[number] }) => {
@@ -360,7 +371,7 @@ export function RightSidebar() {
   return (
     <div
       id="ide-sidebar-right"
-      className="fixed top-[42px] right-0 bottom-[68px] w-[560px] z-40 overflow-hidden border-l border-white/5 transition-transform duration-200 ease-in-out"
+      className="fixed top-[42px] right-0 bottom-[68px] w-[504px] z-40 overflow-hidden border-l border-white/5 transition-transform duration-200 ease-in-out"
       style={{
         background: 'linear-gradient(180deg, rgba(18,18,22,0.95) 0%, rgba(12,12,14,0.98) 100%)',
       }}
@@ -439,10 +450,10 @@ export function RightSidebar() {
             </SelectContent>
           </Select>
           <SectionHeader label="Fire Control" />
-          <div id="arty-actions" className="grid grid-cols-2 gap-1.5">
-            <ActionButton id="arty-place-gun-btn" icon={<Crosshair size={14} />} label="Mark Platform" variant={getPlaceGunVariant()} onClick={handlePlaceGun} />
-            <ActionButton id="arty-set-target-btn" icon={<Target size={14} />} label="Mark Target" variant={getSetTargetVariant()} onClick={handleSetTarget} />
-            <ActionButton id="arty-mark-impact-btn" icon={<Flame size={14} />} label="Mark Impact" variant={getMarkImpactVariant()} colSpan onClick={handleMarkImpact} />
+          <div id="arty-actions" className="grid grid-cols-3 gap-1.5">
+            <ActionButton id="arty-place-gun-btn" icon={<Crosshair size={14} />} label="Platform" variant={getPlaceGunVariant()} onClick={handlePlaceGun} />
+            <ActionButton id="arty-set-target-btn" icon={<Target size={14} />} label="Target" variant={getSetTargetVariant()} onClick={handleSetTarget} />
+            <ActionButton id="arty-mark-impact-btn" icon={<Flame size={14} />} label="Impact" variant={getMarkImpactVariant()} onClick={handleMarkImpact} />
           </div>
           {isConnected && (
             <div className="grid grid-cols-2 gap-1.5">
@@ -466,11 +477,21 @@ export function RightSidebar() {
               </button>
             </div>
           )}
-          <div className="flex items-center gap-1.5">
-            <button className="px-2 py-1 rounded text-[9px] font-bold uppercase tracking-[0.06em] cursor-pointer transition-all duration-150 border bg-red-500/10 border-red-500/30 text-red-400 hover:bg-red-500/20 hover:border-red-400/50 hover:text-red-300" onClick={handleClearTarget}>Clear Target</button>
-            <button className="px-2 py-1 rounded text-[9px] font-bold uppercase tracking-[0.06em] cursor-pointer transition-all duration-150 border bg-red-500/10 border-red-500/30 text-red-400 hover:bg-red-500/20 hover:border-red-400/50 hover:text-red-300" onClick={handleClearImpact}>Clear Impact</button>
-            <div className="flex-1" />
-            <button className="px-2 py-1 rounded text-[9px] font-bold uppercase tracking-[0.06em] cursor-pointer transition-all duration-150 border bg-red-500/10 border-red-500/30 text-red-400 hover:bg-red-500/20 hover:border-red-400/50 hover:text-red-300" onClick={handleClearAll}>Clear All</button>
+          <div ref={clearRef} className="relative inline-block">
+            <button
+              className="flex items-center gap-1 px-2 py-1 rounded text-[9px] font-bold uppercase tracking-[0.06em] cursor-pointer transition-all duration-150 border bg-red-500/10 border-red-500/30 text-red-400 hover:bg-red-500/20 hover:border-red-400/50 hover:text-red-300"
+              onClick={() => setClearOpen((v) => !v)}
+            >
+              Clear
+              <ChevronDown size={10} className={`transition-transform ${clearOpen ? 'rotate-180' : ''}`} />
+            </button>
+            {clearOpen && (
+              <div className="absolute left-0 top-full mt-1 z-50 min-w-[120px] rounded border border-red-500/30 bg-[var(--color-navy)] shadow-lg overflow-hidden">
+                <button className="w-full px-3 py-1.5 text-left text-[9px] font-bold uppercase tracking-[0.06em] text-red-400 hover:bg-red-500/20 cursor-pointer" onClick={() => { handleClearTarget(); setClearOpen(false); }}>Clear Target</button>
+                <button className="w-full px-3 py-1.5 text-left text-[9px] font-bold uppercase tracking-[0.06em] text-red-400 hover:bg-red-500/20 cursor-pointer" onClick={() => { handleClearImpact(); setClearOpen(false); }}>Clear Impact</button>
+                <button className="w-full px-3 py-1.5 text-left text-[9px] font-bold uppercase tracking-[0.06em] text-red-400 hover:bg-red-500/20 cursor-pointer" onClick={() => { handleClearAll(); setClearOpen(false); }}>Clear All</button>
+              </div>
+            )}
           </div>
           {statusText && (
             <div

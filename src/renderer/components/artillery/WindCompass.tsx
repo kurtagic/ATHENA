@@ -1,4 +1,5 @@
-import React, { useCallback, useRef } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useArtilleryStore } from '../../stores/artilleryStore';
 import { useMapStore } from '../../stores/mapStore';
 import { recalcWind } from '../../map/artillery';
@@ -24,6 +25,13 @@ export function WindCompass() {
   const setWind = useArtilleryStore((s) => s.setWind);
   const map = useMapStore((s) => s.mapInstance);
   const svgRef = useRef<SVGSVGElement>(null);
+  const refBtnRef = useRef<HTMLSpanElement>(null);
+  const [showRef, setShowRef] = useState(false);
+  const refPos = (() => {
+    if (!showRef || !refBtnRef.current) return { top: 0, left: 0 };
+    const rect = refBtnRef.current.getBoundingClientRect();
+    return { top: rect.bottom + 4, left: rect.left };
+  })();
 
   const handleClick = useCallback(
     (e: React.MouseEvent<SVGSVGElement>) => {
@@ -67,6 +75,29 @@ export function WindCompass() {
 
   return (
     <div className="flex flex-col items-center gap-2">
+      {/* Flag reference — shown on hover of ? icon, portaled to body to escape overflow:hidden */}
+      <div className="inline-flex items-center gap-1 self-start">
+        <span className="text-[9px] text-white/30 uppercase tracking-[0.08em]">Wind Ref</span>
+        <span
+          ref={refBtnRef}
+          className="w-4 h-4 flex items-center justify-center rounded-full border border-white/20 text-[9px] text-white/40 cursor-help hover:border-white/40 hover:text-white/60"
+          onMouseEnter={() => setShowRef(true)}
+          onMouseLeave={() => setShowRef(false)}
+        >?</span>
+        {showRef && createPortal(
+          <div
+            className="fixed z-[9999] pointer-events-none"
+            style={{ top: refPos.top, left: refPos.left }}
+          >
+            <img
+              src={flagWindImage}
+              alt="Wind Strength Reference"
+              className="w-[700px] rounded shadow-lg"
+              draggable={false}
+            />
+          </div>,
+          document.body,
+        )}</div>
       <svg
         ref={svgRef}
         width={SIZE}
@@ -206,14 +237,6 @@ export function WindCompass() {
         </span>
       )}
 
-      {/* Flag reference image */}
-      <img
-        src={flagWindImage}
-        alt="Wind Strength Reference"
-        className="w-[400px] rounded opacity-80"
-        draggable={false}
-      />
-      <span className="text-[9px] text-white/30 uppercase tracking-[0.08em]">Wind Strength Reference</span>
     </div>
   );
 }
