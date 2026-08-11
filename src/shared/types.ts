@@ -59,6 +59,7 @@ export interface AudioSettings {
 export interface GeneralSettings {
   windowedMode: boolean;
   displayName: string;
+  serverAddress: string; // '' = not configured; e.g. "203.0.113.7:8080" or "[2001:db8::1]:8080"
 }
 
 export interface BetaSettings {

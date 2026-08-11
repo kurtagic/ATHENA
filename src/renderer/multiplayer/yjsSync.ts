@@ -1,8 +1,8 @@
 import * as Y from 'yjs';
 import { WebsocketProvider } from 'y-websocket';
 import { debugLog } from '../stores/debugStore';
-
-const YJS_SERVER_URL = 'wss://api.athena.kurti.si/yjs';
+import { useSettingsStore } from '../stores/settingsStore';
+import { resolveServerEndpoints } from './serverUrls';
 
 let doc: Y.Doc | null = null;
 let provider: WebsocketProvider | null = null;
@@ -10,7 +10,12 @@ let provider: WebsocketProvider | null = null;
 export function connectYjs(lobbyId: string): { doc: Y.Doc; provider: WebsocketProvider } {
   disconnectYjs();
   doc = new Y.Doc();
-  provider = new WebsocketProvider(YJS_SERVER_URL, `lobby-${lobbyId}`, doc, {
+  // Settings are guaranteed loaded here — connectYjs only runs after a lobby
+  // join succeeded, which resolved the same address.
+  const { yjsUrl } = resolveServerEndpoints(
+    useSettingsStore.getState().settings?.general.serverAddress
+  );
+  provider = new WebsocketProvider(yjsUrl, `lobby-${lobbyId}`, doc, {
     connect: true,
     disableBc: true,
   });

@@ -3,19 +3,10 @@ import { useVoiceStore } from '../stores/voiceStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { debugLog } from '../stores/debugStore';
 import type { ServerBroadcast } from './protocol';
+import { resolveServerEndpoints } from './serverUrls';
 
-const RTC_CONFIG: RTCConfiguration = {
-  iceServers: [
-    { urls: 'stun:stun.l.google.com:19302' },
-    {
-      urls: [
-        'turn:api.athena.kurti.si:3478',
-        'turn:api.athena.kurti.si:3478?transport=tcp',
-      ],
-      username: 'athena',
-      credential: 'athena-turn-2024',
-    },
-  ],
+const FALLBACK_RTC_CONFIG: RTCConfiguration = {
+  iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
 };
 
 const SPEAKING_THRESHOLD = 15; // RMS level 0-255
@@ -32,9 +23,34 @@ export class VoiceManager {
   private localStream: MediaStream | null = null;
   private peers = new Map<string, PeerConnection>();
   private speakingPollTimer: ReturnType<typeof setInterval> | null = null;
+  private rtcConfig: RTCConfiguration = FALLBACK_RTC_CONFIG;
+
+  /**
+   * Fetch ICE servers (STUN + optional TURN relay) from the active server.
+   * Falls back to public STUN only — voice join must never block on this.
+   */
+  private async fetchIceConfig(): Promise<void> {
+    try {
+      const { httpUrl } = resolveServerEndpoints(
+        useSettingsStore.getState().settings?.general.serverAddress
+      );
+      const res = await fetch(`${httpUrl}/ice`, { signal: AbortSignal.timeout(4000) });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const body = await res.json();
+      if (!Array.isArray(body?.iceServers) || body.iceServers.length === 0) {
+        throw new Error('malformed /ice response');
+      }
+      this.rtcConfig = { iceServers: body.iceServers };
+      debugLog('voice', `ICE config loaded (${body.iceServers.length} entries)`);
+    } catch (err) {
+      this.rtcConfig = FALLBACK_RTC_CONFIG;
+      debugLog('voice', `ICE fetch failed, using STUN-only fallback: ${err}`);
+    }
+  }
 
   async joinVoice(): Promise<void> {
     try {
+      await this.fetchIceConfig();
       const inputDeviceId = useSettingsStore.getState().settings?.audio.inputDeviceId || '';
       const audioConstraints: MediaTrackConstraints = {
         echoCancellation: true,
@@ -188,7 +204,7 @@ export class VoiceManager {
   }
 
   private createPeerConnection(peerId: string): RTCPeerConnection {
-    const pc = new RTCPeerConnection(RTC_CONFIG);
+    const pc = new RTCPeerConnection(this.rtcConfig);
     const audioEl = document.createElement('audio');
     audioEl.autoplay = true;
 

@@ -18,6 +18,7 @@ const DEFAULT_SETTINGS: Settings = {
   general: {
     windowedMode: false,
     displayName: '',
+    serverAddress: '',
   },
 };
 
